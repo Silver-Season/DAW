@@ -60,10 +60,14 @@ if(DAW_BUILD_JUCE)
             tests/EngineTests.cpp
             tests/ModelTests.cpp
             tests/GraphTests.cpp
+            tests/HostingTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-            DAW_RT_CHECKS=1)
+            DAW_RT_CHECKS=1 JUCE_MODAL_LOOPS_PERMITTED=1
+            # the VST3 built from plugins/prisma in this same build, hosted by the hosting test
+            DAW_TEST_VST3_DIR="${CMAKE_BINARY_DIR}/plugins/prisma/Prisma_artefacts/$<CONFIG>/VST3")
+        add_dependencies(daw_engine_tests Prisma_VST3)
         target_link_libraries(daw_engine_tests PRIVATE daw_core juce::juce_audio_utils
             juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
         add_test(NAME daw_engine_tests COMMAND daw_engine_tests)

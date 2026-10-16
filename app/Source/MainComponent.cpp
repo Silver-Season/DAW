@@ -668,37 +668,21 @@ void MainComponent::setPrismaInstrument (int64_t trackId, const juce::String& pr
 
 void MainComponent::removeInstrument (int64_t trackId)
 {
-    // Windows first: their editors point into the processor the engine is about to drop.
     const auto track = model.findTrack (trackId);
     if (track.isValid() && track.numDevices() > 0)
     {
-        closeInstrumentEditor (track.device (0).id());
-        model.removeDevice (track.device (0));
+        engine.removeDevice (track.device (0)); // the model listener closes its editor window
     }
 }
 
 void MainComponent::loadPluginInstrument (int64_t trackId, const juce::PluginDescription& desc)
 {
-    engine.getFormatManager().createPluginInstanceAsync (
-        desc, engine.getSampleRate(), engine.getBlockSize(),
-        [this, trackId, desc] (std::unique_ptr<juce::AudioPluginInstance> instance, const juce::String& error) {
-            const auto track = model.findTrack (trackId);
-            if (instance == nullptr || ! track.isValid())
-            {
-                if (instance == nullptr)
-                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, Strings::dialogPluginTitle,
-                                                            Strings::errorPluginLoad + (error.isNotEmpty() ? error : desc.name));
-                return;
-            }
-            model.undo.beginNewTransaction (Strings::undoSetInstrument);
-            removeInstrument (trackId);
-            auto device = model.addDevice (track, "plugin", desc.name, 0);
-            device.setPluginDesc (desc.createXml()->toString (juce::XmlElement::TextFormat().singleLine()), &model.undo);
-            const auto deviceId = device.id();
-            engine.registerProcessor (deviceId, std::move (instance));
-            engine.rebuildGraphIfNeeded();
+    engine.loadPluginInstrument (trackId, desc, [this] (juce::String error, int64_t deviceId) {
+        if (error.isNotEmpty())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, Strings::dialogPluginTitle, error);
+        else
             openInstrumentEditor (deviceId);
-        });
+    });
 }
 
 void MainComponent::showInstrumentMenu (int64_t trackId)
@@ -761,9 +745,7 @@ void MainComponent::showInstrumentMenu (int64_t trackId)
         else if (result == 6)
         {
             model.undo.beginNewTransaction (Strings::undoDeleteTrack);
-            for (const auto& d : t.devices())
-                closeInstrumentEditor (d.id());
-            model.deleteTrack (trackId);
+            engine.deleteTrack (trackId);
         }
         else if (result >= 1000 && result < 2000)
             setPrismaInstrument (trackId, presets[(size_t) (result - 1000)].name);

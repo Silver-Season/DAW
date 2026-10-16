@@ -3,6 +3,7 @@
 #include "AudioEngine.h"
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
+#include "../Strings.h"
 
 namespace
 {
@@ -377,4 +378,64 @@ void AudioEngine::collectGarbage()
         if (r.generation <= seen && r.object->processor != nullptr)
             r.object->processor->releaseResources();
     reclaim (retiredDevices);
+}
+
+//==============================================================================
+void AudioEngine::captureDeviceStates (const juce::ValueTree& subtree)
+{
+    if (model == nullptr)
+        return;
+    if (subtree.hasType (ids::DEVICE))
+    {
+        DeviceRef device (subtree);
+        if (auto* processor = findProcessor (device.id()))
+        {
+            juce::MemoryBlock state;
+            processor->getStateInformation (state);
+            // Not undoable on purpose: if the write were part of the transaction, undoing the removal would undo it too
+            // and the device would come back with its old state.
+            device.setStateBase64 (state.toBase64Encoding(), nullptr);
+        }
+    }
+    for (const auto& child : subtree)
+        captureDeviceStates (child);
+}
+
+void AudioEngine::removeDevice (const DeviceRef& device)
+{
+    if (model == nullptr)
+        return;
+    captureDeviceStates (device.state);
+    model->removeDevice (device);
+}
+
+void AudioEngine::deleteTrack (int64_t trackId)
+{
+    if (model == nullptr)
+        return;
+    captureDeviceStates (model->findTrack (trackId).state);
+    model->deleteTrack (trackId);
+}
+
+void AudioEngine::loadPluginInstrument (int64_t trackId, const juce::PluginDescription& desc,
+                                        std::function<void (juce::String, int64_t)> done)
+{
+    formatManager.createPluginInstanceAsync (
+        desc, sampleRate.load(), blockSize,
+        [this, trackId, desc, done = std::move (done)] (std::unique_ptr<juce::AudioPluginInstance> instance, const juce::String& error) {
+            const auto track = model != nullptr ? model->findTrack (trackId) : TrackRef();
+            if (instance == nullptr || ! track.isValid())
+            {
+                done (instance == nullptr ? Strings::errorPluginLoad + (error.isNotEmpty() ? error : desc.name) : juce::String ("track gone"), -1);
+                return;
+            }
+            model->undo.beginNewTransaction (Strings::undoSetInstrument);
+            if (track.numDevices() > 0)
+                removeDevice (track.device (0));
+            auto device = model->addDevice (track, "plugin", desc.name, 0);
+            device.setPluginDesc (desc.createXml()->toString (juce::XmlElement::TextFormat().singleLine()), &model->undo);
+            registerProcessor (device.id(), std::move (instance));
+            rebuildGraph();
+            done ({}, device.id());
+        });
 }

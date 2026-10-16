@@ -128,4 +128,5 @@ struct Fixture
 
 void runModelTests();
 void runGraphTests();
+void runHostingTests();
 } // namespace tests
