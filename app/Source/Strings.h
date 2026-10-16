@@ -115,6 +115,24 @@ inline const juce::String dialogDontSave = utf8 ("Не сохранять");
 inline juce::String dialogSaveChanges (const juce::String& name) { return utf8 ("Сохранить изменения в «") + name + utf8 ("»?"); }
 inline const juce::String dialogSaveChangesText = utf8 ("Если не сохранить, изменения будут потеряны.");
 
+// Project files (task 1.7)
+inline const juce::String dialogOpenTitle = utf8 ("Открыть проект");
+inline const juce::String dialogOpenFailed = utf8 ("Не удалось открыть проект");
+inline const juce::String dialogSaveAsTitle = utf8 ("Сохранить проект как");
+inline const juce::String dialogSaveAsPrompt = utf8 ("Название проекта. Будет создана папка «Название Project».");
+inline const juce::String dialogSaveFailed = utf8 ("Не удалось сохранить проект");
+inline const juce::String recoveryTitle = utf8 ("Восстановить несохранённую работу?");
+inline juce::String recoveryText (const juce::String& name)
+{
+    return utf8 ("Прошлый сеанс закрылся неожиданно. Найдена копия проекта «") + name + utf8 ("» с несохранёнными изменениями.");
+}
+inline const juce::String recoveryRestore = utf8 ("Восстановить");
+inline const juce::String recoveryDiscard = utf8 ("Не восстанавливать");
+inline const juce::String infoSaved = utf8 ("Проект сохранён");
+inline const juce::String infoTemplateSaved = utf8 ("Этот проект теперь шаблон для новых проектов");
+inline const juce::String infoRecovered = utf8 ("Работа восстановлена из копии. Сохраните проект");
+inline const juce::String clearRecent = utf8 ("Очистить список");
+
 // Window
 inline const juce::String windowUntitled = utf8 ("Без названия");
 inline const juce::String labelPlaceholderProject = utf8 ("Перетащите инструмент из браузера сюда");

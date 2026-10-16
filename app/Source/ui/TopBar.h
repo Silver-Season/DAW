@@ -23,6 +23,9 @@ public:
     void setComputerKeysOn (bool on);
 
     std::function<void()> onCpuClicked;
+    // The version button: shows "v14 · 5 мин" and opens the history.
+    std::function<void()> onVersionClicked;
+    void setVersionText (const juce::String&);
 
     void paint (juce::Graphics&) override;
     void resized() override;

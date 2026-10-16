@@ -12,7 +12,8 @@ namespace ui
 void promptText (const juce::String& title, const juce::String& message, const juce::String& initial, std::function<void (const juce::String&)> done);
 
 // OK / Cancel. `done` is called with true for OK.
-void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void (bool)> done);
+void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void (bool)> done,
+              const juce::String& cancelText = {});
 
 // Three answers, like "Save changes?" : 0 = first button, 1 = second, 2 = cancel.
 void askThree (const juce::String& title, const juce::String& message, const juce::String& first, const juce::String& second,

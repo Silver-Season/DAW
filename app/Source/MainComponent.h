@@ -36,8 +36,14 @@ public:
     // "Name" or "Name •" when there are unsaved changes (docs/spec/99-details.md, stage 1).
     juce::String windowTitle() const;
     std::function<void (const juce::String&)> onTitleChanged;
-    void markClean();
-    bool isDirty() const { return dirty; }
+    bool isDirty() const { return doc.isDirty(); }
+
+    // Called once the window is visible: offers the recovery of a lost session, or opens the first-run demo
+    // or a new project (the template if there is one).
+    void startup();
+    // Asks about unsaved changes, then calls `quitNow` (the lock is removed first). Cancel does nothing.
+    void requestQuit (std::function<void()> quitNow);
+    project::ProjectSession& document() { return doc; }
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -63,16 +69,23 @@ private:
 
     void timerCallback() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
-    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
-    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override { dirty = true; }
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
-    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { dirty = true; }
+    void valueTreeRedirected (juce::ValueTree&) override { closeEditorsOfMissingDevices(); }
 
     void setBrowserVisible (bool);
     void setDetailVisible (bool);
     void setUiScale (double);
     void applyTheme();
     void updateTitle();
+
+    // project files (task 1.7)
+    void confirmDiscard (std::function<void()> proceed);
+    void doSave (std::function<void()> then = nullptr);
+    void doSaveAs (std::function<void()> then = nullptr);
+    void doOpenDialog();
+    void doOpen (const juce::File&);
+    void documentChanged();
+    juce::File projectsFolder() const;
 
     // the browser and the library (tasks 1.5 and 1.6)
     void showDeviceMenu (int64_t deviceId, juce::Point<int> screenPosition);
@@ -92,6 +105,7 @@ private:
     library::UserLibrary library;
     browser::BrowserSources sources;
     browser::BrowserActions browserActions;
+    project::ProjectSession doc;
     ui::SelectionState selection;
     ui::EditCommands editCommands;
 
@@ -113,8 +127,8 @@ private:
 
     int browserWidth, detailHeight, dragStartSize = 0;
     bool browserVisible, detailVisible;
-    bool dirty = false;
     juce::String lastTitle;
+    std::unique_ptr<juce::FileChooser> chooser;
 
     std::map<int64_t, std::unique_ptr<PluginWindow>> editorWindows; // by device id
     std::unique_ptr<juce::DocumentWindow> scannerWindow;

@@ -25,9 +25,22 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::openProject);
             juce::PopupMenu recent;
             const auto list = recentProjects ? recentProjects() : juce::StringArray();
+            for (const auto& path : list)
+                recent.addItem (juce::File (path).getFileNameWithoutExtension(), true, false, [this, path] {
+                    if (onOpenRecent)
+                        onOpenRecent (path);
+                });
             if (list.isEmpty())
                 recent.addItem (Strings::utf8 ("(пусто)"), false, false, nullptr);
-            menu.addSubMenu (M::openRecent, recent, false); // enabled with the project files (task 1.7)
+            else
+            {
+                recent.addSeparator();
+                recent.addItem (Strings::clearRecent, [this] {
+                    if (onClearRecent)
+                        onClearRecent();
+                });
+            }
+            menu.addSubMenu (M::openRecent, recent, ! list.isEmpty());
             menu.addSeparator();
             add (commands::saveProject);
             add (commands::saveProjectAs);

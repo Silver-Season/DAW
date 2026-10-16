@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 
+#include "DemoProject.h"
 #include "Strings.h"
 #include "ui/Dialogs.h"
 #include "ui/ThemeLookAndFeel.h"
@@ -55,7 +56,8 @@ private:
 MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     : engine (e), model (m), settings (e.getSettings()), actions (m, &e),
       library (settings.libraryPath().isNotEmpty() ? juce::File (settings.libraryPath()) : library::UserLibrary::defaultRoot()),
-      sources (settings, e.getKnownPlugins(), library), browserActions (m, e, library), editCommands (e, m, actions, selection),
+      sources (settings, e.getKnownPlugins(), library), browserActions (m, e, library),
+      doc (e, m, settings, library, juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Prisma DAW")), editCommands (e, m, actions, selection),
       menuModel (commandManager), keyboard (e.getKeyboardState()),
       browserWidth (settings.browserWidth()), detailHeight (settings.detailHeight()),
       browserVisible (settings.browserVisible()), detailVisible (settings.detailVisible())
@@ -64,6 +66,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
 
     topBar = std::make_unique<ui::TopBar> (engine, model);
     topBar->onCpuClicked = [this] { showAudioSettings(); };
+    topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources, library);
     sources.onChanged = [this] { browser->sourcesChanged(); };
     browser->onActivate = [this] (const browser::DragItem& item) {
@@ -136,6 +139,10 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
         ThemeManager::get().setCurrent (id);
     };
     menuModel.recentProjects = [this] { return settings.recentProjects(); };
+    menuModel.onOpenRecent = [this] (const juce::String& path) {
+        confirmDiscard ([this, path] { doOpen (juce::File (path)); });
+    };
+    menuModel.onClearRecent = [this] { settings.clearRecentProjects(); };
 #if JUCE_MAC
     juce::MenuBarModel::setMacMainMenu (&menuModel, nullptr);
 #else
@@ -150,6 +157,9 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
         selection.selectTrack (model.selectedTrack());
 
     model.root.addListener (this);
+    model.undo.addChangeListener (this);
+    doc.onDocumentChanged = [this] { documentChanged(); };
+    doc.onWriteFailed = [this] (const juce::String& error) { infoBar->showMessage (error, 10000); };
     ThemeManager::get().addChangeListener (this);
     applyTheme();
 
@@ -170,6 +180,9 @@ MainComponent::~MainComponent()
 #endif
     ThemeManager::get().removeChangeListener (this);
     engine.getKnownPlugins().removeChangeListener (this);
+    model.undo.removeChangeListener (this);
+    doc.onDocumentChanged = nullptr;
+    doc.onWriteFailed = nullptr;
     model.root.removeListener (this);
     removeKeyListener (router.get());
     editorWindows.clear();
@@ -180,8 +193,8 @@ MainComponent::~MainComponent()
 //==============================================================================
 juce::String MainComponent::windowTitle() const
 {
-    const auto name = model.name().isEmpty() ? Strings::windowUntitled : model.name();
-    return dirty ? name + juce::String::fromUTF8 (" \xe2\x80\xa2") : name;
+    const auto name = doc.name().isEmpty() ? Strings::windowUntitled : doc.name();
+    return doc.isDirty() ? name + juce::String::fromUTF8 (" \xe2\x80\xa2") : name;
 }
 
 void MainComponent::updateTitle()
@@ -195,21 +208,8 @@ void MainComponent::updateTitle()
     }
 }
 
-void MainComponent::markClean()
-{
-    dirty = false;
-    updateTitle();
-}
-
-void MainComponent::valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier& property)
-{
-    if (property != ids::selectedTrack)
-        dirty = true;
-}
-
 void MainComponent::valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int)
 {
-    dirty = true;
     closeEditorsOfMissingDevices();
 }
 
@@ -224,6 +224,12 @@ void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
 {
     if (source == &engine.getKnownPlugins())
         sources.refreshPlugins();
+    else if (source == &model.undo)
+    {
+        // A fresh project has an empty history; anything else in it is an edit of the user's.
+        if (model.undo.canUndo() || model.undo.canRedo())
+            doc.noteEdited();
+    }
     else
         applyTheme();
 }
@@ -291,15 +297,15 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
 
     switch (id)
     {
-        // File: everything except quit waits for the project files (1.7) and the export (04)
-        case newProject: set (M::newProject, fileCategory, false, key ('n', cmd)); break;
-        case openProject: set (M::open, fileCategory, false, key ('o', cmd)); break;
-        case saveProject: set (M::save, fileCategory, false, key ('s', cmd)); break;
-        case saveProjectAs: set (M::saveAs, fileCategory, false, key ('s', cmd | shift)); break;
-        case saveTemplate: set (M::saveTemplate, fileCategory, false); break;
-        case versionHistory: set (M::versionHistory, fileCategory, false); break;
+        // File: the export waits for stage 4
+        case newProject: set (M::newProject, fileCategory, true, key ('n', cmd)); break;
+        case openProject: set (M::open, fileCategory, true, key ('o', cmd)); break;
+        case saveProject: set (M::save, fileCategory, true, key ('s', cmd)); break;
+        case saveProjectAs: set (M::saveAs, fileCategory, true, key ('s', cmd | shift)); break;
+        case saveTemplate: set (M::saveTemplate, fileCategory, true); break;
+        case versionHistory: set (M::versionHistory, fileCategory, doc.hasFile()); break;
         case exportAudio: set (M::exportAudio, fileCategory, false, key ('r', cmd | shift)); break;
-        case showInFinder: set (M::showInFinder, fileCategory, false); break;
+        case showInFinder: set (M::showInFinder, fileCategory, doc.folder() != juce::File() && doc.folder().exists()); break;
         case scanPlugins: set (M::scanPlugins, fileCategory, true); break;
         case quitApp: set (M::quit, fileCategory, true, key ('q', cmd)); break;
 
@@ -365,6 +371,17 @@ bool MainComponent::perform (const InvocationInfo& info)
     using namespace ui::commands;
     switch (info.commandID)
     {
+        case newProject: confirmDiscard ([this] { doc.newProject(); }); return true;
+        case openProject: confirmDiscard ([this] { doOpenDialog(); }); return true;
+        case saveProject: doSave(); return true;
+        case saveProjectAs: doSaveAs(); return true;
+        case saveTemplate:
+            if (const auto r = doc.saveAsDefaultTemplate(); r.wasOk())
+                infoBar->showMessage (Strings::infoTemplateSaved);
+            else
+                ui::showMessage (Strings::dialogSaveFailed, r.getErrorMessage());
+            return true;
+        case showInFinder: doc.folder().revealToUser(); return true;
         case scanPlugins: showPluginScanner(); return true;
         case quitApp: juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
 
@@ -433,6 +450,7 @@ void MainComponent::focusLost (FocusChangeType)
 void MainComponent::timerCallback()
 {
     topBar->tick();
+    topBar->setVersionText (doc.versionButtonText());
     session->tick();
     if (detailVisible)
         detail->tick();
@@ -481,6 +499,161 @@ void MainComponent::resized()
 }
 
 //==============================================================================
+//==============================================================================
+juce::File MainComponent::projectsFolder() const
+{
+    return juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Prisma DAW");
+}
+
+void MainComponent::documentChanged()
+{
+    editorWindows.clear();
+    selection.clear();
+    if (model.findTrack (model.selectedTrack()).isValid())
+        selection.selectTrack (model.selectedTrack());
+    else if (model.numTracks() > 0)
+        selection.selectTrack (model.trackAt (0).id());
+    sources.setProjectFolder (doc.folder());
+    if (doc.hasFile())
+        settings.addRecentProject (doc.mainFile());
+    updateTitle();
+}
+
+void MainComponent::confirmDiscard (std::function<void()> proceed)
+{
+    if (! doc.isDirty())
+    {
+        proceed();
+        return;
+    }
+    const auto name = doc.name().isEmpty() ? Strings::windowUntitled : doc.name();
+    ui::askThree (Strings::dialogSaveChanges (name), Strings::dialogSaveChangesText, Strings::dialogSave, Strings::dialogDontSave, Strings::dialogCancel,
+                  [this, safe = juce::Component::SafePointer<MainComponent> (this), proceed = std::move (proceed)] (int answer) {
+                      if (safe == nullptr)
+                          return;
+                      if (answer == 0)
+                          doSave (proceed);
+                      else if (answer == 1)
+                          proceed();
+                  });
+}
+
+void MainComponent::doSave (std::function<void()> then)
+{
+    if (! doc.hasFile())
+    {
+        doSaveAs (std::move (then));
+        return;
+    }
+    const auto result = doc.save();
+    if (! result.wasOk())
+    {
+        ui::showMessage (Strings::dialogSaveFailed, result.getErrorMessage());
+        return;
+    }
+    settings.addRecentProject (doc.mainFile());
+    infoBar->showMessage (Strings::infoSaved);
+    if (then)
+        then();
+}
+
+void MainComponent::doSaveAs (std::function<void()> then)
+{
+    ui::promptText (Strings::dialogSaveAsTitle, Strings::dialogSaveAsPrompt, doc.name(),
+                    [this, safe = juce::Component::SafePointer<MainComponent> (this), then = std::move (then)] (const juce::String& entered) {
+                        if (safe == nullptr)
+                            return;
+                        const auto name = juce::File::createLegalFileName (entered).trim();
+                        if (name.isEmpty())
+                            return;
+                        const auto target = projectsFolder().getChildFile (name + " Project");
+                        if (target.exists())
+                        {
+                            ui::showMessage (Strings::dialogSaveFailed, Strings::errorFolderExists (target.getFullPathName()));
+                            return;
+                        }
+                        const auto result = doc.saveAs (target);
+                        if (! result.wasOk())
+                        {
+                            ui::showMessage (Strings::dialogSaveFailed, result.getErrorMessage());
+                            return;
+                        }
+                        infoBar->showMessage (Strings::infoSaved);
+                        if (then)
+                            then();
+                    });
+}
+
+void MainComponent::doOpenDialog()
+{
+    chooser = std::make_unique<juce::FileChooser> (Strings::dialogOpenTitle, projectsFolder().isDirectory() ? projectsFolder() : juce::File::getSpecialLocation (juce::File::userMusicDirectory),
+                                                   "*.prisma", ! JUCE_LINUX);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [safe = juce::Component::SafePointer<MainComponent> (this)] (const juce::FileChooser& fc) {
+                              if (safe != nullptr && fc.getResult() != juce::File())
+                                  safe->doOpen (fc.getResult());
+                          });
+}
+
+void MainComponent::doOpen (const juce::File& file)
+{
+    const auto result = doc.openFile (file);
+    if (! result.wasOk())
+    {
+        settings.removeRecentProject (file);
+        ui::showMessage (Strings::dialogOpenFailed, result.getErrorMessage());
+    }
+}
+
+void MainComponent::startup()
+{
+    const auto check = project::RecoveryCheck::check (project::ProjectSession::lockFileFor (settings));
+    auto openFresh = [this] {
+        if (! settings.firstRunDone())
+        {
+            // The first launch shows the demo project once.
+            auto demo = ProjectModel::createEmpty();
+            populateDemoProject (demo);
+            doc.adoptNewTree (demo.root);
+            settings.setFirstRunDone();
+        }
+        else
+            doc.newProject();
+    };
+    if (! check.needed)
+    {
+        openFresh();
+        return;
+    }
+    const auto name = check.projectFile != juce::File() ? check.projectFile.getFileNameWithoutExtension() : Strings::windowUntitled;
+    ui::confirm (Strings::recoveryTitle, Strings::recoveryText (name), Strings::recoveryRestore,
+                 [this, safe = juce::Component::SafePointer<MainComponent> (this), check, openFresh] (bool restore) {
+                     if (safe == nullptr)
+                         return;
+                     if (restore)
+                     {
+                         const auto result = doc.openRecovered (check);
+                         if (result.wasOk())
+                         {
+                             infoBar->showMessage (Strings::infoRecovered, 10000);
+                             return;
+                         }
+                         ui::showMessage (Strings::dialogOpenFailed, result.getErrorMessage());
+                     }
+                     project::RecoveryCheck::removeLock (project::ProjectSession::lockFileFor (settings));
+                     openFresh();
+                 },
+                 Strings::recoveryDiscard);
+}
+
+void MainComponent::requestQuit (std::function<void()> quitNow)
+{
+    confirmDiscard ([this, quitNow = std::move (quitNow)] {
+        doc.closeCleanly();
+        quitNow();
+    });
+}
+
 void MainComponent::reportDrop (const browser::DropResult& result, const browser::DragItem& item)
 {
     if (result.ok)

@@ -24,14 +24,15 @@ void promptText (const juce::String& title, const juce::String& message, const j
                              true);
 }
 
-void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void (bool)> done)
+void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void (bool)> done,
+              const juce::String& cancelText)
 {
     juce::AlertWindow::showAsync (juce::MessageBoxOptions()
                                       .withIconType (juce::MessageBoxIconType::QuestionIcon)
                                       .withTitle (title)
                                       .withMessage (message)
                                       .withButton (okText)
-                                      .withButton (Strings::dialogCancel),
+                                      .withButton (cancelText.isEmpty() ? Strings::dialogCancel : cancelText),
                                   [done = std::move (done)] (int result) {
                                       if (done)
                                           done (result == 1);

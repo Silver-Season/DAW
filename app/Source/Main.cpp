@@ -1,4 +1,3 @@
-#include "DemoProject.h"
 #include "MainComponent.h"
 #include "Settings.h"
 #include "engine/AudioEngine.h"
@@ -26,9 +25,8 @@ public:
         juce::LookAndFeel::setDefaultLookAndFeel (lookAndFeel.get());
         juce::Desktop::getInstance().setGlobalScaleFactor ((float) settings->uiScale());
 
-        // The demo project of phase 0; real project files come with task 1.7.
+        // The window's startup code fills the model: recovery, the first-run demo or a new project.
         model.reset (new ProjectModel (ProjectModel::createEmpty()));
-        populateDemoProject (*model);
 
         const bool nullAudio = juce::SystemStats::getEnvironmentVariable ("DAW_NULL_AUDIO", {}).isNotEmpty();
         engine = std::make_unique<AudioEngine> (*settings, ! nullAudio);
@@ -36,6 +34,7 @@ public:
         if (nullAudio)
             nullDriver = std::make_unique<NullAudioDriver> (*engine); // no sound card: tick the engine from a timer thread
         mainWindow = std::make_unique<MainWindow> (*engine, *model, *settings);
+        mainWindow->startup();
     }
 
     void shutdown() override
@@ -51,9 +50,13 @@ public:
 
     void systemRequestedQuit() override
     {
-        if (mainWindow != nullptr)
-            settings->setWindowState (mainWindow->getWindowStateAsString());
-        quit();
+        if (mainWindow == nullptr)
+        {
+            quit();
+            return;
+        }
+        settings->setWindowState (mainWindow->getWindowStateAsString());
+        mainWindow->requestQuit ([this] { quit(); });
     }
 
 private:
@@ -64,7 +67,7 @@ private:
             : DocumentWindow ("DAW", theme().background, DocumentWindow::allButtons), settings (s)
         {
             setUsingNativeTitleBar (true);
-            auto* content = new MainComponent (engine, model);
+            content = new MainComponent (engine, model);
             content->onTitleChanged = [this] (const juce::String& title) { setName (title); };
             setName (content->windowTitle());
             setContentOwned (content, true);
@@ -78,9 +81,12 @@ private:
         }
 
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+        void startup() { content->startup(); }
+        void requestQuit (std::function<void()> quitNow) { content->requestQuit (std::move (quitNow)); }
 
     private:
         Settings& settings;
+        MainComponent* content = nullptr; // owned by the window
     };
 
     std::unique_ptr<Settings> settings;
