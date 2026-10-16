@@ -12,6 +12,7 @@
 #include "ui/Chrome.h"
 #include "ui/DetailPanel.h"
 #include "ui/EditCommands.h"
+#include "ui/SettingsWindow.h"
 #include "ui/SessionView.h"
 #include "ui/TopBar.h"
 #include "ui/VersionWindow.h"
@@ -97,7 +98,7 @@ private:
 
     void openInstrumentEditor (int64_t deviceId);
     void closeEditorsOfMissingDevices();
-    void showAudioSettings();
+    void showSettings (ui::SettingsWindow::Tab);
     void showPluginScanner();
 
     AudioEngine& engine;
@@ -135,6 +136,7 @@ private:
     std::map<int64_t, std::unique_ptr<PluginWindow>> editorWindows; // by device id
     std::unique_ptr<juce::DocumentWindow> scannerWindow;
     std::unique_ptr<ui::VersionWindow> versionWindow;
+    std::unique_ptr<ui::SettingsWindow> settingsWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

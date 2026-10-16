@@ -2,6 +2,7 @@
 #include "Settings.h"
 #include "engine/AudioEngine.h"
 #include "engine/NullAudioDriver.h"
+#include "library/UserLibrary.h"
 #include "ui/ThemeLookAndFeel.h"
 
 class DawApplication final : public juce::JUCEApplication
@@ -16,7 +17,7 @@ public:
         settings = std::make_unique<Settings>();
 
         // Themes: the built-in ones plus User Library/Themes/*.json. DAW_THEME overrides the saved choice (screenshots).
-        const auto userThemes = juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Prisma DAW/User Library/Themes");
+        const auto userThemes = (settings->libraryPath().isNotEmpty() ? juce::File (settings->libraryPath()) : library::UserLibrary::defaultRoot()).getChildFile ("Themes");
         for (const auto& problem : ThemeManager::get().reload (userThemes))
             juce::ignoreUnused (problem);
         const auto themeOverride = juce::SystemStats::getEnvironmentVariable ("DAW_THEME", {});

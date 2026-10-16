@@ -151,6 +151,61 @@ inline const juce::String restoreOk = utf8 ("Вернуться");
 inline const juce::String restored = utf8 ("Проект возвращён к выбранной версии");
 } // namespace versions
 
+// Settings window (task 1.9)
+namespace settingsui
+{
+inline const juce::String title = utf8 ("Настройки");
+inline const juce::String tabSound = utf8 ("Звук");
+inline const juce::String tabMidi = utf8 ("MIDI");
+inline const juce::String tabAppearance = utf8 ("Внешний вид");
+inline const juce::String tabLibrary = utf8 ("Библиотека");
+inline const juce::String driver = utf8 ("Драйвер");
+inline const juce::String input = utf8 ("Вход");
+inline const juce::String output = utf8 ("Выход");
+inline const juce::String sampleRate = utf8 ("Частота");
+inline const juce::String bufferSize = utf8 ("Буфер");
+inline const juce::String none = utf8 ("(нет)");
+inline const juce::String noDevice = utf8 ("Звуковая карта не открыта");
+inline juce::String samples (int n) { return juce::String (n) + utf8 (" сэмплов"); }
+inline juce::String hz (double r)
+{
+    const int whole = (int) (r + 0.5);
+    return juce::String ((double) whole / 1000.0, whole % 1000 == 0 ? 0 : 1).replace (".", ",") + utf8 (" кГц");
+}
+inline juce::String ms (double v) { return juce::String (v, 1).replace (".", ",") + utf8 (" мс"); }
+inline juce::String latency (double in, double out)
+{
+    return utf8 ("Вход ") + ms (in) + utf8 (" · Выход ") + ms (out) + utf8 (" · Всего ") + ms (in + out);
+}
+inline juce::String cpu (int percent) { return utf8 ("Нагрузка процессора: ") + juce::String (percent) + " %"; }
+inline const juce::String channels = utf8 ("Каналы");
+inline const juce::String inputChannels = utf8 ("Входы");
+inline const juce::String outputChannels = utf8 ("Выходы");
+inline const juce::String channelNameHint = utf8 ("Имя канала");
+inline const juce::String testTone = utf8 ("Тестовый сигнал");
+inline const juce::String audioMidiSetup = utf8 ("Открыть настройку Audio MIDI");
+inline const juce::String driverNoteMac = utf8 ("На Mac все звуковые карты работают через Core Audio. Отдельный драйвер ASIO не нужен.");
+inline const juce::String driverNoteDev = utf8 ("Для разработки на Linux используется ALSA.");
+inline const juce::String midiInputs = utf8 ("Входы MIDI");
+inline const juce::String midiOutputs = utf8 ("Выходы MIDI");
+inline const juce::String playTracks = utf8 ("Игра на дорожках");
+inline const juce::String control = utf8 ("Управление");
+inline const juce::String noMidiInputs = utf8 ("MIDI-входов нет. Подключите клавиатуру: она появится здесь сама.");
+inline const juce::String noMidiOutputs = utf8 ("MIDI-выходов нет");
+inline const juce::String themeHeading = utf8 ("Тема");
+inline const juce::String scale = utf8 ("Масштаб интерфейса");
+inline const juce::String animations = utf8 ("Анимации");
+inline const juce::String libraryPath = utf8 ("Папка User Library");
+inline const juce::String change = utf8 ("Изменить…");
+inline const juce::String byDefault = utf8 ("По умолчанию");
+inline const juce::String chooseLibrary = utf8 ("Выберите папку User Library");
+inline const juce::String placesHeading = utf8 ("Папки «Места»");
+inline const juce::String noPlaces = utf8 ("Папок пока нет");
+inline const juce::String add = utf8 ("Добавить…");
+inline const juce::String remove = utf8 ("Убрать");
+inline const juce::String rescan = utf8 ("Повторно сканировать плагины…");
+} // namespace settingsui
+
 // Window
 inline const juce::String windowUntitled = utf8 ("Без названия");
 inline const juce::String labelPlaceholderProject = utf8 ("Перетащите инструмент из браузера сюда");

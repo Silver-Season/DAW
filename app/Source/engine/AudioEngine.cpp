@@ -58,8 +58,10 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
         }
         deviceManager.addChangeListener (this);
 
+        devicesOpened = true;
         updateMidiInputs();
         deviceManager.addMidiInputDeviceCallback ({}, this);
+        midiListConnection = juce::MidiDeviceListConnection::make ([this] { updateMidiInputs(); }); // plugged in or out
         deviceManager.addAudioCallback (this);
     }
     keyboardState.addListener (this);
@@ -69,6 +71,7 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
 AudioEngine::~AudioEngine()
 {
     alive->store (false);
+    midiListConnection = {};
     stopTimer();
     deviceManager.removeAudioCallback (this);
     deviceManager.removeMidiInputDeviceCallback ({}, this);
@@ -81,10 +84,19 @@ AudioEngine::~AudioEngine()
 
 void AudioEngine::updateMidiInputs()
 {
-    // Every connected MIDI keyboard/controller plays the armed track.
+    // Every connected MIDI keyboard/controller plays the armed track, unless the user switched it off.
     for (const auto& input : juce::MidiInput::getAvailableDevices())
-        if (! deviceManager.isMidiInputDeviceEnabled (input.identifier))
-            deviceManager.setMidiInputDeviceEnabled (input.identifier, true);
+    {
+        const bool wanted = settings.midiInputPlays (input.identifier);
+        if (deviceManager.isMidiInputDeviceEnabled (input.identifier) != wanted)
+            deviceManager.setMidiInputDeviceEnabled (input.identifier, wanted);
+    }
+}
+
+void AudioEngine::refreshMidiInputs()
+{
+    if (devicesOpened)
+        updateMidiInputs();
 }
 
 void AudioEngine::changeListenerCallback (juce::ChangeBroadcaster* source)

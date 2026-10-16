@@ -137,6 +137,10 @@ public:
     void playTestTone();
     bool isTestToneSounding() const { return toneSamplesLeft.load() > 0; }
 
+    // Opens the MIDI inputs that are switched on in the settings ("plays tracks") and closes the others. Called
+    // by the settings window and, on its own, when a device is plugged in or out. Does nothing without devices.
+    void refreshMidiInputs();
+
     // Number of events received from MIDI hardware so far; the transport's MIDI indicator blinks when it changes.
     uint32_t getHardwareMidiCount() const { return hardwareMidiCount.load (std::memory_order_relaxed); }
 
@@ -164,6 +168,8 @@ private:
     void handleNoteOn (juce::MidiKeyboardState*, int channel, int note, float velocity) override;
     void handleNoteOff (juce::MidiKeyboardState*, int channel, int note, float velocity) override;
     void updateMidiInputs();
+    bool devicesOpened = false;
+    juce::MidiDeviceListConnection midiListConnection;
 
     // juce::ValueTree::Listener (message thread)
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;

@@ -65,7 +65,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     setHelpText (Strings::help::logo);
 
     topBar = std::make_unique<ui::TopBar> (engine, model);
-    topBar->onCpuClicked = [this] { showAudioSettings(); };
+    topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources, library);
     sources.onChanged = [this] { browser->sourcesChanged(); };
@@ -188,6 +188,7 @@ MainComponent::~MainComponent()
     editorWindows.clear();
     scannerWindow.reset();
     versionWindow.reset();
+    settingsWindow.reset();
     keyboard.releaseAll();
 }
 
@@ -355,7 +356,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
             info.addDefaultKeypress ('+', juce::ModifierKeys (cmd | shift));
             break;
         case zoomOut: set (M::zoomOut, viewCategory, settings.uiScale() > 0.81, key ('-', cmd)); break;
-        case openSettings: set (M::settings, M::view, false, key (',', cmd)); break;
+        case openSettings: set (M::settings, M::view, true, key (',', cmd)); break;
 
         case playStop: set (M::playStop, M::view, true, juce::KeyPress (juce::KeyPress::spaceKey)); break;
         case toggleComputerKeys:
@@ -384,6 +385,7 @@ bool MainComponent::perform (const InvocationInfo& info)
             return true;
         case versionHistory: showVersionHistory(); return true;
         case showInFinder: doc.folder().revealToUser(); return true;
+        case openSettings: showSettings (ui::SettingsWindow::sound); return true;
         case scanPlugins: showPluginScanner(); return true;
         case quitApp: juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
 
@@ -859,17 +861,30 @@ void MainComponent::openInstrumentEditor (int64_t deviceId)
     });
 }
 
-void MainComponent::showAudioSettings()
+void MainComponent::showSettings (ui::SettingsWindow::Tab tab)
 {
-    auto* selector = new juce::AudioDeviceSelectorComponent (engine.getDeviceManager(), 0, 2, 0, 2, true, false, true, false);
-    selector->setSize (520, 480);
-    juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned (selector);
-    options.dialogTitle = Strings::windowAudioSettings;
-    options.dialogBackgroundColour = theme().panel;
-    options.useNativeTitleBar = true;
-    options.resizable = true;
-    options.launchAsync();
+    if (settingsWindow == nullptr)
+    {
+        ui::SettingsWindow::Hooks hooks;
+        hooks.libraryRootChanged = [this] (const juce::File& root) {
+            library.setRoot (root);
+            for (const auto& problem : ThemeManager::get().reload (library.themesFolder()))
+                juce::ignoreUnused (problem);
+            ThemeManager::get().setCurrent (settings.theme());
+            sources.refreshAll();
+        };
+        hooks.placesChanged = [this] { sources.scanPlaces (false); };
+        hooks.scanPlugins = [this] { showPluginScanner(); };
+        hooks.closed = [this] {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
+                if (safe != nullptr)
+                    safe->settingsWindow.reset();
+            });
+        };
+        settingsWindow = std::make_unique<ui::SettingsWindow> (engine, settings, std::move (hooks));
+    }
+    settingsWindow->showTab (tab);
+    settingsWindow->toFront (true);
 }
 
 void MainComponent::showPluginScanner()
