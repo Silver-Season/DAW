@@ -30,6 +30,20 @@ public:
     bool animations() const;
     void setAnimations (bool);
 
+    // Window layout (task 1.4): panel sizes and visibility, position of the main window
+    int browserWidth() const;  // 180 .. 420
+    void setBrowserWidth (int);
+    int detailHeight() const;  // 160 .. 480
+    void setDetailHeight (int);
+    bool browserVisible() const;
+    void setBrowserVisible (bool);
+    bool detailVisible() const;
+    void setDetailVisible (bool);
+    bool mixerVisible() const;
+    void setMixerVisible (bool);
+    juce::String windowState() const; // juce::DocumentWindow::getWindowStateAsString()
+    void setWindowState (const juce::String&);
+
     // Library
     juce::StringArray recentProjects() const;
     void addRecentProject (const juce::File&);

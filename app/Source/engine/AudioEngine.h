@@ -33,7 +33,9 @@ class AudioEngine final : public juce::AudioIODeviceCallback,
 public:
     using DeviceFactory = std::function<std::unique_ptr<juce::AudioProcessor> (const DeviceRef&)>;
 
-    explicit AudioEngine (Settings&);
+    // openDevices = false leaves the sound card and MIDI inputs closed, for an engine whose callback is
+    // driven by hand (tests, DAW_NULL_AUDIO): a real device would call it concurrently from its own thread.
+    explicit AudioEngine (Settings&, bool openDevices = true);
     ~AudioEngine() override;
 
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
@@ -108,6 +110,9 @@ public:
     void setClockForTesting (ClockFn fn) { clock.store (fn); }
 
     std::atomic<float> masterMeterL { 0.0f }, masterMeterR { 0.0f };
+
+    // Number of events received from MIDI hardware so far; the transport's MIDI indicator blinks when it changes.
+    uint32_t getHardwareMidiCount() const { return hardwareMidiCount.load (std::memory_order_relaxed); }
 
     // juce::AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
@@ -200,6 +205,7 @@ private:
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };
     std::atomic<float> masterGain { 1.0f };
     std::atomic<int64_t> selectedTrackId { -1 };
+    std::atomic<uint32_t> hardwareMidiCount { 0 };
 
     std::atomic<double> sampleRate { 44100.0 };
     int blockSize = 512;

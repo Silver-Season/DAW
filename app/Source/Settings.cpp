@@ -41,6 +41,20 @@ bool Settings::animations() const { return props->getBoolValue ("animations", tr
 void Settings::setAnimations (bool on) { props->setValue ("animations", on); }
 
 //==============================================================================
+int Settings::browserWidth() const { return juce::jlimit (180, 420, props->getIntValue ("browserWidth", 236)); }
+void Settings::setBrowserWidth (int w) { props->setValue ("browserWidth", juce::jlimit (180, 420, w)); }
+int Settings::detailHeight() const { return juce::jlimit (160, 480, props->getIntValue ("detailHeight", 232)); }
+void Settings::setDetailHeight (int h) { props->setValue ("detailHeight", juce::jlimit (160, 480, h)); }
+bool Settings::browserVisible() const { return props->getBoolValue ("browserVisible", true); }
+void Settings::setBrowserVisible (bool v) { props->setValue ("browserVisible", v); }
+bool Settings::detailVisible() const { return props->getBoolValue ("detailVisible", true); }
+void Settings::setDetailVisible (bool v) { props->setValue ("detailVisible", v); }
+bool Settings::mixerVisible() const { return props->getBoolValue ("mixerVisible", true); }
+void Settings::setMixerVisible (bool v) { props->setValue ("mixerVisible", v); }
+juce::String Settings::windowState() const { return props->getValue ("windowState"); }
+void Settings::setWindowState (const juce::String& s) { props->setValue ("windowState", s); }
+
+//==============================================================================
 juce::StringArray Settings::recentProjects() const
 {
     juce::StringArray list;

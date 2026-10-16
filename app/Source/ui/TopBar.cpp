@@ -1,0 +1,436 @@
+#include "TopBar.h"
+
+#include "../Strings.h"
+#include "Chrome.h"
+#include "../engine/AudioEngine.h"
+
+
+namespace ui
+{
+//==============================================================================
+class TopBar::IconButton final : public juce::Component
+{
+public:
+    enum class Role
+    {
+        normal,
+        play,
+        record
+    };
+
+    std::function<juce::Path (juce::Rectangle<float>)> icon;
+    juce::String text;
+    Role role = Role::normal;
+    bool on = false;
+    std::function<void()> onClick;
+
+    IconButton (std::function<juce::Path (juce::Rectangle<float>)> iconFn, const juce::String& label, Role r, const juce::String& help)
+        : icon (std::move (iconFn)), text (label), role (r)
+    {
+        setHelpText (help);
+    }
+
+    void setOn (bool v)
+    {
+        if (on != v)
+        {
+            on = v;
+            repaint();
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        auto r = getLocalBounds().toFloat().reduced (0.5f);
+        juce::Colour fill = t.panel, ink = t.text, border = t.line;
+        if (role == Role::record)
+            ink = t.record;
+        if (on)
+        {
+            const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : t.accent);
+            fill = accent;
+            border = accent;
+            ink = t.clipInk;
+            if (role == Role::play && t.glow > 0.0f)
+                juce::DropShadow (accent.withAlpha (0.6f), juce::roundToInt (14.0f * t.glow), {}).drawForRectangle (g, getLocalBounds().reduced (3));
+        }
+        else if (isMouseOver() && isEnabled())
+            fill = t.panel2;
+        if (! isEnabled())
+        {
+            fill = fill.withMultipliedAlpha (0.5f);
+            ink = t.dimText.withAlpha (0.6f);
+            border = border.withMultipliedAlpha (0.6f);
+        }
+        fillCell (g, r, fill);
+        strokeCell (g, r, border);
+
+        g.setColour (ink);
+        if (icon)
+        {
+            const float s = text.isEmpty() ? 11.0f : 10.0f;
+            const auto box = juce::Rectangle<float> (s, s).withCentre (text.isEmpty() ? r.getCentre() : juce::Point<float> (r.getX() + 15.0f, r.getCentreY()));
+            g.fillPath (icon (box));
+        }
+        if (text.isNotEmpty())
+        {
+            g.setFont (t.uiFont (12.5f, 500));
+            g.drawText (text, getLocalBounds().withTrimmedLeft (icon ? 24 : 0), juce::Justification::centred, false);
+        }
+    }
+
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { repaint(); }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (isEnabled() && getLocalBounds().contains (e.getPosition()) && onClick)
+            onClick();
+    }
+};
+
+//==============================================================================
+class TopBar::Lamp final : public juce::Component
+{
+public:
+    Lamp (const juce::String& label, const juce::String& help) : text (label)
+    {
+        setHelpText (help);
+    }
+
+    void setLit (bool v, bool useGreen)
+    {
+        if (v != lit || useGreen != green)
+        {
+            lit = v;
+            green = useGreen;
+            repaint();
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        const auto colour = lit ? (green ? t.play : t.accent) : t.line;
+        g.setColour (colour);
+        const auto dot = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ 8.0f, (float) getHeight() * 0.5f });
+        g.fillEllipse (dot);
+        if (lit && t.glow > 0.0f)
+        {
+            g.setColour (colour.withAlpha (0.25f));
+            g.fillEllipse (dot.expanded (3.0f));
+        }
+        g.setColour (lit ? t.text : t.dimText);
+        g.setFont (t.uiFont (10.5f, 500));
+        g.drawText (text, getLocalBounds().withTrimmedLeft (18), juce::Justification::centredLeft, false);
+    }
+
+private:
+    juce::String text;
+    bool lit = false, green = false;
+};
+
+//==============================================================================
+class TopBar::CpuMeter final : public juce::Component
+{
+public:
+    CpuMeter()
+    {
+        setHelpText (Strings::help::cpu);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    }
+
+    void setLoad (float v)
+    {
+        v = juce::jlimit (0.0f, 1.0f, v);
+        if (std::abs (v - load) > 0.004f)
+        {
+            load = v;
+            repaint();
+        }
+    }
+
+    std::function<void()> onClick;
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        g.setColour (t.dimText);
+        g.setFont (t.uiFont (10.5f, 500));
+        g.drawText (Strings::transport::cpu, getLocalBounds().removeFromLeft (26), juce::Justification::centredLeft, false);
+        const auto bar = juce::Rectangle<float> (46.0f, 6.0f).withCentre ({ 31.0f + 23.0f, (float) getHeight() * 0.5f });
+        g.setColour (t.panel2);
+        g.fillRoundedRectangle (bar, 3.0f);
+        g.setColour (load > 0.85f ? t.record : t.play);
+        g.fillRoundedRectangle (bar.withWidth (juce::jmax (2.0f, bar.getWidth() * load)), 3.0f);
+    }
+
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (getLocalBounds().contains (e.getPosition()) && onClick)
+            onClick();
+    }
+
+private:
+    float load = 0.0f;
+};
+
+//==============================================================================
+// The A <-> B morph slider; it only looks like the final control (stage 6).
+class TopBar::FakeSlider final : public juce::Component
+{
+public:
+    FakeSlider() { setHelpText (Strings::help::morph); }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        const float alpha = 0.55f;
+        auto r = getLocalBounds().toFloat();
+        auto letter = [&] (juce::Rectangle<float> box, const juce::String& s) {
+            g.setColour (t.panel2.withAlpha (alpha));
+            g.fillRoundedRectangle (box, 4.0f);
+            g.setColour (t.line);
+            g.drawRoundedRectangle (box.reduced (0.5f), 4.0f, 1.0f);
+            g.setColour (t.dimText);
+            g.setFont (t.uiFont (11.0f, 600));
+            g.drawText (s, box.toNearestInt(), juce::Justification::centred, false);
+        };
+        const auto a = r.removeFromLeft (18.0f).withSizeKeepingCentre (18.0f, 18.0f);
+        const auto b = r.removeFromRight (18.0f).withSizeKeepingCentre (18.0f, 18.0f);
+        letter (a, "A");
+        letter (b, "B");
+        const auto track = r.reduced (7.0f, 0.0f).withSizeKeepingCentre (r.getWidth() - 14.0f, 4.0f);
+        g.setColour (t.line);
+        g.fillRoundedRectangle (track, 2.0f);
+        g.setColour (t.accent2.withAlpha (alpha));
+        g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ track.getX() + 6.0f, track.getCentreY() }));
+    }
+};
+
+//==============================================================================
+class TopBar::Tabs final : public juce::Component, public HelpProvider
+{
+public:
+    juce::String helpAt (juce::Point<int> p) const override
+    {
+        return p.x < getWidth() / 2 ? Strings::help::tabSession : Strings::help::tabArrangement;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        auto r = getLocalBounds().toFloat().reduced (0.5f);
+        g.setColour (t.panel);
+        g.fillRoundedRectangle (r, t.radius);
+        auto left = r.removeFromLeft (r.getWidth() * 0.46f);
+        g.setColour (t.panel2);
+        g.fillRoundedRectangle (left, t.radius);
+        g.setColour (t.accent);
+        g.fillRect (left.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
+        g.setColour (t.text);
+        g.setFont (t.uiFont (12.0f, 500));
+        g.drawText (Strings::transport::sessionTab, left.toNearestInt(), juce::Justification::centred, false);
+        g.setColour (t.dimText.withAlpha (0.7f));
+        g.drawText (Strings::transport::arrangementTab, r.toNearestInt(), juce::Justification::centred, false);
+        strokeCell (g, getLocalBounds().toFloat(), t.line);
+    }
+};
+
+//==============================================================================
+TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
+{
+    setHelpText (Strings::help::logo);
+
+    tempo.setRange (20.0, 999.0, 0.01);
+    tempo.setValue (model.tempo());
+    tempo.setDecimals (2);
+    tempo.setDragSensitivity (0.5);
+    tempo.setWheelStep (0.1);
+    tempo.setHelpText (Strings::help::tempo);
+    tempo.onGestureStart = [this] { model.undo.beginNewTransaction (Strings::undoTempo); };
+    tempo.onValueChange = [this] (double) { model.setTempo (tempo.getValue()); };
+    addAndMakeVisible (tempo);
+
+    namespace I = icons;
+    using Role = IconButton::Role;
+    metronome = std::make_unique<IconButton> (I::metronome, juce::String(), Role::normal, Strings::help::metronome);
+    play = std::make_unique<IconButton> (I::play, juce::String(), Role::play, Strings::help::play);
+    stop = std::make_unique<IconButton> (I::stop, juce::String(), Role::normal, Strings::help::stop);
+    record = std::make_unique<IconButton> (I::record, juce::String(), Role::record, Strings::help::record);
+    loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
+    capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
+    version = std::make_unique<IconButton> (nullptr, Strings::transport::versionNone, Role::normal, Strings::help::version);
+    for (auto* b : { metronome.get(), record.get(), loop.get(), capture.get(), version.get() })
+        b->setEnabled (false);
+    play->onClick = [this] {
+        if (engine.isPlaying())
+            engine.stop();
+        else
+            engine.play();
+    };
+    stop->onClick = [this] { engine.stop(); };
+
+    morph = std::make_unique<FakeSlider>();
+    tabs = std::make_unique<Tabs>();
+    midiLamp = std::make_unique<Lamp> (Strings::transport::midi, Strings::help::midiIn);
+    keysLamp = std::make_unique<Lamp> (Strings::transport::keysOn, Strings::help::keysIndicator);
+    cpu = std::make_unique<CpuMeter>();
+    cpu->onClick = [this] {
+        if (onCpuClicked)
+            onCpuClicked();
+    };
+
+    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), loop.get(), capture.get(),
+                                                              version.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
+        addAndMakeVisible (c);
+    lastMidiCount = engine.getHardwareMidiCount();
+    tick();
+}
+
+TopBar::~TopBar() = default;
+
+void TopBar::setComputerKeysOn (bool on)
+{
+    keysLamp->setLit (on, true);
+}
+
+void TopBar::tick()
+{
+    const bool playing = engine.isPlaying();
+    play->setOn (playing);
+
+    if (! tempo.isEditing() && std::abs (tempo.getValue() - model.tempo()) > 0.004)
+        tempo.setValue (model.tempo());
+
+    const double beats = engine.getPositionBeats();
+    const int sigNum = juce::jmax (1, (int) model.root.getProperty (ids::sigNum, 4));
+    const int bar = (int) std::floor (beats / sigNum) + 1;
+    const int beat = (int) std::floor (std::fmod (beats, (double) sigNum)) + 1;
+    const int sixteenth = (int) std::floor (std::fmod (beats * 4.0, 4.0)) + 1;
+    const auto text = juce::String (bar) + ". " + juce::String (beat) + ". " + juce::String (sixteenth);
+    if (text != positionText)
+    {
+        positionText = text;
+        repaint (positionArea);
+    }
+
+    const auto count = engine.getHardwareMidiCount();
+    if (count != lastMidiCount)
+    {
+        lastMidiCount = count;
+        midiFlashUntil = juce::Time::getMillisecondCounter() + 120;
+    }
+    midiLamp->setLit (juce::Time::getMillisecondCounter() < midiFlashUntil, false);
+    cpu->setLoad ((float) engine.getDeviceManager().getCpuUsage());
+    wasPlaying = playing;
+}
+
+void TopBar::paint (juce::Graphics& g)
+{
+    const auto& t = theme();
+    g.fillAll (t.chrome);
+    g.setColour (t.line);
+    g.fillRect (0, getHeight() - 1, getWidth(), 1);
+
+    ui::drawLogo (g, logoArea.toFloat());
+    g.setColour (t.text);
+    g.setFont (t.uiFont (15.0f, 600));
+    g.drawText (Strings::labelAppName, logoArea.withTrimmedLeft (30).withWidth (80), juce::Justification::centredLeft, false);
+
+    auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
+        fillCell (g, area.toFloat(), t.panel);
+        strokeCell (g, area.toFloat(), t.line);
+        g.setColour (t.text);
+        g.setFont (t.numFont (13.0f));
+        g.drawText (text, area, juce::Justification::centred, false);
+    };
+    const int num = (int) model.root.getProperty (ids::sigNum, 4), den = (int) model.root.getProperty (ids::sigDen, 4);
+    field (signatureArea, juce::String (num) + " / " + juce::String (den));
+    field (positionArea, positionText);
+
+    if (! ribbonArea.isEmpty())
+    {
+        // The "10 min" capture ribbon: an empty strip until stage 2.
+        const auto r = ribbonArea.toFloat();
+        fillCell (g, r, t.panel);
+        strokeCell (g, r, t.line);
+        g.setColour (t.dimText);
+        g.setFont (t.uiFont (10.5f, 500));
+        g.drawText (Strings::transport::capture10.toUpperCase(), ribbonArea.withTrimmedLeft (9).withWidth (46), juce::Justification::centredLeft, false);
+        const auto strip = juce::Rectangle<float> (130.0f, 24.0f).withCentre ({ r.getX() + 58.0f + 65.0f, r.getCentreY() });
+        g.setColour (t.panel2.withAlpha (0.7f));
+        g.fillRoundedRectangle (strip, 3.0f);
+        g.setColour (t.dimText.withAlpha (0.25f));
+        for (float x = strip.getX() + 3.0f; x < strip.getRight() - 3.0f; x += 4.0f)
+            g.fillRect (x, strip.getCentreY() - 1.0f, 2.0f, 2.0f);
+    }
+}
+
+void TopBar::resized()
+{
+    constexpr int pad = 14, gap = 10, small = 6, h = 30;
+    auto r = getLocalBounds().reduced (pad, 0);
+    const int cy = getHeight() / 2;
+    auto place = [&] (juce::Component& c, int w, int height = 30) {
+        c.setBounds (juce::Rectangle<int> (w, height).withCentre ({ r.getX() + w / 2, cy }));
+        r.removeFromLeft (w);
+    };
+
+    // Left to right
+    logoArea = juce::Rectangle<int> (22, 22).withCentre ({ r.getX() + 11, cy });
+    r.removeFromLeft (108 + gap);
+
+    tempo.setBounds (juce::Rectangle<int> (80, h).withCentre ({ r.getX() + 40, cy }));
+    r.removeFromLeft (80 + small);
+    signatureArea = juce::Rectangle<int> (60, h).withCentre ({ r.getX() + 30, cy });
+    r.removeFromLeft (60 + small);
+    place (*metronome, h);
+    r.removeFromLeft (gap);
+
+    place (*play, h);
+    r.removeFromLeft (small);
+    place (*stop, h);
+    r.removeFromLeft (small);
+    place (*record, h);
+    r.removeFromLeft (small);
+    positionArea = juce::Rectangle<int> (90, h).withCentre ({ r.getX() + 45, cy });
+    r.removeFromLeft (90 + small);
+    place (*loop, h);
+    r.removeFromLeft (gap);
+
+    // Right to left: what has to stay visible at the minimum window width
+    auto takeRight = [&] (juce::Component& c, int w, int height = 30) {
+        c.setBounds (juce::Rectangle<int> (w, height).withCentre ({ r.getRight() - w / 2, cy }));
+        r.removeFromRight (w);
+    };
+    takeRight (*cpu, 80, 20);
+    r.removeFromRight (gap);
+    takeRight (*keysLamp, 52, 20);
+    takeRight (*midiLamp, 52, 20);
+    r.removeFromRight (gap);
+    takeRight (*version, 96);
+    r.removeFromRight (gap);
+    takeRight (*tabs, 176, 30);
+    r.removeFromRight (gap);
+
+    // Middle: the ribbon and the morph slider appear only if there is room for them.
+    const int ribbonWidth = 58 + 130 + 10 + 86 + 6;
+    const int morphWidth = 18 + 90 + 18 + 24;
+    ribbonArea = {};
+    capture->setVisible (false);
+    morph->setVisible (false);
+    if (r.getWidth() >= ribbonWidth)
+    {
+        ribbonArea = juce::Rectangle<int> (ribbonWidth - 4, h).withCentre ({ r.getX() + (ribbonWidth - 4) / 2, cy });
+        capture->setVisible (true);
+        capture->setBounds (juce::Rectangle<int> (82, 24).withCentre ({ ribbonArea.getRight() - 4 - 41, cy }));
+        r.removeFromLeft (ribbonWidth - 4 + gap);
+        if (r.getWidth() >= morphWidth)
+        {
+            morph->setVisible (true);
+            morph->setBounds (juce::Rectangle<int> (morphWidth, 22).withCentre ({ r.getX() + morphWidth / 2, cy }));
+        }
+    }
+}
+} // namespace ui

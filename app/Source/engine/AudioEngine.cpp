@@ -34,7 +34,7 @@ namespace
 double defaultClock() { return juce::Time::getMillisecondCounterHiRes(); }
 } // namespace
 
-AudioEngine::AudioEngine (Settings& s) : settings (s), clock (&defaultClock)
+AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (&defaultClock)
 {
     formatManager.addDefaultFormats();
 
@@ -48,18 +48,21 @@ AudioEngine::AudioEngine (Settings& s) : settings (s), clock (&defaultClock)
     hardwareMidi.ensureSize (4096);
     keyboardMidi.ensureSize (4096);
 
-    auto savedDevice = settings.audioDeviceState();
-    const auto error = deviceManager.initialise (0, 2, savedDevice.get(), true);
-    if (error.isNotEmpty())
+    if (openDevices)
     {
-        DBG ("Audio device error: " << error);
-    }
-    deviceManager.addChangeListener (this);
+        auto savedDevice = settings.audioDeviceState();
+        const auto error = deviceManager.initialise (0, 2, savedDevice.get(), true);
+        if (error.isNotEmpty())
+        {
+            DBG ("Audio device error: " << error);
+        }
+        deviceManager.addChangeListener (this);
 
-    updateMidiInputs();
-    deviceManager.addMidiInputDeviceCallback ({}, this);
+        updateMidiInputs();
+        deviceManager.addMidiInputDeviceCallback ({}, this);
+        deviceManager.addAudioCallback (this);
+    }
     keyboardState.addListener (this);
-    deviceManager.addAudioCallback (this);
     startTimerHz (60);
 }
 
@@ -120,6 +123,8 @@ bool AudioEngine::pushLiveMidi (const uint8_t* bytes, int size, bool fromKeyboar
         e.bytes[i] = bytes[i];
     e.size = (uint8_t) size;
     e.source = fromKeyboard ? MidiInputQueue::keyboard : MidiInputQueue::hardware;
+    if (! fromKeyboard)
+        hardwareMidiCount.fetch_add (1, std::memory_order_relaxed);
     e.timeMs = timeMs;
     return midiQueue.push (e);
 }
@@ -372,6 +377,7 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
 
     rt.playingSlot.store (rt.player.playingSlot(), std::memory_order_relaxed);
     rt.queuedSlot.store (rt.player.queuedSlot(), std::memory_order_relaxed);
+    rt.playingStartBeat.store (rt.player.playingStartBeat(), std::memory_order_relaxed);
 
     rt.midi.clear();
     if (killNotes)
