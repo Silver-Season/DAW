@@ -4,75 +4,88 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include "../Settings.h"
+#include "../model/ProjectModel.h"
+#include "MidiInputQueue.h"
+#include "PlaybackGraph.h"
+
 #include "daw/engine/Clip.h"
 
-#include <array>
 #include <atomic>
+#include <functional>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <set>
 
-// The DAW's real-time core: transport, Session View clip players, per-track instruments
-// (built-in Prisma or any hosted AU/VST3), and the mixer.
-class AudioEngine final : public juce::AudioIODeviceCallback, private juce::ChangeListener
+// The DAW's real-time core: transport, Session View clip players, per-track device chains (built-in
+// Prisma or any hosted AU/VST3) and the mixer.
+//
+// The engine listens to a ProjectModel and publishes an immutable PlaybackGraph that the audio thread
+// reads without locks. The model never knows about the engine.
+class AudioEngine final : public juce::AudioIODeviceCallback,
+                          private juce::ChangeListener,
+                          private juce::ValueTree::Listener,
+                          private juce::Timer,
+                          private juce::MidiInputCallback,
+                          private juce::MidiKeyboardState::Listener
 {
 public:
-    static constexpr int kNumTracks = 8;
-    static constexpr int kNumScenes = 8;
+    using DeviceFactory = std::function<std::unique_ptr<juce::AudioProcessor> (const DeviceRef&)>;
 
-    struct Track
-    {
-        juce::String name;
-        juce::Colour colour;
-        std::array<std::unique_ptr<daw::engine::MidiClip>, kNumScenes> clips;
-
-        std::unique_ptr<juce::AudioProcessor> instrument;
-        juce::String instrumentName;
-
-        std::atomic<float> volumeDb { 0.0f }, pan { 0.0f };
-        std::atomic<bool> mute { false }, solo { false }, arm { false };
-        std::atomic<float> meterL { 0.0f }, meterR { 0.0f };
-
-        // audio thread only
-        daw::engine::ClipPlayer player;
-        juce::AudioBuffer<float> buffer;
-        juce::MidiBuffer midi;
-        std::vector<daw::MidiEvent> events;
-        float lastGainL = 0.0f, lastGainR = 0.0f;
-    };
-
-    AudioEngine();
+    explicit AudioEngine (Settings&);
     ~AudioEngine() override;
 
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
     juce::AudioPluginFormatManager& getFormatManager() { return formatManager; }
     juce::KnownPluginList& getKnownPlugins() { return knownPlugins; }
-    juce::PropertiesFile* getSettings() { return properties.getUserSettings(); }
+    Settings& getSettings() { return settings; }
     juce::MidiKeyboardState& getKeyboardState() { return keyboardState; }
+    double getSampleRate() const { return sampleRate.load(); }
+    int getBlockSize() const { return blockSize; }
 
+    //==========================================================================
+    // Model. Everything below that talks about tracks and devices by id refers to the attached model.
+    // Attaching builds and publishes a graph straight away; null detaches (the engine goes silent).
+    void setModel (ProjectModel*);
+    ProjectModel* getModel() const { return model; }
+
+    // How devices are made from DEVICE nodes. The default makes Prisma (with the saved state) for
+    // kind="prisma" and nothing for plugins, which arrive through registerProcessor. Tests replace it.
+    void setDeviceFactory (DeviceFactory);
+
+    // Hands over a plugin loaded asynchronously by the UI for a DEVICE node of the model.
+    void registerProcessor (int64_t deviceId, std::unique_ptr<juce::AudioProcessor>);
+
+    // Message thread only; the pointers stay valid until the next graph rebuild that drops them.
+    juce::AudioProcessor* findProcessor (int64_t deviceId) const;
+    TrackRuntime* findRuntime (int64_t trackId) const;
+
+    //==========================================================================
+    // Graph publication. The timer calls rebuildGraphIfNeeded() and collectGarbage() at 60 Hz; tests call
+    // them directly. All of these are for the message thread (or whatever thread plays its role).
+    void rebuildGraphIfNeeded();
+    void rebuildGraph();
+    void collectGarbage();
+    bool isGraphDirty() const { return graphDirty.load(); }
+    uint64_t getPublishedGeneration() const { return generationCounter.load(); }
+    size_t getNumRetiredObjects() const; // graphs + runtimes + devices waiting for deletion
+
+    //==========================================================================
     // Transport
     void play();
     void stop();
     bool isPlaying() const { return playing.load(); }
-    void setTempo (double bpm);
     double getTempo() const { return tempo.load(); }
     double getPositionBeats() const { return positionBeats.load(); }
-    void setLaunchQuantise (double beats) { quantise.store (beats); }
 
-    // Session View
-    Track& getTrack (int index) { return *tracks[(size_t) index]; }
-    void setClip (int track, int scene, std::unique_ptr<daw::engine::MidiClip> clip);
-    void launchClip (int track, int scene);
-    void stopTrack (int track);
-    void launchScene (int scene);
-    void stopAllClips();
-    int getPlayingScene (int track) const { return playingScene[(size_t) track].load(); }
-    int getQueuedScene (int track) const { return queuedScene[(size_t) track].load(); }
+    // Session View commands: queued for the audio thread. They return false if the queue is full.
+    bool launchClip (int64_t trackId, int scene);
+    bool launchScene (int scene);
+    bool stopTrack (int64_t trackId);
+    bool stopAllClips();
 
-    // Instruments
-    void setInstrument (int track, std::unique_ptr<juce::AudioProcessor> processor, const juce::String& name);
-    void loadPluginInstrument (int track, const juce::PluginDescription& desc, std::function<void (juce::String error)> done);
-    void armExclusive (int track);
-
-    std::atomic<float> masterVolumeDb { 0.0f }, masterMeterL { 0.0f }, masterMeterR { 0.0f };
+    std::atomic<float> masterMeterL { 0.0f }, masterMeterR { 0.0f };
 
     // juce::AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
@@ -82,30 +95,97 @@ public:
 
 private:
     class PlayHead;
+    friend class PlayHead;
 
+    template <typename T>
+    struct Retired
+    {
+        std::unique_ptr<T> object;
+        uint64_t generation; // deletable once the audio thread has seen a graph at least this new
+    };
+
+    // juce::ChangeListener / juce::Timer / MIDI
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
-    void prepareInstrument (juce::AudioProcessor&) const;
+    void timerCallback() override;
+    void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage&) override;
+    void handleNoteOn (juce::MidiKeyboardState*, int channel, int note, float velocity) override;
+    void handleNoteOff (juce::MidiKeyboardState*, int channel, int note, float velocity) override;
     void updateMidiInputs();
 
-    juce::ApplicationProperties properties;
+    // juce::ValueTree::Listener (message thread)
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
+    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override { graphDirty = true; }
+    void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override { graphDirty = true; }
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { graphDirty = true; }
+    void valueTreeRedirected (juce::ValueTree&) override { graphDirty = true; }
+
+    // graph building (EngineGraph.cpp)
+    void applyTrackProperties (TrackRuntime&, const TrackRef&);
+    void applyProjectProperties();
+    DeviceInstance* acquireDevice (const DeviceRef&, std::set<int64_t>& used);
+    std::shared_ptr<const daw::engine::MidiClip> acquireClip (const ClipRef&, std::set<int64_t>& used);
+    std::unique_ptr<juce::AudioProcessor> makeProcessor (const DeviceRef&);
+    void prepareDevice (DeviceInstance&) const;
+    void retireEverything();
+
+    // audio thread (AudioEngine.cpp)
+    void reconcileWithGraph (const PlaybackGraph&);
+    void processCommands (const PlaybackGraph&);
+    void renderTrack (const PlaybackGraph::Track&, const daw::engine::Transport::Block&, double samplesPerBeat, int numSamples,
+                      bool killNotes, bool anySolo, bool anyArmed);
+
+    Settings& settings;
     juce::AudioDeviceManager deviceManager;
     juce::AudioPluginFormatManager formatManager;
     juce::KnownPluginList knownPlugins;
     juce::MidiKeyboardState keyboardState;
-    juce::MidiMessageCollector midiCollector;
-
-    juce::CriticalSection lock; // guards session structure between the UI and the audio thread
-    std::array<std::unique_ptr<Track>, kNumTracks> tracks;
+    MidiInputQueue midiQueue;
     std::unique_ptr<PlayHead> playHead;
 
-    daw::engine::Transport transport;
+    //==========================================================================
+    // Message-thread state, guarded by buildLock (never taken by the audio thread).
+    mutable std::recursive_mutex buildLock;
+    ProjectModel* model = nullptr;
+    DeviceFactory deviceFactory;
+    std::map<int64_t, std::unique_ptr<TrackRuntime>> runtimes;
+    std::map<int64_t, std::unique_ptr<DeviceInstance>> devices;
+    std::map<int64_t, std::unique_ptr<juce::AudioProcessor>> pendingProcessors;
+    struct ClipCacheEntry
+    {
+        uint64_t hash = 0;
+        std::shared_ptr<const daw::engine::MidiClip> clip;
+    };
+    std::map<int64_t, ClipCacheEntry> clipCache;
+    std::unique_ptr<PlaybackGraph> currentOwner;
+    std::vector<Retired<PlaybackGraph>> retiredGraphs;
+    std::vector<Retired<TrackRuntime>> retiredTracks;
+    std::vector<Retired<DeviceInstance>> retiredDevices;
+    std::atomic<uint64_t> generationCounter { 0 };
+    std::atomic<bool> graphDirty { false };
+    std::atomic<bool> audioRunning { false };
+
+    //==========================================================================
+    // Shared with the audio thread
+    std::atomic<const PlaybackGraph*> current { nullptr };
+    std::atomic<uint64_t> seenGeneration { 0 };
+
+    static constexpr int kCommandQueueSize = 256;
+    juce::AbstractFifo commandFifo { kCommandQueueSize };
+    std::array<EngineCommand, kCommandQueueSize> commands;
+    bool pushCommand (const EngineCommand&);
+
     std::atomic<bool> playing { false }, stopRequested { false };
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };
-    std::array<std::atomic<int>, kNumTracks> playingScene, queuedScene;
+    std::atomic<float> masterGain { 1.0f };
+    std::atomic<int64_t> selectedTrackId { -1 };
 
-    double sampleRate = 44100.0;
+    std::atomic<double> sampleRate { 44100.0 };
     int blockSize = 512;
-    juce::MidiBuffer liveMidi;
+
+    // audio thread only
+    daw::engine::Transport transport;
+    uint64_t lastGeneration = 0;
+    juce::MidiBuffer hardwareMidi, keyboardMidi, masterMidi, masterFxMidi;
     juce::AudioBuffer<float> master;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)

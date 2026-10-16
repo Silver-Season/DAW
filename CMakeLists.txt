@@ -15,6 +15,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(DAW_BUILD_TESTS "Build core unit tests" ON)
 option(DAW_BUILD_TOOLS "Build the offline renderer" ON)
 option(DAW_BUILD_JUCE "Build the JUCE app and plugins (needs JUCE)" ON)
+# Replaces the global operator new/delete and counts heap use on the audio thread (docs/spec/00-rules.md, section 2).
+# Always on in the engine tests; for the app it is a debugging aid.
+option(DAW_RT_CHECKS "Count heap allocations on the audio thread" OFF)
 
 if(DAW_BUILD_TESTS)
     enable_testing()
@@ -37,6 +40,17 @@ if(DAW_BUILD_JUCE)
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(JUCE)
 
+    # Sources shared by the app and the engine tests: model, settings, engine, built-in Prisma.
+    set(DAW_APP_SHARED_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Settings.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioEngine.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/EngineGraph.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RtCheck.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaEditor.cpp)
+
     add_subdirectory(plugins/prisma)
     add_subdirectory(app)
 
@@ -44,12 +58,14 @@ if(DAW_BUILD_JUCE)
         juce_add_console_app(daw_engine_tests PRODUCT_NAME "daw_engine_tests")
         target_sources(daw_engine_tests PRIVATE
             tests/EngineTests.cpp
-            app/Source/AudioEngine.cpp
-            plugins/prisma/Source/PrismaProcessor.cpp
-            plugins/prisma/Source/PrismaEditor.cpp)
+            tests/ModelTests.cpp
+            tests/GraphTests.cpp
+            ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
-            JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-        target_link_libraries(daw_engine_tests PRIVATE daw_core juce::juce_audio_utils juce::juce_recommended_config_flags)
+            JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+            DAW_RT_CHECKS=1)
+        target_link_libraries(daw_engine_tests PRIVATE daw_core juce::juce_audio_utils
+            juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
         add_test(NAME daw_engine_tests COMMAND daw_engine_tests)
     endif()
 endif()

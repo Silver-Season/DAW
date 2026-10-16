@@ -1,5 +1,7 @@
 #include "AudioEngine.h"
 
+#include "RtCheck.h"
+
 //==============================================================================
 // Gives hosted instruments the tempo and position (LFO sync, arpeggiators, delays).
 class AudioEngine::PlayHead final : public juce::AudioPlayHead
@@ -11,12 +13,13 @@ public:
     {
         PositionInfo info;
         const double beats = engine.positionBeats.load();
-        info.setBpm (engine.tempo.load());
+        const double bpm = engine.tempo.load();
+        info.setBpm (bpm);
         info.setTimeSignature (juce::AudioPlayHead::TimeSignature { 4, 4 });
         info.setPpqPosition (beats);
         info.setPpqPositionOfLastBarStart (std::floor (beats / 4.0) * 4.0);
-        info.setTimeInSeconds (beats * 60.0 / engine.tempo.load());
-        info.setTimeInSamples ((int64_t) (beats * 60.0 / engine.tempo.load() * engine.sampleRate));
+        info.setTimeInSeconds (beats * 60.0 / bpm);
+        info.setTimeInSamples ((int64_t) (beats * 60.0 / bpm * engine.sampleRate.load()));
         info.setIsPlaying (engine.playing.load());
         return info;
     }
@@ -26,38 +29,21 @@ private:
 };
 
 //==============================================================================
-AudioEngine::AudioEngine()
+AudioEngine::AudioEngine (Settings& s) : settings (s)
 {
-    juce::PropertiesFile::Options options;
-    options.applicationName = "DAW";
-    options.filenameSuffix = ".settings";
-    options.folderName = "DAW";
-    options.osxLibrarySubFolder = "Application Support";
-    properties.setStorageParameters (options);
-
     formatManager.addDefaultFormats();
 
-    if (auto xml = getSettings()->getXmlValue ("knownPlugins"))
+    if (auto xml = settings.knownPlugins())
         knownPlugins.recreateFromXml (*xml);
     knownPlugins.addChangeListener (this);
 
     playHead = std::make_unique<PlayHead> (*this);
 
-    const juce::Colour palette[] { juce::Colour (0xffa78bfa), juce::Colour (0xff4fd1c5), juce::Colour (0xfff6ad55), juce::Colour (0xfffc8181),
-                                   juce::Colour (0xff63b3ed), juce::Colour (0xff68d391), juce::Colour (0xfff687b3), juce::Colour (0xffecc94b) };
-    for (int i = 0; i < kNumTracks; ++i)
-    {
-        tracks[(size_t) i] = std::make_unique<Track>();
-        tracks[(size_t) i]->name = "Track " + juce::String (i + 1);
-        tracks[(size_t) i]->colour = palette[i];
-        tracks[(size_t) i]->events.reserve (1024);
-        tracks[(size_t) i]->midi.ensureSize (4096);
-        playingScene[(size_t) i] = -1;
-        queuedScene[(size_t) i] = -1;
-    }
-    liveMidi.ensureSize (4096);
+    master.setSize (kMaxChannels, blockSize);
+    hardwareMidi.ensureSize (4096);
+    keyboardMidi.ensureSize (4096);
 
-    auto savedDevice = getSettings()->getXmlValue ("audioDevice");
+    auto savedDevice = settings.audioDeviceState();
     const auto error = deviceManager.initialise (0, 2, savedDevice.get(), true);
     if (error.isNotEmpty())
     {
@@ -66,19 +52,22 @@ AudioEngine::AudioEngine()
     deviceManager.addChangeListener (this);
 
     updateMidiInputs();
-    deviceManager.addMidiInputDeviceCallback ({}, &midiCollector);
+    deviceManager.addMidiInputDeviceCallback ({}, this);
+    keyboardState.addListener (this);
     deviceManager.addAudioCallback (this);
+    startTimerHz (60);
 }
 
 AudioEngine::~AudioEngine()
 {
+    stopTimer();
     deviceManager.removeAudioCallback (this);
-    deviceManager.removeMidiInputDeviceCallback ({}, &midiCollector);
+    deviceManager.removeMidiInputDeviceCallback ({}, this);
+    keyboardState.removeListener (this);
     deviceManager.closeAudioDevice();
     knownPlugins.removeChangeListener (this);
     deviceManager.removeChangeListener (this);
-    for (auto& t : tracks)
-        t->instrument.reset();
+    setModel (nullptr);
 }
 
 void AudioEngine::updateMidiInputs()
@@ -94,14 +83,62 @@ void AudioEngine::changeListenerCallback (juce::ChangeBroadcaster* source)
     if (source == &knownPlugins)
     {
         if (auto xml = knownPlugins.createXml())
-            getSettings()->setValue ("knownPlugins", xml.get());
+            settings.setKnownPlugins (*xml);
     }
     else if (source == &deviceManager)
     {
         if (auto xml = deviceManager.createStateXml())
-            getSettings()->setValue ("audioDevice", xml.get());
+            settings.setAudioDeviceState (*xml);
     }
-    getSettings()->saveIfNeeded();
+    settings.save();
+}
+
+void AudioEngine::timerCallback()
+{
+    rebuildGraphIfNeeded();
+    collectGarbage();
+
+    // Live key events are forwarded to the audio thread by listener callbacks; this only empties the
+    // keyboard state's own event list, which nobody else reads.
+    juce::MidiBuffer scratch;
+    keyboardState.processNextMidiBuffer (scratch, 0, 1, false);
+}
+
+//==============================================================================
+// Live MIDI input: pushed lock-free, from any thread, to the audio thread.
+void AudioEngine::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
+{
+    const int size = m.getRawDataSize();
+    if (size < 1 || size > 3)
+        return; // sysex and the like are not routed to tracks
+    MidiInputQueue::Event e;
+    for (int i = 0; i < size; ++i)
+        e.bytes[i] = m.getRawData()[i];
+    e.size = (uint8_t) size;
+    e.source = MidiInputQueue::hardware;
+    midiQueue.push (e);
+}
+
+void AudioEngine::handleNoteOn (juce::MidiKeyboardState*, int channel, int note, float velocity)
+{
+    MidiInputQueue::Event e;
+    e.bytes[0] = (uint8_t) (0x90 | juce::jlimit (0, 15, channel - 1));
+    e.bytes[1] = (uint8_t) juce::jlimit (0, 127, note);
+    e.bytes[2] = (uint8_t) juce::jlimit (1, 127, juce::roundToInt (velocity * 127.0f));
+    e.size = 3;
+    e.source = MidiInputQueue::keyboard;
+    midiQueue.push (e);
+}
+
+void AudioEngine::handleNoteOff (juce::MidiKeyboardState*, int channel, int note, float)
+{
+    MidiInputQueue::Event e;
+    e.bytes[0] = (uint8_t) (0x80 | juce::jlimit (0, 15, channel - 1));
+    e.bytes[1] = (uint8_t) juce::jlimit (0, 127, note);
+    e.bytes[2] = 0;
+    e.size = 3;
+    e.source = MidiInputQueue::keyboard;
+    midiQueue.push (e);
 }
 
 //==============================================================================
@@ -116,158 +153,319 @@ void AudioEngine::stop()
     stopRequested = true;
 }
 
-void AudioEngine::setTempo (double bpm)
+bool AudioEngine::pushCommand (const EngineCommand& c)
 {
-    tempo = juce::jlimit (20.0, 999.0, bpm);
+    const auto scope = commandFifo.write (1);
+    if (scope.blockSize1 + scope.blockSize2 < 1)
+        return false;
+    commands[(size_t) (scope.blockSize1 > 0 ? scope.startIndex1 : scope.startIndex2)] = c;
+    return true;
 }
 
-void AudioEngine::setClip (int trackIndex, int scene, std::unique_ptr<daw::engine::MidiClip> clip)
+bool AudioEngine::launchClip (int64_t trackId, int scene)
 {
-    auto& t = getTrack (trackIndex);
-    {
-        const juce::ScopedLock sl (lock);
-        std::swap (t.clips[(size_t) scene], clip);
-        t.player.clipChanged (scene, t.clips[(size_t) scene].get());
-    }
-    // the previous clip (if any) is destroyed here, outside the lock
+    return pushCommand ({ EngineCommand::Type::launchClip, trackId, scene });
 }
 
-void AudioEngine::launchClip (int trackIndex, int scene)
+bool AudioEngine::launchScene (int scene)
 {
-    auto& t = getTrack (trackIndex);
-    const juce::ScopedLock sl (lock);
-    if (t.clips[(size_t) scene] == nullptr)
-        return;
-    const bool wasPlaying = playing.load();
-    t.player.launch (scene, t.clips[(size_t) scene].get(), transport.getPositionBeats(), wasPlaying ? quantise.load() : 0.0);
-    playing = true; // launching a clip starts the transport, like in Live
+    return pushCommand ({ EngineCommand::Type::launchScene, -1, scene });
 }
 
-void AudioEngine::stopTrack (int trackIndex)
+bool AudioEngine::stopTrack (int64_t trackId)
 {
-    const juce::ScopedLock sl (lock);
-    getTrack (trackIndex).player.stop (transport.getPositionBeats(), playing.load() ? quantise.load() : 0.0);
+    return pushCommand ({ EngineCommand::Type::stopTrack, trackId, -1 });
 }
 
-void AudioEngine::launchScene (int scene)
+bool AudioEngine::stopAllClips()
 {
-    for (int i = 0; i < kNumTracks; ++i)
-    {
-        if (getTrack (i).clips[(size_t) scene] != nullptr)
-            launchClip (i, scene);
-        else
-            stopTrack (i);
-    }
+    return pushCommand ({ EngineCommand::Type::stopAll, -1, -1 });
 }
 
-void AudioEngine::stopAllClips()
+void AudioEngine::prepareDevice (DeviceInstance& d) const
 {
-    for (int i = 0; i < kNumTracks; ++i)
-        stopTrack (i);
-}
-
-void AudioEngine::armExclusive (int trackIndex)
-{
-    for (int i = 0; i < kNumTracks; ++i)
-        getTrack (i).arm = (i == trackIndex);
-}
-
-//==============================================================================
-void AudioEngine::prepareInstrument (juce::AudioProcessor& p) const
-{
+    auto& p = *d.processor;
     p.setPlayHead (playHead.get());
     p.enableAllBuses();
-    p.setRateAndBufferSizeDetails (sampleRate, blockSize);
-    p.prepareToPlay (sampleRate, blockSize);
-}
-
-void AudioEngine::setInstrument (int trackIndex, std::unique_ptr<juce::AudioProcessor> processor, const juce::String& name)
-{
-    auto& t = getTrack (trackIndex);
-    if (processor != nullptr)
-        prepareInstrument (*processor);
-
-    const int channels = processor != nullptr
-                             ? juce::jmax (2, processor->getTotalNumInputChannels(), processor->getTotalNumOutputChannels())
-                             : 2;
-    {
-        const juce::ScopedLock sl (lock);
-        std::swap (t.instrument, processor);
-        t.instrumentName = name;
-        t.buffer.setSize (channels, blockSize, false, true, false);
-    }
-
-    if (processor != nullptr)
-        processor->releaseResources(); // old instrument, destroyed when this function returns
-}
-
-void AudioEngine::loadPluginInstrument (int trackIndex, const juce::PluginDescription& desc, std::function<void (juce::String)> done)
-{
-    formatManager.createPluginInstanceAsync (desc, sampleRate, blockSize,
-                                             [this, trackIndex, desc, done] (std::unique_ptr<juce::AudioPluginInstance> instance, const juce::String& error) {
-                                                 if (instance == nullptr)
-                                                 {
-                                                     done (error.isNotEmpty() ? error : "Could not load " + desc.name);
-                                                     return;
-                                                 }
-                                                 setInstrument (trackIndex, std::move (instance), desc.name);
-                                                 done ({});
-                                             });
+    p.setRateAndBufferSizeDetails (sampleRate.load(), blockSize);
+    p.prepareToPlay (sampleRate.load(), blockSize);
+    d.numChannels = juce::jlimit (2, kMaxChannels, juce::jmax (p.getTotalNumInputChannels(), p.getTotalNumOutputChannels()));
 }
 
 //==============================================================================
 void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
-    const juce::ScopedLock sl (lock);
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
     sampleRate = device->getCurrentSampleRate();
     blockSize = juce::jmax (16, device->getCurrentBufferSizeSamples());
     transport.prepare (sampleRate);
-    midiCollector.reset (sampleRate);
-    master.setSize (2, blockSize);
+    master.setSize (kMaxChannels, blockSize);
 
-    for (auto& t : tracks)
-    {
-        int channels = 2;
-        if (t->instrument != nullptr)
-        {
-            prepareInstrument (*t->instrument);
-            channels = juce::jmax (2, t->instrument->getTotalNumInputChannels(), t->instrument->getTotalNumOutputChannels());
-        }
-        t->buffer.setSize (channels, blockSize);
-    }
+    for (auto& [id, rt] : runtimes)
+        rt->prepare (blockSize);
+    for (auto& r : retiredTracks)
+        r.object->prepare (blockSize);
+    for (auto& [id, d] : devices)
+        prepareDevice (*d);
+    for (auto& r : retiredDevices)
+        prepareDevice (*r.object);
+
+    audioRunning = true;
 }
 
 void AudioEngine::audioDeviceStopped()
 {
-    const juce::ScopedLock sl (lock);
-    for (auto& t : tracks)
-        if (t->instrument != nullptr)
-            t->instrument->releaseResources();
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    audioRunning = false;
+    for (auto& [id, d] : devices)
+        d->processor->releaseResources();
+    collectGarbage(); // nobody can see the old graphs any more
+}
+
+//==============================================================================
+// Audio thread
+//==============================================================================
+void AudioEngine::reconcileWithGraph (const PlaybackGraph& graph)
+{
+    // A new graph arrived. Clips that were edited are new objects, and scenes may have moved, so the
+    // players are re-pointed by clip id: a playing clip keeps playing (nothing restarts, no note is lost).
+    // The old clips are still alive here: seenGeneration is only advanced after this function.
+    for (const auto& t : graph.tracks)
+    {
+        auto& player = t.runtime->player;
+        const auto findById = [&t] (const daw::engine::MidiClip* old, int fallbackSlot, const daw::engine::MidiClip*& clipOut) {
+            int slot = fallbackSlot;
+            clipOut = nullptr;
+            if (old != nullptr)
+                for (int i = 0; i < (int) t.slots.size(); ++i)
+                    if (t.slots[(size_t) i] != nullptr && t.slots[(size_t) i]->id == old->id)
+                    {
+                        slot = i;
+                        clipOut = t.slots[(size_t) i].get();
+                        break;
+                    }
+            return slot; // clip gone: the old slot index with a null clip stops the player
+        };
+
+        const daw::engine::MidiClip *newPlayingClip = nullptr, *newQueuedClip = nullptr;
+        const int oldPlaying = player.playingSlot(), oldQueued = player.queuedSlot();
+        const int newPlaying = oldPlaying == daw::engine::ClipPlayer::kNoClip
+                                   ? oldPlaying
+                                   : findById (player.playingClipPtr(), oldPlaying, newPlayingClip);
+        const int newQueued = oldQueued == daw::engine::ClipPlayer::kNoClip
+                                  ? oldQueued
+                                  : findById (player.queuedClipPtr(), oldQueued, newQueuedClip);
+
+        player.relocate (newPlaying, newQueued);
+        if (newPlaying != daw::engine::ClipPlayer::kNoClip && newPlayingClip != player.playingClipPtr())
+            player.clipChanged (newPlaying, newPlayingClip);
+        if (newQueued != daw::engine::ClipPlayer::kNoClip && newQueuedClip != player.queuedClipPtr())
+            player.clipChanged (newQueued, newQueuedClip);
+    }
+}
+
+void AudioEngine::processCommands (const PlaybackGraph& graph)
+{
+    const auto findTrack = [&graph] (int64_t id) -> const PlaybackGraph::Track* {
+        for (const auto& t : graph.tracks)
+            if (t.runtime->trackId == id)
+                return &t;
+        return nullptr;
+    };
+    const auto slotClip = [] (const PlaybackGraph::Track& t, int scene) -> const daw::engine::MidiClip* {
+        return scene >= 0 && scene < (int) t.slots.size() ? t.slots[(size_t) scene].get() : nullptr;
+    };
+
+    const double now = transport.getPositionBeats();
+    const double q = playing.load() ? quantise.load() : 0.0;
+
+    const auto scope = commandFifo.read (commandFifo.getNumReady());
+    const auto handle = [&] (const EngineCommand& c) {
+        switch (c.type)
+        {
+            case EngineCommand::Type::launchClip:
+                if (auto* t = findTrack (c.trackId))
+                    if (auto* clip = slotClip (*t, c.sceneIndex))
+                    {
+                        t->runtime->player.launch (c.sceneIndex, clip, now, q);
+                        playing = true; // launching a clip starts the transport, like in Live
+                    }
+                break;
+            case EngineCommand::Type::launchScene:
+                for (const auto& t : graph.tracks)
+                {
+                    if (auto* clip = slotClip (t, c.sceneIndex))
+                    {
+                        t.runtime->player.launch (c.sceneIndex, clip, now, q);
+                        playing = true;
+                    }
+                    else
+                        t.runtime->player.stop (now, q);
+                }
+                break;
+            case EngineCommand::Type::stopTrack:
+                if (auto* t = findTrack (c.trackId))
+                    t->runtime->player.stop (now, q);
+                break;
+            case EngineCommand::Type::stopAll:
+                for (const auto& t : graph.tracks)
+                    t.runtime->player.stop (now, q);
+                break;
+        }
+    };
+    for (int i = 0; i < scope.blockSize1; ++i)
+        handle (commands[(size_t) (scope.startIndex1 + i)]);
+    for (int i = 0; i < scope.blockSize2; ++i)
+        handle (commands[(size_t) (scope.startIndex2 + i)]);
+}
+
+namespace
+{
+// Runs a device chain in place on `view`. The first device is the instrument and gets the MIDI; the others
+// are effects and get an empty MIDI buffer. A disabled effect lets the sound through; a disabled
+// instrument is silent.
+void processChain (const std::vector<DeviceInstance*>& chain, juce::AudioBuffer<float>& storage, int numSamples,
+                   juce::MidiBuffer& midi, juce::MidiBuffer& emptyMidi, bool firstIsInstrument)
+{
+    for (size_t i = 0; i < chain.size(); ++i)
+    {
+        auto* d = chain[i];
+        const bool isInstrument = firstIsInstrument && i == 0;
+        if (d == nullptr || d->processor == nullptr)
+            continue;
+
+        const int channels = d->numChannels.load (std::memory_order_relaxed);
+        juce::AudioBuffer<float> view (storage.getArrayOfWritePointers(), channels, numSamples);
+        if (! d->enabled.load (std::memory_order_relaxed))
+        {
+            if (isInstrument)
+                view.clear();
+            continue;
+        }
+        if (isInstrument)
+        {
+            view.clear();
+            d->processor->processBlock (view, midi);
+        }
+        else
+        {
+            for (int ch = 2; ch < channels; ++ch) // only the main stereo bus carries signal
+                view.clear (ch, 0, numSamples);
+            emptyMidi.clear();
+            d->processor->processBlock (view, emptyMidi);
+        }
+    }
+}
+} // namespace
+
+void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine::Transport::Block& block, double spb, int numSamples,
+                               bool killNotes, bool anySolo, bool anyArmed)
+{
+    auto& rt = *t.runtime;
+
+    rt.events.clear();
+    rt.player.process (block.startBeat, block.endBeat, spb, numSamples, rt.events);
+    daw::engine::sortEvents (rt.events);
+
+    rt.playingSlot.store (rt.player.playingSlot(), std::memory_order_relaxed);
+    rt.queuedSlot.store (rt.player.queuedSlot(), std::memory_order_relaxed);
+
+    rt.midi.clear();
+    if (killNotes)
+        for (int ch = 1; ch <= 16; ++ch)
+            rt.midi.addEvent (juce::MidiMessage::allNotesOff (ch), 0);
+    for (const auto& e : rt.events)
+    {
+        const uint8_t bytes[3] { e.status, e.data1, e.data2 };
+        rt.midi.addEvent (bytes, 3, e.sampleOffset);
+    }
+
+    // Live MIDI goes to armed tracks; with no armed track the selected one is armed automatically.
+    const bool armed = rt.arm.load() || (! anyArmed && rt.trackId == selectedTrackId.load());
+    if (armed)
+        switch ((TrackInputMode) rt.inputMode.load())
+        {
+            case TrackInputMode::allMidi:
+                rt.midi.addEvents (hardwareMidi, 0, numSamples, 0);
+                rt.midi.addEvents (keyboardMidi, 0, numSamples, 0);
+                break;
+            case TrackInputMode::keyboard: rt.midi.addEvents (keyboardMidi, 0, numSamples, 0); break;
+            case TrackInputMode::midiDevice: rt.midi.addEvents (hardwareMidi, 0, numSamples, 0); break;
+            case TrackInputMode::none: break;
+        }
+
+    if (t.chain.empty())
+        return;
+
+    // Start from silence so that a missing or disabled instrument cannot feed old audio into the effects.
+    rt.buffer.clear (0, 0, numSamples);
+    rt.buffer.clear (1, 0, numSamples);
+    processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true);
+
+    const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load());
+    const float vol = audible ? rt.volumeGain.load() : 0.0f;
+    const float pan = juce::jlimit (-1.0f, 1.0f, rt.pan.load());
+    const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f; // equal-power pan law
+    const float gainL = vol * std::cos (angle) * juce::MathConstants<float>::sqrt2;
+    const float gainR = vol * std::sin (angle) * juce::MathConstants<float>::sqrt2;
+
+    const float* srcL = rt.buffer.getReadPointer (0);
+    const float* srcR = rt.buffer.getReadPointer (1);
+    master.addFromWithRamp (0, 0, srcL, numSamples, rt.lastGainL, gainL);
+    master.addFromWithRamp (1, 0, srcR, numSamples, rt.lastGainR, gainR);
+    rt.lastGainL = gainL;
+    rt.lastGainR = gainR;
+
+    const auto peak = [numSamples] (const float* d) {
+        const auto r = juce::FloatVectorOperations::findMinAndMax (d, numSamples);
+        return juce::jmax (std::abs (r.getStart()), std::abs (r.getEnd()));
+    };
+    rt.meterL.store (juce::jmax (rt.meterL.load(), peak (srcL) * gainL), std::memory_order_relaxed);
+    rt.meterR.store (juce::jmax (rt.meterR.load(), peak (srcR) * gainR), std::memory_order_relaxed);
 }
 
 void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, float* const* outputs, int numOutputs, int numSamples,
                                                     const juce::AudioIODeviceCallbackContext&)
 {
+    const daw::rt::ScopedAudioThread rtGuard;
     juce::ScopedNoDenormals noDenormals;
 
     for (int ch = 0; ch < numOutputs; ++ch)
         if (outputs[ch] != nullptr)
             juce::FloatVectorOperations::clear (outputs[ch], numSamples);
 
+    const PlaybackGraph* graph = current.load (std::memory_order_acquire);
+    if (graph == nullptr)
+        return;
+
     if (numSamples > blockSize || numSamples > master.getNumSamples())
+    {
+        seenGeneration.store (graph->generation, std::memory_order_release);
         return; // device changed its buffer size without a restart; skip until it is prepared again
+    }
 
-    liveMidi.clear();
-    midiCollector.removeNextBlockOfMessages (liveMidi, numSamples);
-    keyboardState.processNextMidiBuffer (liveMidi, 0, numSamples, true);
+    if (graph->generation != lastGeneration)
+    {
+        reconcileWithGraph (*graph);
+        lastGeneration = graph->generation;
+    }
+    // Only now may the message thread delete what older graphs held.
+    seenGeneration.store (graph->generation, std::memory_order_release);
 
-    const juce::ScopedLock sl (lock);
+    processCommands (*graph);
+
+    // Live MIDI
+    hardwareMidi.clear();
+    keyboardMidi.clear();
+    MidiInputQueue::Event e;
+    while (midiQueue.pop (e))
+        (e.source == MidiInputQueue::keyboard ? keyboardMidi : hardwareMidi).addEvent (e.bytes, e.size, 0);
 
     const bool killNotes = stopRequested.exchange (false);
     if (killNotes)
     {
-        for (auto& t : tracks)
-            t->player.stopImmediately();
+        for (const auto& t : graph->tracks)
+            t.runtime->player.stopImmediately();
         transport.stop();
     }
     if (! juce::exactlyEqual (transport.getTempo(), tempo.load()))
@@ -279,64 +477,22 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     const double spb = transport.samplesPerBeat();
 
     master.clear();
-    bool anySolo = false;
-    for (auto& t : tracks)
-        anySolo = anySolo || t->solo.load();
-
-    for (size_t ti = 0; ti < tracks.size(); ++ti)
+    bool anySolo = false, anyArmed = false;
+    for (const auto& t : graph->tracks)
     {
-        auto& t = *tracks[ti];
-
-        t.events.clear();
-        t.player.process (block.startBeat, block.endBeat, spb, numSamples, t.events);
-        daw::engine::sortEvents (t.events);
-
-        playingScene[ti] = t.player.playingSlot();
-        queuedScene[ti] = t.player.queuedSlot();
-
-        t.midi.clear();
-        if (killNotes)
-            for (int ch = 1; ch <= 16; ++ch)
-                t.midi.addEvent (juce::MidiMessage::allNotesOff (ch), 0);
-        for (const auto& e : t.events)
-            t.midi.addEvent (juce::MidiMessage (e.status, e.data1, e.data2), e.sampleOffset);
-        if (t.arm.load())
-            t.midi.addEvents (liveMidi, 0, numSamples, 0);
-
-        if (t.instrument == nullptr)
-            continue;
-
-        const int channels = t.buffer.getNumChannels();
-        juce::AudioBuffer<float> view (t.buffer.getArrayOfWritePointers(), channels, numSamples);
-        view.clear();
-        t.instrument->processBlock (view, t.midi);
-
-        const bool audible = ! t.mute.load() && (! anySolo || t.solo.load());
-        const float vol = t.volumeDb.load() <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (t.volumeDb.load());
-        const float pan = juce::jlimit (-1.0f, 1.0f, t.pan.load());
-        const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
-        const float gainL = audible ? vol * std::cos (angle) * juce::MathConstants<float>::sqrt2 : 0.0f;
-        const float gainR = audible ? vol * std::sin (angle) * juce::MathConstants<float>::sqrt2 : 0.0f;
-
-        const float* srcL = view.getReadPointer (0);
-        const float* srcR = view.getReadPointer (juce::jmin (1, channels - 1));
-        master.addFromWithRamp (0, 0, srcL, numSamples, t.lastGainL, gainL);
-        master.addFromWithRamp (1, 0, srcR, numSamples, t.lastGainR, gainR);
-        t.lastGainL = gainL;
-        t.lastGainR = gainR;
-
-        const auto range = [&] (const float* d) {
-            auto r = juce::FloatVectorOperations::findMinAndMax (d, numSamples);
-            return juce::jmax (std::abs (r.getStart()), std::abs (r.getEnd()));
-        };
-        t.meterL = juce::jmax (t.meterL.load(), range (srcL) * gainL);
-        t.meterR = juce::jmax (t.meterR.load(), range (srcR) * gainR);
+        anySolo = anySolo || t.runtime->solo.load();
+        anyArmed = anyArmed || t.runtime->arm.load();
     }
 
-    const float mg = juce::Decibels::decibelsToGain (masterVolumeDb.load(), -60.0f);
-    master.applyGain (mg);
-    masterMeterL = juce::jmax (masterMeterL.load(), master.getMagnitude (0, 0, numSamples));
-    masterMeterR = juce::jmax (masterMeterR.load(), master.getMagnitude (1, 0, numSamples));
+    for (const auto& t : graph->tracks)
+        renderTrack (t, block, spb, numSamples, killNotes, anySolo, anyArmed);
+
+    // Master chain works on the first two channels of the (wider) master buffer
+    processChain (graph->masterChain, master, numSamples, masterMidi, masterFxMidi, false);
+
+    master.applyGain (masterGain.load());
+    masterMeterL.store (juce::jmax (masterMeterL.load(), master.getMagnitude (0, 0, numSamples)), std::memory_order_relaxed);
+    masterMeterR.store (juce::jmax (masterMeterR.load(), master.getMagnitude (1, 0, numSamples)), std::memory_order_relaxed);
 
     for (int ch = 0; ch < juce::jmin (2, numOutputs); ++ch)
         if (outputs[ch] != nullptr)
