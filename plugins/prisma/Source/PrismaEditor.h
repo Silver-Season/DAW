@@ -103,6 +103,35 @@ private:
     float lastTable = -1, lastPos = -1, lastOn = -1;
 };
 
+// On-screen keyboard with octave shift and computer-keyboard playing, laid out like Ableton:
+// A W S E D F T G Y H U J K O L P ; play notes, Z / X shift the octave, C / V change the velocity.
+// The owner forwards its keyPressed / keyStateChanged calls here.
+class KeyboardPanel : public juce::Component
+{
+public:
+    explicit KeyboardPanel (juce::MidiKeyboardState&);
+    ~KeyboardPanel() override;
+
+    bool handleKeyPressed (const juce::KeyPress&);
+    bool handleKeyStateChanged();
+    void releaseAll();
+    void shiftOctave (int delta);
+
+    void resized() override;
+
+private:
+    void updateLabel();
+
+    juce::MidiKeyboardState& state;
+    juce::MidiKeyboardComponent keyboard;
+    juce::TextButton octDown { "Oct -" }, octUp { "Oct +" };
+    juce::Label info;
+    int baseNote = 60; // the note played by the A key
+    int velocity = 100;
+    static constexpr const char* kKeys = "awsedftgyhujkolp;";
+    std::array<int, 17> heldNote {};
+};
+
 } // namespace prisma_ui
 
 class PrismaEditor final : public juce::AudioProcessorEditor, private juce::Timer
@@ -113,6 +142,9 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress& k) override { return keyboard.handleKeyPressed (k); }
+    bool keyStateChanged (bool) override { return keyboard.handleKeyStateChanged(); }
+    void focusLost (FocusChangeType) override { keyboard.releaseAll(); }
 
 private:
     void timerCallback() override;
@@ -140,7 +172,7 @@ private:
     std::vector<prisma_ui::Section*> envs, lfos;
     prisma_ui::Section* matrix = nullptr;
     prisma_ui::Section* master = nullptr;
-    juce::MidiKeyboardComponent keyboard;
+    prisma_ui::KeyboardPanel keyboard;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrismaEditor)
 };

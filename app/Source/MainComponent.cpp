@@ -483,7 +483,7 @@ private:
 
 //==============================================================================
 MainComponent::MainComponent (AudioEngine& e)
-    : engine (e), keyboard (e.getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard)
+    : engine (e), keyboard (e.getKeyboardState())
 {
     setLookAndFeel (&lnf);
 
@@ -504,9 +504,6 @@ MainComponent::MainComponent (AudioEngine& e)
     masterStrip = std::make_unique<MasterStrip> (engine);
     addAndMakeVisible (*masterStrip);
 
-    keyboard.setAvailableRange (24, 108);
-    keyboard.setKeyWidth (18.0f);
-    keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, colours::accent.withAlpha (0.7f));
     addAndMakeVisible (keyboard);
 
     setWantsKeyboardFocus (true);
@@ -713,7 +710,7 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
             engine.play();
         return true;
     }
-    return false;
+    return keyboard.handleKeyPressed (key);
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -726,7 +723,6 @@ void MainComponent::resized()
     auto r = getLocalBounds();
     transportBar->setBounds (r.removeFromTop (48));
     keyboard.setBounds (r.removeFromBottom (72));
-    keyboard.setKeyWidth ((float) keyboard.getWidth() / 50.0f); // the 24..108 range has 50 white keys
 
     const int gridHeight = kHeaderHeight + AudioEngine::kNumScenes * kSlotHeight + kStopRowHeight + 8;
     auto grid = r.removeFromTop (gridHeight).reduced (4);

@@ -15,6 +15,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
+    bool keyStateChanged (bool) override { return keyboard.handleKeyStateChanged(); }
+    void focusLost (FocusChangeType) override { keyboard.releaseAll(); }
 
     void populateDemoSession();
 
@@ -39,7 +41,7 @@ private:
     std::unique_ptr<SessionGrid> sessionGrid;
     std::vector<std::unique_ptr<MixerStrip>> strips;
     std::unique_ptr<MasterStrip> masterStrip;
-    juce::MidiKeyboardComponent keyboard;
+    prisma_ui::KeyboardPanel keyboard;
 
     std::array<std::unique_ptr<PluginWindow>, AudioEngine::kNumTracks> editorWindows;
     std::unique_ptr<juce::DocumentWindow> scannerWindow;

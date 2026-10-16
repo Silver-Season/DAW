@@ -219,13 +219,126 @@ void WavetableView::paint (juce::Graphics& g)
                 r.reduced (6.0f, 3.0f), juce::Justification::topLeft);
 }
 
+//==============================================================================
+KeyboardPanel::KeyboardPanel (juce::MidiKeyboardState& s)
+    : state (s), keyboard (s, juce::MidiKeyboardComponent::horizontalKeyboard)
+{
+    heldNote.fill (-1);
+    keyboard.setAvailableRange (24, 108);
+    keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, colours::accent.withAlpha (0.7f));
+    keyboard.setWantsKeyboardFocus (false); // keys are handled here, for any focused child of the owner
+    addAndMakeVisible (keyboard);
+
+    octDown.onClick = [this] { shiftOctave (-1); };
+    octUp.onClick = [this] { shiftOctave (1); };
+    octDown.setTooltip ("Octave down (Z)");
+    octUp.setTooltip ("Octave up (X)");
+    for (auto* b : { &octDown, &octUp })
+    {
+        b->setWantsKeyboardFocus (false);
+        addAndMakeVisible (b);
+    }
+    info.setJustificationType (juce::Justification::centred);
+    info.setFont (juce::FontOptions (11.0f));
+    addAndMakeVisible (info);
+    updateLabel();
+}
+
+KeyboardPanel::~KeyboardPanel()
+{
+    releaseAll();
+}
+
+void KeyboardPanel::updateLabel()
+{
+    info.setText (juce::MidiMessage::getMidiNoteName (baseNote, true, true, 3) + "\nvel " + juce::String (velocity), juce::dontSendNotification);
+    // Shade the keys the computer keyboard reaches.
+    keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, colours::panelEdge);
+    keyboard.setKeyPressBaseOctave (baseNote / 12);
+    keyboard.setLowestVisibleKey (juce::jlimit (24, 108, baseNote - 24));
+}
+
+void KeyboardPanel::shiftOctave (int delta)
+{
+    const int next = juce::jlimit (12, 108, baseNote + 12 * delta);
+    if (next == baseNote)
+        return;
+    baseNote = next;
+    updateLabel();
+}
+
+void KeyboardPanel::releaseAll()
+{
+    for (auto& n : heldNote)
+        if (n >= 0)
+        {
+            state.noteOff (1, n, 0.0f);
+            n = -1;
+        }
+}
+
+bool KeyboardPanel::handleKeyPressed (const juce::KeyPress& key)
+{
+    if (key.getModifiers().isCommandDown() || key.getModifiers().isCtrlDown())
+        return false;
+    const auto c = juce::CharacterFunctions::toLowerCase (key.getTextCharacter());
+    switch (c)
+    {
+        case 'z': shiftOctave (-1); return true;
+        case 'x': shiftOctave (1); return true;
+        case 'c': velocity = juce::jmax (1, velocity - 20); updateLabel(); return true;
+        case 'v': velocity = juce::jmin (127, velocity + 20); updateLabel(); return true;
+        default: break;
+    }
+    return juce::String (kKeys).containsChar (c); // swallow note keys so they don't beep
+}
+
+bool KeyboardPanel::handleKeyStateChanged()
+{
+    bool used = false;
+    const bool modifierDown = juce::ModifierKeys::currentModifiers.isCommandDown() || juce::ModifierKeys::currentModifiers.isCtrlDown();
+    for (int i = 0; kKeys[i] != 0; ++i)
+    {
+        const bool down = juce::KeyPress::isKeyCurrentlyDown (kKeys[i]);
+        auto& held = heldNote[(size_t) i];
+        if (down && held < 0 && ! modifierDown)
+        {
+            const int note = baseNote + i;
+            if (note <= 127)
+            {
+                state.noteOn (1, note, (float) velocity / 127.0f);
+                held = note;
+                used = true;
+            }
+        }
+        else if (! down && held >= 0)
+        {
+            state.noteOff (1, held, 0.0f); // the note that was played, even if the octave changed since
+            held = -1;
+            used = true;
+        }
+    }
+    return used;
+}
+
+void KeyboardPanel::resized()
+{
+    auto r = getLocalBounds();
+    auto side = r.removeFromLeft (64).reduced (3);
+    octUp.setBounds (side.removeFromTop (side.getHeight() / 3));
+    octDown.setBounds (side.removeFromBottom (side.getHeight() / 2));
+    info.setBounds (side);
+    keyboard.setKeyWidth ((float) r.getWidth() / 36.0f); // five octaves visible around the playing range
+    keyboard.setBounds (r);
+}
+
 } // namespace prisma_ui
 
 //==============================================================================
 using namespace prisma_ui;
 
 PrismaEditor::PrismaEditor (PrismaProcessor& p)
-    : AudioProcessorEditor (p), processor (p), keyboard (p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
+    : AudioProcessorEditor (p), processor (p), keyboard (p.keyboardState)
 {
     setLookAndFeel (&lnf);
     auto& s = p.apvts;
@@ -301,10 +414,8 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     master->addRow ({ &make<Toggle> (s, "mono", "Mono"), &make<Toggle> (s, "legato", "Legato") }, {}, 0.5f);
     addAndMakeVisible (master);
 
-    keyboard.setAvailableRange (24, 108);
-    keyboard.setKeyWidth (16.0f);
-    keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, colours::accent.withAlpha (0.7f));
     addAndMakeVisible (keyboard);
+    setWantsKeyboardFocus (true);
 
     setResizable (true, true);
     setResizeLimits (1000, 680, 1800, 1200);
@@ -359,7 +470,6 @@ void PrismaEditor::resized()
     presetBox.setBounds (header.removeFromRight (260).reduced (4, 6));
 
     keyboard.setBounds (r.removeFromBottom (70));
-    keyboard.setKeyWidth ((float) keyboard.getWidth() / 50.0f); // the 24..108 range has 50 white keys
 
     const int h = r.getHeight();
     auto top = r.removeFromTop ((int) (h * 0.40f));
