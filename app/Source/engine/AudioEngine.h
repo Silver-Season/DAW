@@ -77,6 +77,7 @@ public:
     // (createPluginInstanceAsync); until it is done the device passes the sound through. If the plugin is
     // gone or fails to load, the node becomes kind="missing" and keeps its state.
     bool isDeviceLoading (int64_t deviceId) const;
+    bool isAnyDeviceLoading() const;
     // After a project is opened: devices that were "missing" when it was saved but whose plugin is installed
     // now become plugins again (and load). Devices whose plugin is still absent stay "missing".
     void reviveMissingDevices();

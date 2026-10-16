@@ -72,6 +72,7 @@ inline juce::String errorFileMissing (const juce::String& path) { return utf8 ("
 inline juce::String errorMidiRead (const juce::String& n) { return utf8 ("Не удалось прочитать MIDI-файл «") + n + utf8 ("»"); }
 inline juce::String errorMidiTiming (const juce::String& n) { return utf8 ("MIDI-файл «") + n + utf8 ("» использует тайм-код SMPTE, он не поддерживается"); }
 inline juce::String errorMidiNoNotes (const juce::String& n) { return utf8 ("В MIDI-файле «") + n + utf8 ("» нет нот"); }
+inline juce::String errorFolderExists (const juce::String& path) { return utf8 ("Проект с таким именем уже есть: ") + path; }
 inline juce::String errorWriteFile (const juce::String& path) { return utf8 ("Не удалось записать файл: ") + path; }
 inline const juce::String dialogPluginTitle = utf8 ("Плагин");
 inline const juce::String windowPlugins = utf8 ("Плагины (AU / VST3)");
@@ -165,6 +166,17 @@ inline const juce::String sessionTab = utf8 ("Session");
 inline const juce::String capture = utf8 ("Захватить");
 inline const juce::String capture10 = utf8 ("10 мин");
 inline const juce::String versionNone = utf8 ("v1 · новый");
+// "v14 · сейчас", "v14 · 5 мин", "v14 · 3 ч"; sinceMs < 0: never saved by hand
+inline juce::String versionText (int number, juce::int64 sinceMs)
+{
+    juce::String when = utf8 ("авто");
+    if (sinceMs >= 0)
+    {
+        const auto minutes = sinceMs / 60000;
+        when = minutes < 1 ? utf8 ("сейчас") : (minutes < 60 ? juce::String (minutes) + utf8 (" мин") : juce::String (minutes / 60) + utf8 (" ч"));
+    }
+    return "v" + juce::String (number) + utf8 (" · ") + when;
+}
 inline const juce::String cpu = utf8 ("CPU");
 inline const juce::String keysOn = utf8 ("КЛАВ");
 inline const juce::String midi = utf8 ("MIDI");

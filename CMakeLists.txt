@@ -60,6 +60,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectFile.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/RecoveryCheck.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectSession.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/MidiImport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/library/UserLibrary.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/browser/BrowserCatalog.cpp

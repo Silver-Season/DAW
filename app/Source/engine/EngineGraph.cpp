@@ -238,6 +238,12 @@ bool AudioEngine::isDeviceLoading (int64_t deviceId) const
     return loadingDevices.count (deviceId) > 0;
 }
 
+bool AudioEngine::isAnyDeviceLoading() const
+{
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    return ! loadingDevices.empty();
+}
+
 void AudioEngine::reviveMissingDevices()
 {
     if (model == nullptr)

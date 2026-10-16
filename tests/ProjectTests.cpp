@@ -6,6 +6,7 @@
 #include "../app/Source/library/UserLibrary.h"
 #include "../app/Source/project/MidiImport.h"
 #include "../app/Source/project/ProjectFile.h"
+#include "../app/Source/project/ProjectSession.h"
 #include "../app/Source/project/RecoveryCheck.h"
 
 using namespace tests;
@@ -486,6 +487,114 @@ void testUserLibrary()
     check (library::UserLibrary::renameChain (chain, "Pad chain").existsAsFile() && lib.listChains().size() == 1, "chains can be renamed");
     root.deleteRecursively();
 }
+
+//==============================================================================
+void testSession()
+{
+    std::printf ("[test] project session: autosave, lock, crash recovery, save as, versions, restore\n");
+    const auto root = makeTempFolder ("session");
+    const auto music = root.getChildFile ("Music");
+    juce::TemporaryFile settingsFile (".settings");
+    Settings settings (settingsFile.getFile());
+    library::UserLibrary lib (root.getChildFile ("Library"));
+    ProjectModel model (ProjectModel::createEmpty());
+    AudioEngine engine (settings, false);
+    engine.setModel (&model);
+    juce::File unsavedFolder;
+    juce::String stateBeforeCrash;
+    {
+        project::ProjectSession session (engine, model, settings, lib, music);
+        session.newProject();
+        check (model.numTracks() == 2 && ! session.hasFile() && ! session.isDirty(), "a new project is the default one, not dirty, without a file");
+        check (! session.save().wasOk(), "save needs a file first");
+        session.autosaveNow();
+        session.flush();
+        check (! session.folder().exists(), "nothing changed: no autosave");
+
+        // an edit, then the autosave
+        model.undo.beginNewTransaction ("add");
+        model.addTrack ("midi");
+        session.noteEdited();
+        check (session.isDirty(), "an edit makes it dirty");
+        session.autosaveNow();
+        session.flush();
+        unsavedFolder = session.folder();
+        check (unsavedFolder.getFullPathName().contains ("Prisma DAW/Unsaved/") && unsavedFolder.getFileName().endsWith (" Project"),
+               "an unsaved project is autosaved into Music/Prisma DAW/Unsaved/<date> Project");
+        check (project::autosaveFile (unsavedFolder).existsAsFile() && project::readVersions (unsavedFolder).size() == 1, "Backup/autosave.prisma and version 1");
+        check (project::readVersions (unsavedFolder)[0].kind == daw::project::VersionKind::autosave, "which is an autosave");
+        check (session.lockFile().existsAsFile() && session.lockFile().loadFileAsString() == unsavedFolder.getFullPathName(), "the lock names the folder");
+
+        stateBeforeCrash = project::serialise (model.root);
+        // no closeCleanly(): this is the crash
+    }
+    check (project::RecoveryCheck::check (project::ProjectSession::lockFileFor (settings)).needed, "after the crash the next start offers recovery");
+
+    {
+        ProjectModel model2 (ProjectModel::createEmpty());
+        AudioEngine engine2 (settings, false);
+        engine2.setModel (&model2);
+        project::ProjectSession session (engine2, model2, settings, lib, music);
+        const auto check1 = project::RecoveryCheck::check (session.lockFile());
+        check (session.openRecovered (check1).wasOk(), "the autosave opens");
+        check (model2.numTracks() == 3 && session.isDirty() && ! session.hasFile(), "with the edit, dirty, still without a file");
+
+        // Save as: the project gets a folder, a name and a first saved version
+        const auto target = root.getChildFile ("Projects/Night Drive Project");
+        check (session.saveAs (target).wasOk(), "save as works");
+        session.flush();
+        check (project::mainFile (target, "Night Drive").existsAsFile() && model2.name() == "Night Drive" && session.hasFile() && ! session.isDirty(),
+               "Night Drive.prisma exists, the name is the folder's, nothing is dirty");
+        check (! unsavedFolder.exists(), "the temporary folder of the never-saved project is gone");
+        auto versions = session.versions();
+        check (versions.size() == 2 && versions.back().kind == daw::project::VersionKind::save, "the history came along and the save is its newest version");
+        check (session.save().wasOk(), "Cmd+S saves again");
+        check (session.versions().size() == 3, "every Cmd+S makes a version");
+        check (! session.saveAs (target).wasOk(), "save as onto an existing project is refused");
+
+        // change, autosave, label, restore
+        model2.undo.beginNewTransaction ("add");
+        model2.addTrack ("midi");
+        session.noteEdited();
+        check (model2.numTracks() == 4 && session.isDirty(), "a fourth track");
+        session.autosaveNow();
+        session.flush();
+        versions = session.versions();
+        check (versions.size() == 4 && versions.back().kind == daw::project::VersionKind::autosave, "the autosave is version 4");
+        check (project::mainFile (target, "Night Drive").loadFileAsString().contains ("Night Drive"), "(the file on disk is the saved one)");
+        check (session.setVersionLabel (3, "before the fourth track") && session.versions()[2].label == "before the fourth track", "a label is set on version 3");
+        check (session.versionButtonText().startsWith ("v4 "), "the button shows the newest version: " + session.versionButtonText());
+
+        const auto restored = session.restoreVersion (3);
+        check (restored.wasOk() && model2.numTracks() == 3, "going back to version 3 gives three tracks");
+        versions = session.versions();
+        check (versions.size() == 5 && versions.back().kind == daw::project::VersionKind::restore, "the state before the return was saved as a \"restore\" version");
+        const auto before = project::loadVersion (target, versions.back().number);
+        check (before.ok() && before.tree.getChildWithName (ids::TRACKS).getNumChildren() == 4, "and it holds the four tracks");
+        check (! model2.undo.canUndo(), "undo history is cleared");
+        check (! session.restoreVersion (99).wasOk(), "an unknown version is an error");
+
+        session.closeCleanly();
+        check (! session.lockFile().existsAsFile(), "a normal exit removes the lock");
+    }
+
+    // open a saved project by its file
+    {
+        ProjectModel model3 (ProjectModel::createEmpty());
+        AudioEngine engine3 (settings, false);
+        engine3.setModel (&model3);
+        project::ProjectSession session (engine3, model3, settings, lib, music);
+        const auto file = root.getChildFile ("Projects/Night Drive Project/Night Drive.prisma");
+        check (session.openFile (file).wasOk() && model3.name() == "Night Drive" && session.hasFile() && ! session.isDirty(), "a project opens by its file, clean");
+        check (settings.recentProjects().contains (file.getFullPathName()), "and joins the recent projects");
+        check (! session.openFile (root.getChildFile ("nothing.prisma")).wasOk(), "a missing file is an error");
+        check (session.saveAsDefaultTemplate().wasOk() && lib.defaultTemplate().existsAsFile(), "save as default template writes Templates/Default.prisma");
+        session.newProject();
+        check (model3.numTracks() == 3 && ! session.hasFile() && model3.name().isEmpty(), "a new project starts from the template, without a name");
+        session.closeCleanly();
+    }
+    root.deleteRecursively();
+}
 } // namespace
 
 void tests::runProjectTests()
@@ -498,4 +607,5 @@ void tests::runProjectTests()
     testFolderHelpers();
     testMidiImport();
     testUserLibrary();
+    testSession();
 }
