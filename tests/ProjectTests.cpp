@@ -504,6 +504,12 @@ void testSession()
     juce::String stateBeforeCrash;
     {
         project::ProjectSession session (engine, model, settings, lib, music);
+        // Before any document is open (the recovery question is still on screen) nothing may be written, least of all the lock.
+        project::RecoveryCheck::writeLock (project::ProjectSession::lockFileFor (settings), root.getChildFile ("lost project"));
+        session.autosaveNow();
+        session.flush();
+        check (project::ProjectSession::lockFileFor (settings).existsAsFile() && ! music.exists(), "no autosave and no new lock before a document is open");
+        project::RecoveryCheck::removeLock (project::ProjectSession::lockFileFor (settings));
         session.newProject();
         check (model.numTracks() == 2 && ! session.hasFile() && ! session.isDirty(), "a new project is the default one, not dirty, without a file");
         check (! session.save().wasOk(), "save needs a file first");

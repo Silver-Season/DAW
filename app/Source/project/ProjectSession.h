@@ -82,6 +82,7 @@ private:
     Settings& settings;
     library::UserLibrary& library;
     juce::File musicFolder, projectFolder, lock;
+    bool hasDocument = false; // set by the first adopt
     bool named = false;
     bool edited = false;
     bool baselinePending = false;

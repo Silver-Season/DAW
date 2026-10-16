@@ -95,6 +95,7 @@ void ProjectSession::closeCleanly()
 void ProjectSession::adopt (juce::ValueTree tree, const juce::File& folder, bool isNamed, bool dirtyAfter)
 {
     flush();
+    hasDocument = true;
     projectFolder = folder;
     named = isNamed;
     if (tree.getProperty (ids::name).toString().isEmpty() && folder != juce::File() && isNamed)
@@ -250,6 +251,8 @@ void ProjectSession::timerCallback()
 
 void ProjectSession::autosaveNow()
 {
+    if (! hasDocument)
+        return; // nothing is open yet: the startup question about a lost session is still open, and its lock must stay
     if (baselinePending && ! edited)
         return; // still settling after a load: plugins are not back yet
     const auto text = currentText();
