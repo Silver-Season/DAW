@@ -1322,6 +1322,17 @@ void SessionView::openRenameEditor (juce::Component& host, juce::Rectangle<int> 
 
 void SessionView::startRename()
 {
+    // Deferred: when it comes from a popup menu, the menu gives focus back to the window as it closes,
+    // which would take the focus from the editor that is opened right now.
+    juce::Component::SafePointer<SessionView> safe (this);
+    juce::Timer::callAfterDelay (60, [safe] {
+        if (safe != nullptr)
+            safe->startRenameNow();
+    });
+}
+
+void SessionView::startRenameNow()
+{
     const auto& s = selection.get();
     switch (s.kind)
     {

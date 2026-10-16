@@ -32,6 +32,7 @@ public:
 
     // Cmd+R: renames what is selected (track, clip or scene).
     void startRename();
+    void startRenameNow();
 
     void setMixerVisible (bool);
     bool isMixerVisible() const { return mixerVisible; }

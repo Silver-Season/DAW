@@ -24,6 +24,10 @@ struct Theme
 
     // Palette colour i (0..15); inactive clips use the same colour at 55 % opacity.
     juce::Colour palette (int index) const;
+    // Palette colour i for text on panel/chrome: the same hue, with the lightness moved until the contrast
+    // against both backgrounds is at least 4.5:1 (about 38-42 % lightness on light themes).
+    juce::Colour textPalette (int index) const;
+    static float contrast (juce::Colour a, juce::Colour b);
     juce::Colour clipColour (int index, bool active) const { return palette (index).withAlpha (active ? 1.0f : 0.55f); }
 
     // weight: 400 regular, 500 medium, 600 semibold (bold for the monospace family)

@@ -1,3 +1,5 @@
+#include <cmath>
+#include <algorithm>
 #include "Theme.h"
 
 #include <BinaryData.h>
@@ -49,6 +51,31 @@ juce::Colour Theme::palette (int index) const
 {
     const float hue = hues[(size_t) juce::jlimit (0, kPaletteSize - 1, index)];
     return juce::Colour::fromHSL (hue / 360.0f, clipSaturation, clipLightness, 1.0f);
+}
+
+float Theme::contrast (juce::Colour a, juce::Colour b)
+{
+    const auto lum = [] (juce::Colour c) {
+        const auto lin = [] (float v) { return v <= 0.03928f ? v / 12.92f : std::pow ((v + 0.055f) / 1.055f, 2.4f); };
+        return 0.2126f * lin (c.getFloatRed()) + 0.7152f * lin (c.getFloatGreen()) + 0.0722f * lin (c.getFloatBlue());
+    };
+    const float la = lum (a), lb = lum (b);
+    return (std::max (la, lb) + 0.05f) / (std::min (la, lb) + 0.05f);
+}
+
+juce::Colour Theme::textPalette (int index) const
+{
+    const float hue = hues[(size_t) juce::jlimit (0, kPaletteSize - 1, index)] / 360.0f;
+    const bool lightTheme = panel.getPerceivedBrightness() > 0.5f;
+    float lightness = lightTheme ? 0.40f : clipLightness;
+    const float step = lightTheme ? -0.01f : 0.01f;
+    auto colour = juce::Colour::fromHSL (hue, clipSaturation, lightness, 1.0f);
+    while (lightness > 0.05f && lightness < 0.95f && (contrast (colour, panel) < 4.5f || contrast (colour, chrome) < 4.5f))
+    {
+        lightness += step;
+        colour = juce::Colour::fromHSL (hue, clipSaturation, lightness, 1.0f);
+    }
+    return colour;
 }
 
 juce::Font Theme::uiFont (float height, int weight) const { return makeFont (fontUi, height, weight); }

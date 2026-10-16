@@ -741,7 +741,7 @@ void DetailPanel::paint (juce::Graphics& g)
     g.setColour (t.dimText);
     g.setFont (t.uiFont (10.5f, 500));
     g.drawText (Strings::detail::track.toUpperCase(), area.removeFromTop (16), juce::Justification::centredLeft, false);
-    g.setColour (t.palette (track.colour()));
+    g.setColour (t.textPalette (track.colour()));
     g.setFont (t.uiFont (14.0f, 600));
     g.drawText (track.name(), area.removeFromTop (22), juce::Justification::centredLeft, true);
     area.removeFromTop (6);
