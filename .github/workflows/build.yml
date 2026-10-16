@@ -1,0 +1,46 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: brew install ninja
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Validate the Audio Unit
+        run: |
+          killall -9 AudioComponentRegistrar || true
+          auval -v aumu Prsm Dawp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DAW-macOS
+          path: |
+            build/app/DAW_artefacts/Release/DAW.app
+            build/plugins/prisma/Prisma_artefacts/Release/AU/Prisma.component
+            build/plugins/prisma/Prisma_artefacts/Release/VST3/Prisma.vst3
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxcomposite-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev xvfb
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: xvfb-run ctest --test-dir build --output-on-failure
