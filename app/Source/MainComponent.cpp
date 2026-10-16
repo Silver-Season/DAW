@@ -57,7 +57,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     : engine (e), model (m), settings (e.getSettings()), actions (m, &e),
       library (settings.libraryPath().isNotEmpty() ? juce::File (settings.libraryPath()) : library::UserLibrary::defaultRoot()),
       sources (settings, e.getKnownPlugins(), library), browserActions (m, e, library),
-      doc (e, m, settings, library, juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("Prisma DAW")), editCommands (e, m, actions, selection),
+      doc (e, m, settings, library, juce::File::getSpecialLocation (juce::File::userMusicDirectory)), editCommands (e, m, actions, selection),
       menuModel (commandManager), keyboard (e.getKeyboardState()),
       browserWidth (settings.browserWidth()), detailHeight (settings.detailHeight()),
       browserVisible (settings.browserVisible()), detailVisible (settings.detailVisible())
@@ -195,7 +195,8 @@ MainComponent::~MainComponent()
 //==============================================================================
 juce::String MainComponent::windowTitle() const
 {
-    const auto name = doc.name().isEmpty() ? Strings::windowUntitled : doc.name();
+    // An unsaved project lives in a folder named after the time; the user sees it as untitled.
+    const auto name = doc.hasFile() && doc.name().isNotEmpty() ? doc.name() : Strings::windowUntitled;
     return doc.isDirty() ? name + juce::String::fromUTF8 (" \xe2\x80\xa2") : name;
 }
 
@@ -204,7 +205,7 @@ void MainComponent::updateTitle()
     const auto title = windowTitle();
     if (title != lastTitle)
     {
-        lastTitle = title;
+            lastTitle = title;
         if (onTitleChanged)
             onTitleChanged (title);
     }
@@ -532,7 +533,7 @@ void MainComponent::confirmDiscard (std::function<void()> proceed)
         proceed();
         return;
     }
-    const auto name = doc.name().isEmpty() ? Strings::windowUntitled : doc.name();
+    const auto name = doc.hasFile() && doc.name().isNotEmpty() ? doc.name() : Strings::windowUntitled;
     ui::askThree (Strings::dialogSaveChanges (name), Strings::dialogSaveChangesText, Strings::dialogSave, Strings::dialogDontSave, Strings::dialogCancel,
                   [this, safe = juce::Component::SafePointer<MainComponent> (this), proceed = std::move (proceed)] (int answer) {
                       if (safe == nullptr)
@@ -649,24 +650,31 @@ void MainComponent::startup()
         return;
     }
     const auto name = check.projectFile != juce::File() ? check.projectFile.getFileNameWithoutExtension() : Strings::windowUntitled;
-    ui::confirm (Strings::recoveryTitle, Strings::recoveryText (name), Strings::recoveryRestore,
-                 [this, safe = juce::Component::SafePointer<MainComponent> (this), check, openFresh] (bool restore) {
-                     if (safe == nullptr)
-                         return;
-                     if (restore)
-                     {
-                         const auto result = doc.openRecovered (check);
-                         if (result.wasOk())
-                         {
-                             infoBar->showMessage (Strings::infoRecovered, 10000);
-                             return;
-                         }
-                         ui::showMessage (Strings::dialogOpenFailed, result.getErrorMessage());
-                     }
-                     project::RecoveryCheck::removeLock (project::ProjectSession::lockFileFor (settings));
-                     openFresh();
-                 },
-                 Strings::recoveryDiscard);
+    ui::askThree (Strings::recoveryTitle, Strings::recoveryText (name), Strings::recoveryRestore, Strings::recoveryOpenSaved, Strings::recoveryDiscard,
+                  [this, safe = juce::Component::SafePointer<MainComponent> (this), check, openFresh] (int answer) {
+                      if (safe == nullptr)
+                          return;
+                      juce::Result result = juce::Result::ok();
+                      if (answer == 0)
+                      {
+                          result = doc.openRecovered (check);
+                          if (result.wasOk())
+                          {
+                              infoBar->showMessage (Strings::infoRecovered, 10000);
+                              return;
+                          }
+                      }
+                      else if (answer == 1 && check.projectFile.existsAsFile())
+                      {
+                          result = doc.openFile (check.projectFile);
+                          if (result.wasOk())
+                              return;
+                      }
+                      if (! result.wasOk())
+                          ui::showMessage (Strings::dialogOpenFailed, result.getErrorMessage());
+                      project::RecoveryCheck::removeLock (project::ProjectSession::lockFileFor (settings));
+                      openFresh();
+                  });
 }
 
 void MainComponent::requestQuit (std::function<void()> quitNow)

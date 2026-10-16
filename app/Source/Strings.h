@@ -127,7 +127,8 @@ inline juce::String recoveryText (const juce::String& name)
     return utf8 ("Прошлый сеанс закрылся неожиданно. Найдена копия проекта «") + name + utf8 ("» с несохранёнными изменениями.");
 }
 inline const juce::String recoveryRestore = utf8 ("Восстановить");
-inline const juce::String recoveryDiscard = utf8 ("Не восстанавливать");
+inline const juce::String recoveryOpenSaved = utf8 ("Открыть последнее сохранение");
+inline const juce::String recoveryDiscard = utf8 ("Не открывать");
 inline const juce::String infoSaved = utf8 ("Проект сохранён");
 inline const juce::String infoTemplateSaved = utf8 ("Этот проект теперь шаблон для новых проектов");
 inline const juce::String infoRecovered = utf8 ("Работа восстановлена из копии. Сохраните проект");
