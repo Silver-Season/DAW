@@ -15,6 +15,7 @@ juce::var makeDrag (const Item& item)
     o->setProperty ("id", item.id);
     o->setProperty ("path", item.path);
     o->setProperty ("name", item.name);
+    o->setProperty ("key", item.key);
     o->setProperty ("instrument", item.instrument);
     return juce::var (o);
 }
@@ -28,6 +29,7 @@ bool parseDrag (const juce::var& v, DragItem& out)
     out.id = o->getProperty ("id").toString();
     out.path = o->getProperty ("path").toString();
     out.name = o->getProperty ("name").toString();
+    out.key = o->getProperty ("key").toString();
     out.instrument = (bool) o->getProperty ("instrument");
     return out.kind.isNotEmpty();
 }

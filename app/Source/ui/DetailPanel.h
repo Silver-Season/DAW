@@ -3,6 +3,7 @@
 #include "Controls.h"
 #include "Selection.h"
 
+#include "../browser/BrowserActions.h"
 #include "../model/ProjectActions.h"
 
 class AudioEngine;
@@ -55,6 +56,11 @@ public:
     // The preset button (the triangle) of a device: asks for the menu at a screen position.
     std::function<void (int64_t deviceId, juce::Point<int> screenPosition)> onPresetMenu;
 
+    // Drops from the browser: the chain is a drop target when these are set. `onDropped` hears every
+    // drop (with the result) so that the window can report errors and note the recent item.
+    void setBrowserActions (browser::BrowserActions* a) { dropActions = a; }
+    std::function<void (const browser::DropResult&, const browser::DragItem&)> onDropped;
+
     // Number of device views currently shown; tests and the screenshot script read it.
     int numDeviceViews() const;
 
@@ -81,5 +87,6 @@ private:
     std::unique_ptr<Content> content;
     int64_t trackId = -1;
     bool dirty = true;
+    browser::BrowserActions* dropActions = nullptr;
 };
 } // namespace ui

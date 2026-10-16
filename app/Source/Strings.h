@@ -107,6 +107,14 @@ inline juce::String errorChainRead (const juce::String& n) { return utf8 ("Не 
 inline juce::String errorPluginUnknown (const juce::String& n) { return utf8 ("Плагин «") + n + utf8 ("» не найден в списке плагинов"); }
 inline const juce::String errorNoSlot = utf8 ("Некуда положить клип");
 
+// Dialogs
+inline const juce::String dialogOk = utf8 ("OK");
+inline const juce::String dialogCancel = utf8 ("Отмена");
+inline const juce::String dialogSave = utf8 ("Сохранить");
+inline const juce::String dialogDontSave = utf8 ("Не сохранять");
+inline juce::String dialogSaveChanges (const juce::String& name) { return utf8 ("Сохранить изменения в «") + name + utf8 ("»?"); }
+inline const juce::String dialogSaveChangesText = utf8 ("Если не сохранить, изменения будут потеряны.");
+
 // Window
 inline const juce::String windowUntitled = utf8 ("Без названия");
 inline const juce::String labelPlaceholderProject = utf8 ("Перетащите инструмент из браузера сюда");
@@ -215,12 +223,30 @@ inline const juce::String labelNone = utf8 ("Без метки");
 inline const juce::String renamePreset = utf8 ("Переименовать…");
 inline const juce::String deletePreset = utf8 ("Удалить…");
 inline const juce::String showInFinder = utf8 ("Показать в Finder");
+inline const juce::String emptyRecent = utf8 ("Здесь появятся элементы, которые вы использовали");
+inline const juce::String emptyLabel = utf8 ("Нет элементов с этой меткой");
+inline const juce::String deleteTitle = utf8 ("Удалить из библиотеки");
+inline juce::String deleteQuestion (const juce::String& name) { return utf8 ("Удалить «") + name + utf8 ("»? Это нельзя отменить."); }
+inline const juce::String deleteOk = utf8 ("Удалить");
+inline const juce::String dropNewTrack = utf8 ("Отпустите, чтобы создать новую дорожку");
+inline const juce::String saveChain = utf8 ("Сохранить цепочку…");
+inline const juce::String savePreset = utf8 ("Сохранить пресет…");
+inline const juce::String savePresetTitle = utf8 ("Сохранить пресет");
+inline const juce::String savePresetPrompt = utf8 ("Название пресета");
+inline const juce::String saveChainPrompt = utf8 ("Название цепочки");
+inline juce::String presetSaved (const juce::String& n) { return utf8 ("Пресет «") + n + utf8 ("» сохранён в библиотеку"); }
+inline juce::String chainSaved (const juce::String& n) { return utf8 ("Цепочка «") + n + utf8 ("» сохранена в библиотеку"); }
+inline const juce::String factoryPresets = utf8 ("Пресеты Prisma");
+inline const juce::String myPresets = utf8 ("Мои пресеты");
+inline const juce::String noUserPresets = utf8 ("(пока нет)");
+inline const juce::String replaceInstrument = utf8 ("Заменить инструмент");
 inline const juce::String useOnTrack = utf8 ("Поставить на выбранную дорожку");
 } // namespace browser
 
 // Detail panel and device chain
 namespace detail
 {
+inline const juce::String loading = utf8 ("Загрузка…");
 inline const juce::String track = utf8 ("Дорожка");
 inline const juce::String input = utf8 ("Вход");
 inline const juce::String monitor = utf8 ("Мониторинг");
@@ -285,9 +311,12 @@ inline const juce::String cpu = make (utf8 ("Нагрузка процессор
 inline const juce::String midiIn = make (utf8 ("MIDI-вход"), utf8 ("Мигает, когда приходят события с MIDI-устройств."));
 inline const juce::String keysIndicator = make (utf8 ("Клавиатура компьютера"), utf8 ("Когда горит, буквенные клавиши играют ноты. Включается клавишей M."));
 
-inline const juce::String browserPanel = make (utf8 ("Браузер"), utf8 ("Инструменты, пресеты, эффекты и звуки. Наполнение появится в следующей части этапа 1."));
+inline const juce::String browserPanel = make (utf8 ("Браузер"), utf8 ("Инструменты, пресеты, эффекты, цепочки и звуки. Тяните элементы в проект."));
+inline const juce::String browserPreview = make (utf8 ("Предпрослушивание"), utf8 ("Когда включено, выбранный пресет Prisma играет фразу в темпе проекта. Для сторонних плагинов предпрослушивания нет."));
+inline const juce::String browserItem = utf8 ("Тяните на дорожку, в цепочку или на пустое место. Двойной щелчок ставит на выбранную дорожку, правая кнопка открывает меню.");
+inline const juce::String browserAddFolder = utf8 ("Добавляет папку со звуками и MIDI-файлами в «Места».");
 inline const juce::String browserSearch = make (utf8 ("Поиск"), utf8 ("Ищет по всем категориям сразу. Cmd+F переводит сюда курсор, Esc очищает."));
-inline juce::String browserCategory (const juce::String& name) { return make (name, utf8 ("Категория браузера. Источники появятся в следующей части этапа 1.")); }
+inline juce::String browserCategory (const juce::String& name) { return make (name, utf8 ("Раздел браузера: щелчок показывает его содержимое.")); }
 
 inline const juce::String trackHeader = make (utf8 ("Заголовок дорожки"), utf8 ("Щелчок выделяет дорожку, двойной щелчок переименовывает, правая кнопка открывает меню. Правый край тянется, меняя ширину столбца."));
 inline const juce::String clipSlot = make (utf8 ("Клип"), utf8 ("Щелчок запускает, двойной щелчок по пустому слоту создаёт клип. Клип можно перетащить в другой слот (Alt: копия)."));
@@ -313,8 +342,8 @@ inline const juce::String hscroll = make (utf8 ("Прокрутка"), utf8 ("П
 inline const juce::String vscroll = make (utf8 ("Прокрутка"), utf8 ("Прокручивает сцены."));
 
 inline const juce::String devicePower = make (utf8 ("Выключатель устройства"), utf8 ("Выключенное устройство пропускает звук насквозь."));
-inline const juce::String devicePresets = make (utf8 ("Пресеты устройства"), soonFiles);
-inline const juce::String devicePresetsInstrument = make (utf8 ("Пресеты инструмента"), utf8 ("Пресеты Prisma и замена инструмента. Пользовательские пресеты появятся в следующей части этапа 1."));
+inline const juce::String devicePresets = make (utf8 ("Пресеты устройства"), utf8 ("Пресеты этого устройства и сохранение ваших настроек в библиотеку."));
+inline const juce::String devicePresetsInstrument = make (utf8 ("Пресеты инструмента"), utf8 ("Пресеты инструмента, замена инструмента и сохранение ваших настроек в библиотеку."));
 inline const juce::String deviceFold = make (utf8 ("Свернуть"), utf8 ("Сворачивает устройство в узкую полосу."));
 inline const juce::String deviceOpen = make (utf8 ("Открыть в окне"), utf8 ("Полный редактор устройства в отдельном окне."));
 inline const juce::String deviceClose = make (utf8 ("Удалить устройство"), utf8 ("Убирает устройство из цепочки. Cmd+Z возвращает."));

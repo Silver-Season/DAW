@@ -15,7 +15,7 @@ namespace browser
 // The description a dragged browser row carries: { kind, id, path, name, instrument }.
 struct DragItem
 {
-    juce::String kind, id, path, name;
+    juce::String kind, id, path, name, key;
     bool instrument = false;
 };
 juce::var makeDrag (const Item&);

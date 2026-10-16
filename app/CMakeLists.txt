@@ -12,6 +12,7 @@ target_sources(DAW PRIVATE
     Source/ui/AppMenu.cpp
     Source/ui/BrowserPanel.cpp
     Source/ui/DetailPanel.cpp
+    Source/ui/Dialogs.cpp
     Source/ui/SessionView.cpp
     Source/ui/ThemeLookAndFeel.cpp
     Source/ui/TopBar.cpp

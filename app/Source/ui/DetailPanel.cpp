@@ -157,6 +157,7 @@ public:
         folded = d.folded();
         processor = owner.engine.findProcessor (deviceId);
         presetName = {};
+        loading = kind != "missing" && owner.engine.isDeviceLoading (deviceId);
 
         if (kind == "missing")
             missingText = missingDescription (d);
@@ -212,6 +213,20 @@ public:
 
     void tick()
     {
+        if (kind != "missing")
+        {
+            // A hosted plugin that was still loading when this view was made: build the view again once it is there.
+            if (processor == nullptr && owner.engine.findProcessor (deviceId) != nullptr)
+                owner.dirty = true;
+            const bool loadingNow = owner.engine.isDeviceLoading (deviceId);
+            if (loadingNow != loading)
+            {
+                loading = loadingNow;
+                repaint();
+            }
+            if (loading)
+                repaint (getLocalBounds().withTrimmedTop (kDeviceHeaderHeight)); // the spinner turns
+        }
         for (auto& k : knobs)
         {
             if (k->knob.isDragging())
@@ -295,10 +310,26 @@ public:
                 g.fillPath (icon);
             };
             const auto inner = [] (juce::Rectangle<int> b, float size) { return juce::Rectangle<float> (size, size).withCentre (b.toFloat().getCentre()); };
-            drawIcon (presetRect(), icons::triangle (inner (presetRect(), 6.0f), 2), isInstrument(), hoverPart == Part::preset, false);
+            drawIcon (presetRect(), icons::triangle (inner (presetRect(), 6.0f), 2), true, hoverPart == Part::preset, false);
             drawIcon (foldRect(), icons::triangle (inner (foldRect(), 6.0f), 3), true, hoverPart == Part::fold, false);
             drawIcon (openRect(), icons::openExternal (inner (openRect(), 9.0f)), processor != nullptr, hoverPart == Part::open, true);
             drawIcon (closeRect(), icons::cross (inner (closeRect(), 8.0f)), true, hoverPart == Part::close, true);
+        }
+
+        if (loading && ! folded)
+        {
+            const auto body = getLocalBounds().withTrimmedTop (kDeviceHeaderHeight);
+            const auto centre = body.getCentre().toFloat().translated (0.0f, -8.0f);
+            const float phase = (float) (juce::Time::getMillisecondCounter() % 900) / 900.0f * juce::MathConstants<float>::twoPi;
+            juce::Path arc;
+            arc.addCentredArc (centre.x, centre.y, 11.0f, 11.0f, 0.0f, phase, phase + 4.2f, true);
+            g.setColour (t.line);
+            g.drawEllipse (juce::Rectangle<float> (22.0f, 22.0f).withCentre (centre), 2.0f);
+            g.setColour (t.accent);
+            g.strokePath (arc, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (t.dimText);
+            g.setFont (t.uiFont (12.0f));
+            g.drawText (Strings::detail::loading, body.withTrimmedTop (body.getHeight() / 2 + 10), juce::Justification::centredTop, true);
         }
 
         if (missing && ! folded)
@@ -377,8 +408,7 @@ public:
                 break;
             case Part::close: owner.actions.removeDevice (deviceId); break;
             case Part::preset:
-                // The instrument's menu (Prisma presets, hosted plugins); the effect presets arrive with task 1.6.
-                if (isInstrument() && owner.onPresetMenu)
+                if (owner.onPresetMenu)
                     owner.onPresetMenu (deviceId, e.getScreenPosition());
                 break;
             case Part::header:
@@ -477,6 +507,7 @@ private:
     int64_t deviceId;
     juce::String kind, name, title, missingText;
     juce::String presetName;
+    bool loading = false;
     juce::Colour trackColour;
     bool enabled = true, folded = false, isSelected = false, dragging = false;
     juce::AudioProcessor* processor = nullptr;
@@ -486,7 +517,7 @@ private:
 };
 
 //==============================================================================
-class DeviceChainView::Content final : public juce::Component
+class DeviceChainView::Content final : public juce::Component, public juce::DragAndDropTarget, public juce::FileDragAndDropTarget
 {
 public:
     explicit Content (DeviceChainView& o) : owner (o)
@@ -575,6 +606,20 @@ public:
         }
     }
 
+    void paintOverChildren (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        if (highlightDevice >= 0)
+            for (const auto& v : views)
+                if (v->id() == highlightDevice)
+                {
+                    g.setColour (t.accent.withAlpha (0.18f));
+                    g.fillRoundedRectangle (v->getBounds().toFloat(), t.radius);
+                    g.setColour (t.accent);
+                    g.drawRoundedRectangle (v->getBounds().toFloat().reduced (0.75f), t.radius, 2.0f);
+                }
+    }
+
     void dragMoved (DeviceView& view, int xInContent)
     {
         dropIndex = slotForX (xInContent);
@@ -598,7 +643,87 @@ public:
             owner.actions.moveDevice (view.id(), to);
     }
 
+    //==========================================================================
+    // Drops from the browser
+    bool isInterestedInDragSource (const SourceDetails& d) override
+    {
+        browser::DragItem item;
+        if (owner.dropActions == nullptr || ! browser::parseDrag (d.description, item))
+            return false;
+        return owner.dropActions->accepts (item, browser::DropTarget::chainGap, owner.trackId)
+               || owner.dropActions->accepts (item, browser::DropTarget::device, owner.trackId, deviceIdAt (d.localPosition.x));
+    }
+    void itemDragEnter (const SourceDetails& d) override { itemDragMove (d); }
+    void itemDragMove (const SourceDetails& d) override
+    {
+        browser::DragItem item;
+        browser::parseDrag (d.description, item);
+        const auto spot = spotAt (item, d.localPosition.x);
+        if (spot.marker != dropMarker || spot.deviceId != highlightDevice)
+        {
+            dropMarker = spot.marker;
+            highlightDevice = spot.deviceId;
+            repaint();
+        }
+    }
+    void itemDragExit (const SourceDetails&) override { clearDropMarks(); }
+    void itemDropped (const SourceDetails& d) override
+    {
+        browser::DragItem item;
+        const auto spot = browser::parseDrag (d.description, item) ? spotAt (item, d.localPosition.x) : Spot();
+        clearDropMarks();
+        if (owner.dropActions == nullptr || item.kind.isEmpty())
+            return;
+        const auto result = spot.deviceId >= 0 ? owner.dropActions->drop (item, browser::DropTarget::device, owner.trackId, -1, -1, spot.deviceId)
+                                               : owner.dropActions->drop (item, browser::DropTarget::chainGap, owner.trackId, -1, spot.index);
+        if (owner.onDropped)
+            owner.onDropped (result, item);
+    }
+
+    bool isInterestedInFileDrag (const juce::StringArray&) override { return false; } // MIDI files go to the Session View
+    void filesDropped (const juce::StringArray&, int, int) override {}
+
 private:
+    struct Spot
+    {
+        int64_t deviceId = -1;
+        int index = -1;
+        int marker = -1;
+    };
+
+    int64_t deviceIdAt (int x) const
+    {
+        for (const auto& v : views)
+            if (x >= v->getX() && x < v->getRight())
+                return v->id();
+        return -1;
+    }
+
+    // A preset over a device of the same type is applied to it; everything else goes into the gap nearest to x.
+    Spot spotAt (const browser::DragItem& item, int x) const
+    {
+        Spot s;
+        if (const auto id = deviceIdAt (x); id >= 0 && owner.dropActions != nullptr
+                                                 && owner.dropActions->accepts (item, browser::DropTarget::device, owner.trackId, id))
+        {
+            s.deviceId = id;
+            return s;
+        }
+        s.index = slotForX (x);
+        if (! views.empty())
+            s.marker = s.index <= 0 ? views.front()->getX() - kArrowGap / 2 : views[(size_t) s.index - 1]->getRight() + kArrowGap / 2;
+        else
+            s.marker = 6;
+        return s;
+    }
+
+    void clearDropMarks()
+    {
+        dropMarker = -1;
+        highlightDevice = -1;
+        repaint();
+    }
+
     int indexOf (const DeviceView& v) const
     {
         for (size_t i = 0; i < views.size(); ++i)
@@ -630,6 +755,7 @@ private:
     std::vector<std::unique_ptr<DeviceView>> views;
     juce::Rectangle<int> dropZone;
     int dropIndex = -1, dropMarker = -1;
+    int64_t highlightDevice = -1;
 };
 
 //==============================================================================

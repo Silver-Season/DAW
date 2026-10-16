@@ -106,6 +106,19 @@ juce::Path openExternal (juce::Rectangle<float> a)
     p.addTriangle (a.getX() + a.getWidth() * 0.35f, a.getY(), a.getRight(), a.getY(), a.getRight(), a.getY() + a.getHeight() * 0.65f);
     return p;
 }
+
+juce::Path headphones (juce::Rectangle<float> a)
+{
+    juce::Path arc;
+    arc.addCentredArc (a.getCentreX(), a.getCentreY() + a.getHeight() * 0.08f, a.getWidth() * 0.42f, a.getHeight() * 0.42f, 0.0f,
+                       -juce::MathConstants<float>::halfPi * 1.0f - 1.35f, -juce::MathConstants<float>::halfPi + 1.35f + juce::MathConstants<float>::pi * 0.0f, true);
+    juce::Path stroked;
+    juce::PathStrokeType (1.6f).createStrokedPath (stroked, arc);
+    const float w = a.getWidth() * 0.22f, h = a.getHeight() * 0.38f;
+    stroked.addRoundedRectangle (a.getX(), a.getBottom() - h - a.getHeight() * 0.05f, w, h, 1.5f);
+    stroked.addRoundedRectangle (a.getRight() - w, a.getBottom() - h - a.getHeight() * 0.05f, w, h, 1.5f);
+    return stroked;
+}
 } // namespace icons
 
 //==============================================================================

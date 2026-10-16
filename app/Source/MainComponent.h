@@ -1,9 +1,12 @@
 #pragma once
 
 #include "../../plugins/prisma/Source/PrismaEditor.h"
+#include "browser/BrowserActions.h"
+#include "browser/BrowserSources.h"
 #include "engine/AudioEngine.h"
 #include "model/ProjectActions.h"
 #include "model/ProjectModel.h"
+#include "project/ProjectSession.h"
 #include "ui/AppMenu.h"
 #include "ui/BrowserPanel.h"
 #include "ui/Chrome.h"
@@ -17,6 +20,7 @@ class PluginWindow;
 // The window content: top bar, browser, Session View, detail panel, info bar and the menu. It reads and
 // writes only the ProjectModel (through ProjectActions); sound comes from the engine that listens to the model.
 class MainComponent final : public juce::Component,
+                            public juce::DragAndDropContainer,
                             public juce::ApplicationCommandTarget,
                             private juce::Timer,
                             private juce::ChangeListener,
@@ -70,10 +74,12 @@ private:
     void applyTheme();
     void updateTitle();
 
-    // instruments and plugin windows (kept from phase 0 until the browser of task 1.5 replaces the menu)
-    void showInstrumentMenu (int64_t deviceId, juce::Point<int> screenPosition);
-    void setPrismaInstrument (int64_t trackId, const juce::String& presetName);
-    void loadPluginInstrument (int64_t trackId, const juce::PluginDescription&);
+    // the browser and the library (tasks 1.5 and 1.6)
+    void showDeviceMenu (int64_t deviceId, juce::Point<int> screenPosition);
+    void savePresetOf (int64_t deviceId);
+    void saveChainOf (int64_t trackId);
+    void reportDrop (const browser::DropResult&, const browser::DragItem&);
+
     void openInstrumentEditor (int64_t deviceId);
     void closeEditorsOfMissingDevices();
     void showAudioSettings();
@@ -83,6 +89,9 @@ private:
     ProjectModel& model;
     Settings& settings;
     ProjectActions actions;
+    library::UserLibrary library;
+    browser::BrowserSources sources;
+    browser::BrowserActions browserActions;
     ui::SelectionState selection;
     ui::EditCommands editCommands;
 
