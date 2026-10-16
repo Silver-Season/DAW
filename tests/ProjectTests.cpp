@@ -122,7 +122,7 @@ void testSaveAndLoad()
     juce::TemporaryFile settingsFile (".settings");
     Settings settings (settingsFile.getFile());
     ProjectModel model (ProjectModel::createEmpty());
-    AudioEngine engine (settings);
+    AudioEngine engine (settings, false);
     engine.setModel (&model);
     model.adopt (loaded.tree);
     FakeDevice fake { 512, 48000.0 };
@@ -191,7 +191,7 @@ void testMissingPlugin()
     juce::TemporaryFile settingsFile (".settings");
     Settings settings (settingsFile.getFile());
     ProjectModel model (ProjectModel::createEmpty());
-    AudioEngine engine (settings);
+    AudioEngine engine (settings, false);
     engine.setModel (&model);
     model.adopt (parsed.tree);
     FakeDevice fake { 512, 48000.0 };

@@ -144,7 +144,7 @@ void testRestoreHostedPlugin()
     juce::TemporaryFile settingsFile (".settings");
     Settings settings (settingsFile.getFile());
     ProjectModel model (ProjectModel::createEmpty());
-    AudioEngine engine (settings);
+    AudioEngine engine (settings, false);
     engine.setModel (&model);
     scanPrisma (engine);
     const auto parsed = project::parseProject (xml);
