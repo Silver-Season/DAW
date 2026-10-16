@@ -14,6 +14,7 @@
 #include "ui/EditCommands.h"
 #include "ui/SessionView.h"
 #include "ui/TopBar.h"
+#include "ui/VersionWindow.h"
 
 class PluginWindow;
 
@@ -82,6 +83,7 @@ private:
     void confirmDiscard (std::function<void()> proceed);
     void doSave (std::function<void()> then = nullptr);
     void doSaveAs (std::function<void()> then = nullptr);
+    void showVersionHistory();
     void doOpenDialog();
     void doOpen (const juce::File&);
     void documentChanged();
@@ -132,6 +134,7 @@ private:
 
     std::map<int64_t, std::unique_ptr<PluginWindow>> editorWindows; // by device id
     std::unique_ptr<juce::DocumentWindow> scannerWindow;
+    std::unique_ptr<ui::VersionWindow> versionWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

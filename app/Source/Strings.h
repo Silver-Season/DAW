@@ -133,6 +133,24 @@ inline const juce::String infoTemplateSaved = utf8 ("Этот проект те�
 inline const juce::String infoRecovered = utf8 ("Работа восстановлена из копии. Сохраните проект");
 inline const juce::String clearRecent = utf8 ("Очистить список");
 
+// Version history window
+namespace versions
+{
+inline const juce::String title = utf8 ("История версий");
+inline const juce::String labelButton = utf8 ("Метка…");
+inline const juce::String restoreButton = utf8 ("Восстановить");
+inline const juce::String closeButton = utf8 ("Закрыть");
+inline const juce::String kindSave = utf8 ("сохранение");
+inline const juce::String kindAutosave = utf8 ("автосохранение");
+inline const juce::String kindRestore = utf8 ("до возврата");
+inline const juce::String empty = utf8 ("Версий пока нет. Сохраните проект: каждое сохранение и автосохранение попадает сюда.");
+inline juce::String labelPrompt (int number) { return utf8 ("Метка версии v") + juce::String (number) + utf8 (". Пустая строка снимает метку."); }
+inline juce::String restoreTitle (int number) { return utf8 ("Вернуться к версии v") + juce::String (number) + utf8 ("?"); }
+inline const juce::String restoreText = utf8 ("Текущее состояние сохранится отдельной версией, ничего не пропадёт.");
+inline const juce::String restoreOk = utf8 ("Вернуться");
+inline const juce::String restored = utf8 ("Проект возвращён к выбранной версии");
+} // namespace versions
+
 // Window
 inline const juce::String windowUntitled = utf8 ("Без названия");
 inline const juce::String labelPlaceholderProject = utf8 ("Перетащите инструмент из браузера сюда");

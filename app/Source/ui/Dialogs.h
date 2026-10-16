@@ -8,8 +8,9 @@ namespace ui
 {
 // Small question windows drawn by the app itself (not the system's), all asynchronous.
 
-// Asks for a line of text. `done` gets the trimmed text, or is not called when cancelled or empty.
-void promptText (const juce::String& title, const juce::String& message, const juce::String& initial, std::function<void (const juce::String&)> done);
+// Asks for a line of text. `done` gets the trimmed text, or is not called when cancelled (or empty, unless `allowEmpty`).
+void promptText (const juce::String& title, const juce::String& message, const juce::String& initial, std::function<void (const juce::String&)> done,
+                 bool allowEmpty = false);
 
 // OK / Cancel. `done` is called with true for OK.
 void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void (bool)> done,

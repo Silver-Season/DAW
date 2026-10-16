@@ -5,7 +5,7 @@
 
 namespace ui
 {
-void promptText (const juce::String& title, const juce::String& message, const juce::String& initial, std::function<void (const juce::String&)> done)
+void promptText (const juce::String& title, const juce::String& message, const juce::String& initial, std::function<void (const juce::String&)> done, bool allowEmpty)
 {
     auto* window = new juce::AlertWindow (title, message, juce::MessageBoxIconType::NoIcon);
     window->addTextEditor ("text", initial);
@@ -13,11 +13,11 @@ void promptText (const juce::String& title, const juce::String& message, const j
     window->addButton (Strings::dialogCancel, 0, juce::KeyPress (juce::KeyPress::escapeKey));
     juce::Component::SafePointer<juce::AlertWindow> safe (window);
     window->enterModalState (true,
-                             juce::ModalCallbackFunction::create ([safe, done = std::move (done)] (int result) {
+                             juce::ModalCallbackFunction::create ([safe, allowEmpty, done = std::move (done)] (int result) {
                                  if (result == 1 && safe != nullptr)
                                  {
                                      const auto text = safe->getTextEditorContents ("text").trim();
-                                     if (text.isNotEmpty() && done)
+                                     if ((allowEmpty || text.isNotEmpty()) && done)
                                          done (text);
                                  }
                              }),

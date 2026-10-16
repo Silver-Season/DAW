@@ -187,6 +187,7 @@ MainComponent::~MainComponent()
     removeKeyListener (router.get());
     editorWindows.clear();
     scannerWindow.reset();
+    versionWindow.reset();
     keyboard.releaseAll();
 }
 
@@ -303,7 +304,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case saveProject: set (M::save, fileCategory, true, key ('s', cmd)); break;
         case saveProjectAs: set (M::saveAs, fileCategory, true, key ('s', cmd | shift)); break;
         case saveTemplate: set (M::saveTemplate, fileCategory, true); break;
-        case versionHistory: set (M::versionHistory, fileCategory, doc.hasFile()); break;
+        case versionHistory: set (M::versionHistory, fileCategory, true); break;
         case exportAudio: set (M::exportAudio, fileCategory, false, key ('r', cmd | shift)); break;
         case showInFinder: set (M::showInFinder, fileCategory, doc.folder() != juce::File() && doc.folder().exists()); break;
         case scanPlugins: set (M::scanPlugins, fileCategory, true); break;
@@ -381,6 +382,7 @@ bool MainComponent::perform (const InvocationInfo& info)
             else
                 ui::showMessage (Strings::dialogSaveFailed, r.getErrorMessage());
             return true;
+        case versionHistory: showVersionHistory(); return true;
         case showInFinder: doc.folder().revealToUser(); return true;
         case scanPlugins: showPluginScanner(); return true;
         case quitApp: juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
@@ -508,6 +510,8 @@ juce::File MainComponent::projectsFolder() const
 void MainComponent::documentChanged()
 {
     editorWindows.clear();
+    if (versionWindow != nullptr)
+        versionWindow->refresh();
     selection.clear();
     if (model.findTrack (model.selectedTrack()).isValid())
         selection.selectTrack (model.selectedTrack());
@@ -582,6 +586,23 @@ void MainComponent::doSaveAs (std::function<void()> then)
                         if (then)
                             then();
                     });
+}
+
+void MainComponent::showVersionHistory()
+{
+    if (versionWindow != nullptr)
+    {
+        versionWindow->refresh();
+        versionWindow->toFront (true);
+        return;
+    }
+    versionWindow = std::make_unique<ui::VersionWindow> (
+        doc,
+        [this] { juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
+                     if (safe != nullptr)
+                         safe->versionWindow.reset();
+                 }); },
+        [this] (const juce::String& text) { infoBar->showMessage (text); });
 }
 
 void MainComponent::doOpenDialog()

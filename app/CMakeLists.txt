@@ -16,6 +16,7 @@ target_sources(DAW PRIVATE
     Source/ui/SessionView.cpp
     Source/ui/ThemeLookAndFeel.cpp
     Source/ui/TopBar.cpp
+    Source/ui/VersionWindow.cpp
     # Model, settings, engine and Prisma (compiled into the DAW as its built-in instrument), see the top-level CMakeLists.
     ${DAW_APP_SHARED_SOURCES})
 
