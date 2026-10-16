@@ -131,4 +131,5 @@ void runGraphTests();
 void runHostingTests();
 void runUiTests();
 void runProjectTests();
+void runBrowserTests();
 } // namespace tests
