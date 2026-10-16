@@ -1,0 +1,816 @@
+<title>Концепт окна DAW</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Unbounded:wght@500;700&display=swap">
+<style>
+/* Layout: page header with skin switcher, then the full DAW window as a live mock in its own scroll box, then notes. */
+/* The DAW skins are the page's colour tokens. Prism (dark) is the default; Paper is the light one. */
+:root {
+  --bg: #07080d; --chrome: #0c0e15; --panel: #121520; --panel-2: #181c29; --line: #232838;
+  --fg: #e6e8f2; --dim: #7f869c; --accent: #8be9ff; --accent-2: #c59bff;
+  --rec: #ff4d6d; --play: #6bf0a6; --clip-ink: #0b0d14;
+  --clip-s: 78%; --clip-l: 62%; --glow: 1; --radius: 6px; --scan: 0;
+  --font-ui: "Onest", "Helvetica Neue", Arial, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-logo: "Unbounded", "Onest", sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #e3e7ee; --chrome: #f6f7f9; --panel: #ffffff; --panel-2: #eef1f5; --line: #d5dae3;
+    --fg: #1b2130; --dim: #667085; --accent: #2457e6; --accent-2: #b5179e;
+    --rec: #e5243f; --play: #0f9a4c; --clip-ink: #141a26;
+    --clip-s: 72%; --clip-l: 74%; --glow: 0; --radius: 6px; --scan: 0;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #e3e7ee; --chrome: #f6f7f9; --panel: #ffffff; --panel-2: #eef1f5; --line: #d5dae3;
+  --fg: #1b2130; --dim: #667085; --accent: #2457e6; --accent-2: #b5179e;
+  --rec: #e5243f; --play: #0f9a4c; --clip-ink: #141a26;
+  --clip-s: 72%; --clip-l: 74%; --glow: 0; --radius: 6px; --scan: 0;
+  color-scheme: light;
+}
+/* Explicit skin choices win over both of the above. */
+:root[data-skin="prism"] {
+  --bg: #07080d; --chrome: #0c0e15; --panel: #121520; --panel-2: #181c29; --line: #232838;
+  --fg: #e6e8f2; --dim: #7f869c; --accent: #8be9ff; --accent-2: #c59bff;
+  --rec: #ff4d6d; --play: #6bf0a6; --clip-ink: #0b0d14;
+  --clip-s: 78%; --clip-l: 62%; --glow: 1; --radius: 6px; --scan: 0;
+  --font-ui: "Onest", "Helvetica Neue", Arial, sans-serif; color-scheme: dark;
+}
+:root[data-skin="neon"] {
+  --bg: #040208; --chrome: #090511; --panel: #0f0919; --panel-2: #160d24; --line: #2d1946;
+  --fg: #f4eaff; --dim: #8e7aab; --accent: #00f0ff; --accent-2: #ff2bd6;
+  --rec: #ff2b4f; --play: #c3ff1a; --clip-ink: #07030d;
+  --clip-s: 100%; --clip-l: 58%; --glow: 1.6; --radius: 0px; --scan: 1;
+  --font-ui: "JetBrains Mono", ui-monospace, Menlo, monospace; color-scheme: dark;
+}
+:root[data-skin="studio"] {
+  --bg: #161718; --chrome: #232426; --panel: #2b2c2f; --panel-2: #333438; --line: #3e4044;
+  --fg: #dcd8cf; --dim: #8f8a82; --accent: #ffb547; --accent-2: #7fc8b2;
+  --rec: #e5484d; --play: #93d36c; --clip-ink: #1a1b1c;
+  --clip-s: 42%; --clip-l: 62%; --glow: 0; --radius: 3px; --scan: 0;
+  --font-ui: "Onest", "Helvetica Neue", Arial, sans-serif; color-scheme: dark;
+}
+:root[data-skin="paper"] {
+  --bg: #e3e7ee; --chrome: #f6f7f9; --panel: #ffffff; --panel-2: #eef1f5; --line: #d5dae3;
+  --fg: #1b2130; --dim: #667085; --accent: #2457e6; --accent-2: #b5179e;
+  --rec: #e5243f; --play: #0f9a4c; --clip-ink: #141a26;
+  --clip-s: 72%; --clip-l: 74%; --glow: 0; --radius: 6px; --scan: 0;
+  --font-ui: "Onest", "Helvetica Neue", Arial, sans-serif; color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--bg); color: var(--fg); }
+body {
+  font-family: var(--font-ui); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+  transition: background .35s ease, color .35s ease;
+}
+.page { max-width: 1440px; margin: 0 auto; display: grid; gap: 22px; }
+
+/* ---------- page header ---------- */
+.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+.head h1 { font-family: var(--font-logo); font-weight: 700; font-size: clamp(22px, 3.2vw, 34px); line-height: 1.1; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+.head p { margin: 6px 0 0; color: var(--dim); max-width: 62ch; }
+.skins { display: flex; flex-wrap: wrap; gap: 8px; }
+.skin {
+  font: 500 13px/1 var(--font-ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 999px; padding: 9px 14px 9px 10px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+}
+.skin[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.skin i { width: 18px; height: 18px; border-radius: 50%; display: block; }
+.skin:focus-visible, .mock :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- the DAW window ---------- */
+.stage { overflow-x: auto; border-radius: 12px; }
+.mock {
+  position: relative; min-width: 1260px; height: 780px; background: var(--chrome);
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  display: grid; grid-template-rows: 52px 1fr 232px; outline: none;
+  box-shadow: 0 30px 80px -40px rgb(0 0 0 / .6);
+}
+.mock::after { /* neon scanlines */
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: calc(var(--scan) * .22);
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgb(0 0 0 / .55) 2px 3px);
+  mix-blend-mode: multiply;
+}
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.lbl { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+
+/* transport */
+.transport { display: flex; align-items: center; gap: 10px; white-space: nowrap; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--chrome); }
+.logo { font-family: var(--font-logo); font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; margin-right: 6px; }
+.logo canvas { width: 22px; height: 22px; }
+.tgroup { display: flex; align-items: center; gap: 6px; }
+.field { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 5px 9px; font-size: 13px; }
+.btn {
+  height: 30px; min-width: 30px; padding: 0 9px; border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--panel); color: var(--fg); font: 500 12.5px/1 var(--font-ui); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn:hover { background: var(--panel-2); }
+.btn.on { color: var(--clip-ink); background: var(--accent); border-color: var(--accent); }
+.btn.play.on { background: var(--play); border-color: var(--play); box-shadow: 0 0 calc(var(--glow) * 14px) color-mix(in srgb, var(--play) 60%, transparent); }
+.btn.rec { color: var(--rec); }
+.btn.rec.on { background: var(--rec); color: #fff; border-color: var(--rec); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg button { border: 0; border-radius: 0; height: 28px; background: var(--panel); color: var(--dim); font: 500 12px/1 var(--font-ui); padding: 0 11px; cursor: pointer; }
+.seg button.on { background: var(--panel-2); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+.spacer { flex: 1; }
+
+/* capture ribbon (always-on recording) */
+.capture { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 3px 4px 3px 9px; }
+.capture canvas { width: 130px; height: 24px; display: block; }
+.capture .btn { height: 24px; font-size: 12px; }
+/* morph between snapshots */
+.morph { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.morph b { font-weight: 600; width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--line); font-size: 11px; }
+.morph input { width: 90px; accent-color: var(--accent-2); }
+.versions { position: relative; }
+.pop {
+  position: absolute; right: 0; top: 36px; z-index: 20; width: 300px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px; box-shadow: 0 18px 50px -20px rgb(0 0 0 / .7); display: grid; gap: 4px;
+}
+.pop .v { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 5px; font-size: 12.5px; }
+.pop .v:hover { background: var(--panel-2); }
+.pop .v i { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); justify-self: center; }
+.pop .v.cur i { background: var(--accent); box-shadow: 0 0 calc(var(--glow) * 8px) var(--accent); }
+.pop .v.named i { background: var(--accent-2); }
+.pop .v span:last-child { color: var(--dim); }
+.cpu { width: 46px; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.cpu i { display: block; height: 100%; width: 14%; background: var(--play); }
+
+/* middle row */
+.middle { display: grid; grid-template-columns: 236px 1fr; min-height: 0; }
+.browser { border-right: 1px solid var(--line); display: grid; grid-template-rows: auto auto 1fr; min-height: 0; background: var(--chrome); }
+.search { margin: 10px; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 9px; color: var(--dim); font-size: 12.5px; }
+.search input { all: unset; flex: 1; color: var(--fg); font-size: 12.5px; }
+.cats { display: grid; padding: 0 6px 8px; border-bottom: 1px solid var(--line); }
+.cat { all: unset; cursor: pointer; display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 5px; font-size: 13px; }
+.cat:hover { background: var(--panel); }
+.cat.on { background: var(--panel-2); }
+.cat small { color: var(--dim); font-family: var(--font-num); font-size: 11px; }
+.cat .dot { width: 8px; height: 8px; border-radius: 2px; }
+.items { overflow: auto; padding: 8px 6px; display: grid; align-content: start; gap: 1px; }
+.folder { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); padding: 8px 8px 3px; }
+.item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; font-size: 13px; cursor: grab; user-select: none; }
+.item:hover { background: var(--panel); }
+.item.sel { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.item .tag { margin-left: auto; font-size: 10px; color: var(--dim); font-family: var(--font-num); }
+.preview { margin: 0 10px 10px; }
+
+/* main view */
+.view { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--chrome); }
+.view > section { position: absolute; inset: 0; transition: opacity .25s ease, transform .25s ease; }
+.view > section[hidden] { display: block !important; opacity: 0; pointer-events: none; transform: translateY(6px); }
+
+/* session */
+.session { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) 112px 112px 128px; grid-template-rows: 30px repeat(6, 34px) 1fr; column-gap: 5px; row-gap: 5px; padding: 8px 10px 10px; }
+.th { display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius); font-size: 12.5px; font-weight: 600; color: var(--clip-ink); white-space: nowrap; overflow: hidden; cursor: pointer; }
+.th.ret { background: var(--panel-2); color: var(--fg); }
+.th.master { background: var(--panel-2); color: var(--fg); }
+.th.sel { outline: 2px solid var(--fg); outline-offset: -2px; }
+.slot { position: relative; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12px; overflow: hidden; cursor: pointer; }
+.slot.empty::before { content: ""; width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--line); }
+.slot.empty.armed::before { border-radius: 50%; border-color: var(--rec); }
+.slot.dropok { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.clip { color: var(--clip-ink); border: 0; font-weight: 500; }
+.clip::before { content: "▶"; font-size: 9px; opacity: .55; }
+.clip.playing { box-shadow: 0 0 calc(var(--glow) * 16px) var(--hue-glow); }
+.clip.playing::before { opacity: 1; animation: blink .5s steps(1) infinite; }
+.clip.queued::before { animation: blink .25s steps(1) infinite; }
+.clip .prog { position: absolute; left: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--clip-ink) 60%, transparent); }
+.clip .sheen { position: absolute; inset: 0; pointer-events: none; opacity: calc(var(--glow) * .55);
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .55) 45%, rgb(255 120 220 / .35) 50%, rgb(120 220 255 / .35) 55%, transparent 70%);
+  background-size: 300% 100%; animation: sheen 2.4s linear infinite; mix-blend-mode: soft-light; }
+.slot.ret, .slot.master { background: transparent; border: 1px dashed var(--line); }
+.scene { display: flex; align-items: center; gap: 7px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 0 8px; font-size: 12px; cursor: pointer; }
+.scene::before { content: "▶"; font-size: 9px; color: var(--dim); }
+.scene:hover::before { color: var(--play); }
+@keyframes blink { 50% { opacity: .15; } }
+@keyframes sheen { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* mixer strip under each column */
+.strip { display: grid; grid-template-columns: 1fr 22px; grid-template-rows: auto 1fr auto; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; min-height: 0; }
+.strip .sends { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: space-between; }
+.knob { --v: .5; width: 26px; height: 26px; border-radius: 50%; position: relative; flex: none;
+  background: conic-gradient(from 225deg, var(--k, var(--accent)) calc(var(--v) * 270deg), var(--panel-2) 0 270deg, transparent 0); }
+.knob::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); }
+.knob-wrap { display: grid; justify-items: center; gap: 2px; font-size: 10px; color: var(--dim); }
+.fader { display: flex; align-items: stretch; gap: 6px; min-height: 0; }
+.fader canvas { width: 14px; height: 100%; display: block; border-radius: 2px; background: var(--panel-2); }
+.fader input { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 100%; accent-color: var(--fg); margin: 0; }
+.vol { font-size: 11px; color: var(--dim); align-self: end; }
+.btns { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.btns button { height: 22px; border-radius: 4px; border: 1px solid var(--line); background: var(--panel-2); color: var(--dim); font: 600 11px/1 var(--font-ui); cursor: pointer; }
+.btns .m.on { background: var(--accent); color: var(--clip-ink); border-color: transparent; }
+.btns .s.on { background: #3b82f6; color: #fff; border-color: transparent; }
+.btns .a.on { background: var(--rec); color: #fff; border-color: transparent; }
+
+/* arrangement */
+.arr { display: grid; grid-template-columns: 172px 1fr; grid-template-rows: 26px 1fr; }
+.arr .corner { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); display: flex; align-items: center; padding: 0 10px; }
+.ruler { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; }
+.ruler canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.heads { border-right: 1px solid var(--line); display: grid; align-content: start; }
+.lane-h { height: 56px; display: grid; grid-template-columns: 6px 1fr auto; gap: 8px; align-items: center; padding-right: 8px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.lane-h i { height: 100%; }
+.lane-h.auto { height: 44px; color: var(--dim); font-size: 11.5px; grid-template-columns: 6px 1fr; }
+.lanes { position: relative; overflow: hidden; }
+.lanes canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* bottom: device chain */
+.detail { border-top: 1px solid var(--line); display: grid; grid-template-columns: 236px 1fr; background: var(--chrome); min-height: 0; }
+.info { border-right: 1px solid var(--line); padding: 12px; display: grid; align-content: start; gap: 8px; font-size: 12.5px; color: var(--dim); }
+.info b { color: var(--fg); font-weight: 600; }
+.chain { display: flex; gap: 10px; padding: 12px; overflow-x: auto; align-items: stretch; }
+.dev { flex: none; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); display: grid; grid-template-rows: 26px 1fr; min-width: 0; }
+.dev header { display: flex; align-items: center; gap: 7px; padding: 0 8px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 600; }
+.dev header .pw { width: 10px; height: 10px; border-radius: 50%; background: var(--play); box-shadow: 0 0 calc(var(--glow) * 6px) var(--play); }
+.dev header small { margin-left: auto; color: var(--dim); font-weight: 400; font-family: var(--font-num); font-size: 10.5px; }
+.dev .body { padding: 10px; display: flex; gap: 12px; align-items: center; }
+.dev canvas { display: block; border-radius: 4px; background: var(--panel-2); }
+.macros { display: grid; grid-template-columns: repeat(4, 54px); gap: 8px 4px; }
+.macros .knob { width: 34px; height: 34px; }
+.macros .knob::after { inset: 5px; }
+.arrow { align-self: center; color: var(--dim); flex: none; }
+.drop { flex: none; width: 180px; border: 1.5px dashed var(--line); border-radius: var(--radius); display: grid; place-items: center; text-align: center; color: var(--dim); font-size: 12px; padding: 10px; }
+.drop.dropok { border-color: var(--accent); color: var(--fg); }
+
+.toast {
+  position: absolute; left: 50%; top: 62px; transform: translateX(-50%); z-index: 30; background: var(--panel); border: 1px solid var(--accent);
+  color: var(--fg); padding: 9px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 0 calc(var(--glow) * 24px) color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* ---------- notes under the mock ---------- */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+.note h2 { font-family: var(--font-logo); font-weight: 500; font-size: 15px; margin: 0 0 8px; }
+.note p, .note li { color: var(--dim); margin: 0; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.note li b { color: var(--fg); font-weight: 600; }
+.swatches { display: grid; gap: 10px; }
+.sw { display: grid; grid-template-columns: 62px 1fr; gap: 12px; align-items: center; }
+.sw .chips { display: flex; height: 22px; border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+.sw .chips i { flex: 1; }
+.sw b { color: var(--fg); font-weight: 600; }
+.sw span { color: var(--dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .clip .sheen, .clip.playing::before, .clip.queued::before { animation: none; }
+  .view > section { transition: none; }
+}
+</style>
+
+<div class="page">
+  <header class="head">
+    <div>
+      <h1>Призма: главное окно DAW</h1>
+      <p>Живой макет. Нажмите клип или сцену, пробел запускает воспроизведение, Tab переключает Session и Arrangement, пресет из браузера можно перетащить на дорожку или в цепочку устройств.</p>
+    </div>
+    <div class="skins" role="group" aria-label="Тема оформления">
+      <button class="skin" data-skin="prism" aria-pressed="false"><i style="background:conic-gradient(#ff5d7a,#ffb35c,#f6ef6b,#6bf0a6,#6bd5ff,#9b8cff,#ff5d7a)"></i>Призма</button>
+      <button class="skin" data-skin="neon" aria-pressed="false"><i style="background:linear-gradient(135deg,#ff2bd6 50%,#00f0ff 50%)"></i>Неон</button>
+      <button class="skin" data-skin="studio" aria-pressed="false"><i style="background:linear-gradient(135deg,#2b2c2f 50%,#ffb547 50%)"></i>Студия</button>
+      <button class="skin" data-skin="paper" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 50%,#2457e6 50%);border:1px solid #c8cfdb"></i>Бумага</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="mock" id="mock" tabindex="0" aria-label="Макет окна DAW">
+      <!-- transport -->
+      <div class="transport">
+        <div class="logo"><canvas id="logo" width="44" height="44" aria-hidden="true"></canvas>Prisma</div>
+        <div class="tgroup">
+          <span class="field num" id="tempo" title="Темп">124.00</span>
+          <span class="field num">4 / 4</span>
+          <button class="btn on" id="metro" title="Метроном">♩</button>
+        </div>
+        <div class="tgroup">
+          <button class="btn play" id="play" title="Играть (пробел)">▶</button>
+          <button class="btn" id="stop" title="Стоп">■</button>
+          <button class="btn rec" id="rec" title="Запись (F9)">●</button>
+          <span class="field num" id="pos" style="min-width:86px;text-align:center">1. 1. 1</span>
+          <button class="btn" id="loop" title="Петля (Cmd+L)">⟲</button>
+        </div>
+        <div class="capture" title="Вечная запись: последние 10 минут игры всегда в памяти">
+          <span class="lbl">10 мин</span>
+          <canvas id="ribbon" width="300" height="48"></canvas>
+          <button class="btn" id="capture">Захватить</button>
+        </div>
+        <div class="morph" title="Снимки и морф: плавный переход между положениями всех ручек">
+          <b>A</b><input type="range" id="morph" min="0" max="100" value="0" aria-label="Морф между снимками A и B"><b>B</b>
+        </div>
+        <div class="spacer"></div>
+        <div class="seg" role="tablist" aria-label="Вид">
+          <button id="tabSession" class="on" role="tab" aria-selected="true">Session</button>
+          <button id="tabArr" role="tab" aria-selected="false">Arrangement</button>
+        </div>
+        <div class="versions">
+          <button class="btn" id="verBtn" title="История версий">v14 · сейчас</button>
+          <div class="pop" id="verPop" hidden>
+            <div class="lbl" style="padding:2px 6px 6px">История версий</div>
+            <div class="v cur"><i></i><span>v14 · автосохранение</span><span class="num">18:42</span></div>
+            <div class="v"><i></i><span>v13 · автосохранение</span><span class="num">18:41</span></div>
+            <div class="v named"><i></i><span>v12 · «до нового баса»</span><span class="num">18:20</span></div>
+            <div class="v"><i></i><span>v11 · Cmd+S</span><span class="num">17:58</span></div>
+            <div class="v named"><i></i><span>v7 · «первый дроп»</span><span class="num">16:03</span></div>
+            <div class="lbl" style="padding:8px 6px 0;text-transform:none;letter-spacing:0">Любую версию можно прослушать или забрать из неё одну дорожку.</div>
+          </div>
+        </div>
+        <div class="tgroup" title="Нагрузка на процессор"><span class="lbl">CPU</span><div class="cpu"><i id="cpu"></i></div></div>
+      </div>
+
+      <!-- browser + view -->
+      <div class="middle">
+        <aside class="browser" aria-label="Браузер">
+          <label class="search">⌕ <input id="q" placeholder="Поиск  ⌘F" aria-label="Поиск по браузеру"></label>
+          <div class="cats" id="cats"></div>
+          <div class="items" id="items"></div>
+        </aside>
+        <div class="view">
+          <section class="session" id="session" aria-label="Session View"></section>
+          <section class="arr" id="arr" hidden aria-label="Arrangement View">
+            <div class="corner lbl">Дорожки</div>
+            <div class="ruler"><canvas id="rulerC"></canvas></div>
+            <div class="heads" id="heads"></div>
+            <div class="lanes"><canvas id="lanesC"></canvas></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- detail: device chain -->
+      <div class="detail">
+        <div class="info" id="info"></div>
+        <div class="chain" id="chain"></div>
+      </div>
+      <div class="toast" id="toast" hidden></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h2>Почему «Призма»</h2>
+      <p>Свет проходит через призму и раскладывается в спектр. Так устроено и окно: дорожки слева направо окрашены по порядку спектра, от красного к фиолетовому. Цвет сразу говорит, где ты, а играющий клип светится, по нему пробегает радужный блик. Синт Prisma дал имя всей программе.</p>
+    </div>
+    <div class="note">
+      <h2>Детали, которых нет у других</h2>
+      <ul>
+        <li><b>Лента «10 мин»</b> в транспорте: видно, как копится сыгранное. «Захватить» превращает последнюю фразу в клип.</li>
+        <li><b>Ползунок A ↔ B</b>: морф между снимками ручек. Подвигайте его и посмотрите на ручки Prisma внизу.</li>
+        <li><b>v14 · сейчас</b>: лента версий проекта, важные отмечены именем.</li>
+        <li><b>Луч воспроизведения</b> в Arrangement расщепляется в спектр там, где проходит по клипу.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h2>Темы</h2>
+      <div class="swatches">
+        <div class="sw"><div class="chips"><i style="background:#07080d"></i><i style="background:#8be9ff"></i><i style="background:#c59bff"></i></div><div><b>Призма.</b> <span>Основная. Глубокий чернильный фон, спектральные клипы, мягкое свечение.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#040208"></i><i style="background:#ff2bd6"></i><i style="background:#00f0ff"></i></div><div><b>Неон.</b> <span>Киберпанк: острые углы, моноширинный шрифт, строки развёртки, кислотные цвета.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#2b2c2f"></i><i style="background:#ffb547"></i><i style="background:#7fc8b2"></i></div><div><b>Студия.</b> <span>Приглушённая, для долгих сессий ночью. Ближе всего к Ableton.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#ffffff"></i><i style="background:#2457e6"></i><i style="background:#b5179e"></i></div><div><b>Бумага.</b> <span>Светлая, для дня и яркого солнца.</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const root = document.documentElement;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const css = n => getComputedStyle(root).getPropertyValue(n).trim();
+
+  /* ---------- data ---------- */
+  const SKIN_HUES = {
+    prism: [350, 24, 48, 150, 196, 262],
+    neon: [318, 290, 186, 172, 64, 335],
+    studio: [12, 32, 50, 140, 190, 250],
+    paper: [350, 24, 46, 150, 200, 262],
+  };
+  const tracks = [
+    { name: 'Drums', dev: 'Drum Rack', kind: 'drums' },
+    { name: 'Reese', dev: 'Prisma · Reese Bass', kind: 'bass' },
+    { name: 'Supersaw', dev: 'Prisma · Supersaw Lead', kind: 'lead' },
+    { name: 'Glass Pad', dev: 'Prisma · Glass Pad', kind: 'pad' },
+    { name: 'Vox', dev: 'Аудио · микрофон', kind: 'audio' },
+    { name: 'Arp', dev: 'Prisma · Pluck', kind: 'arp' },
+  ];
+  const scenes = ['Intro', 'Build', 'Drop', 'Break', 'Drop 2', 'Outro'];
+  const grid = [ // clip names per track per scene, '' = empty slot
+    ['Kick hat', 'Build roll', 'Drop beat', '', 'Drop beat', 'Kick only'],
+    ['', 'Sub long', 'Reese A', 'Sub long', 'Reese B', ''],
+    ['', '', 'Lead hook', '', 'Lead hook 2', ''],
+    ['Pad Am', 'Pad rise', 'Pad Am', 'Pad wide', 'Pad Am', 'Pad tail'],
+    ['', 'Vox chop', 'Vox take 3', 'Vox air', '', ''],
+    ['Arp 16th', 'Arp 16th', '', 'Arp slow', 'Arp 16th', ''],
+  ];
+  const state = {
+    skin: null, view: 'session', playing: false, rec: false, loop: true, beat: 0, tempo: 124,
+    playingScene: Array(6).fill(-1), queued: Array(6).fill(-1), sel: 1, armed: 5,
+    mute: [false, false, false, false, true, false], solo: Array(6).fill(false),
+    vol: [78, 72, 66, 60, 70, 64], chains: null, morph: 0, activity: [],
+  };
+  state.chains = tracks.map(t => t.kind === 'audio' ? ['eq', 'comp', 'verb'] : t.kind === 'drums' ? ['eq', 'comp'] : ['prisma', 'eq', 'verb']);
+  state.playingScene = [0, -1, -1, 0, -1, 0];
+
+  const browser = {
+    'Инструменты': { dot: 'var(--accent)', folders: { 'Prisma': ['Init', 'Supersaw Lead', 'Reese Bass', 'Wobble Bass', 'Glass Pad', 'Pluck', 'Vox Sweep'], 'Скоро': ['Alloy (Alchemy-класс)', 'Drum Rack', 'Sampler'] } },
+    'Пресеты': { dot: 'var(--accent-2)', folders: { 'Bass': ['Reese Bass', 'Wobble Bass', 'Sub 808'], 'Lead': ['Supersaw Lead', 'Glass Lead'], 'Pad': ['Glass Pad', 'Dust Pad'], 'Pluck': ['Pluck', 'Bell Pluck'] } },
+    'Эффекты': { dot: '#f6ad55', folders: { 'Встроенные': ['Эквалайзер', 'Компрессор', 'Реверберация', 'Дилей', 'Дисторшн', 'Лимитер'] } },
+    'Плагины': { dot: '#68d391', folders: { 'Xfer Records': ['Serum 2'], 'Native Instruments': ['Massive X', 'Kontakt 8'], 'FabFilter': ['Pro-Q 4', 'Pro-L 2'], 'Valhalla DSP': ['VintageVerb'] } },
+    'Звуки': { dot: '#63b3ed', folders: { 'Drums': ['kick_tight.wav', 'snare_crack.wav', 'hat_closed.wav'], 'Loops': ['break_174.wav', 'top_loop_124.wav'] } },
+    'MIDI-файлы': { dot: '#fc8181', folders: { 'Аккорды': ['Am-F-C-G.mid', 'dm9 groove.mid'] } },
+    'Места': { dot: 'var(--dim)', folders: { 'Мои папки': ['~/Music/Samples', '~/Desktop/Проекты'] } },
+  };
+  let cat = 'Пресеты', selItem = 'Reese Bass';
+
+  /* ---------- skins ---------- */
+  function hue(i) { return (SKIN_HUES[state.skin] || SKIN_HUES.prism)[i]; }
+  function clipColour(i, alpha = 1) { return `hsl(${hue(i)} ${css('--clip-s')} ${css('--clip-l')} / ${alpha})`; }
+  function setSkin(s, user) {
+    state.skin = s;
+    root.dataset.skin = s;
+    document.querySelectorAll('.skin').forEach(b => b.setAttribute('aria-pressed', b.dataset.skin === s));
+    if (user) try { localStorage.setItem('daw-skin', s); } catch (e) {}
+    renderAll();
+  }
+  document.querySelectorAll('.skin').forEach(b => b.addEventListener('click', () => setSkin(b.dataset.skin, true)));
+
+  /* ---------- browser ---------- */
+  function renderBrowser() {
+    const q = $('#q').value.trim().toLowerCase();
+    $('#cats').innerHTML = Object.entries(browser).map(([name, c]) => {
+      const n = Object.values(c.folders).flat().length;
+      return `<button class="cat ${name === cat && !q ? 'on' : ''}" data-cat="${name}"><span class="dot" style="background:${c.dot}"></span>${name}<small>${n}</small></button>`;
+    }).join('');
+    let html = '';
+    const sources = q ? Object.entries(browser) : [[cat, browser[cat]]];
+    for (const [cname, c] of sources)
+      for (const [folder, list] of Object.entries(c.folders)) {
+        const hits = list.filter(x => !q || x.toLowerCase().includes(q));
+        if (!hits.length) continue;
+        html += `<div class="folder">${q ? cname + ' · ' : ''}${folder}</div>`;
+        html += hits.map(x => `<div class="item ${x === selItem ? 'sel' : ''}" draggable="true" data-item="${x}" data-cat="${cname}">${x}${cname === 'Плагины' ? '<span class="tag">VST3</span>' : cname === 'Пресеты' || cname === 'Инструменты' ? '<span class="tag">Prisma</span>' : ''}</div>`).join('');
+      }
+    $('#items').innerHTML = html || '<div class="folder">Ничего не найдено</div>';
+  }
+  $('#cats').addEventListener('click', e => { const b = e.target.closest('.cat'); if (!b) return; cat = b.dataset.cat; $('#q').value = ''; renderBrowser(); });
+  $('#q').addEventListener('input', renderBrowser);
+  $('#items').addEventListener('click', e => { const it = e.target.closest('.item'); if (!it) return; selItem = it.dataset.item; renderBrowser(); });
+  $('#items').addEventListener('dragstart', e => {
+    const it = e.target.closest('.item'); if (!it) return;
+    e.dataTransfer.setData('text/plain', JSON.stringify({ item: it.dataset.item, cat: it.dataset.cat }));
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  $('#items').addEventListener('dblclick', e => { const it = e.target.closest('.item'); if (it) dropOnTrack(state.sel, { item: it.dataset.item, cat: it.dataset.cat }); });
+
+  function dropOnTrack(t, d) {
+    if (d.cat === 'Эффекты' || d.cat === 'Плагины') {
+      state.chains[t].push({ name: d.item, plugin: d.cat === 'Плагины' });
+      toast(`«${d.item}» добавлен в цепочку дорожки ${tracks[t].name}`);
+    } else if (d.cat === 'Пресеты' || d.cat === 'Инструменты') {
+      tracks[t].dev = 'Prisma · ' + d.item;
+      if (!state.chains[t].includes('prisma')) state.chains[t].unshift('prisma');
+      toast(`На дорожке ${tracks[t].name} теперь Prisma «${d.item}»`);
+    } else {
+      toast(`«${d.item}» положен на дорожку ${tracks[t].name}`);
+    }
+    state.sel = t; renderAll();
+  }
+  function wireDrop(el, t) {
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dropok'); });
+    el.addEventListener('dragleave', () => el.classList.remove('dropok'));
+    el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('dropok'); try { dropOnTrack(t, JSON.parse(e.dataTransfer.getData('text/plain'))); } catch (err) {} });
+  }
+
+  /* ---------- session ---------- */
+  function renderSession() {
+    const s = $('#session');
+    let h = '';
+    tracks.forEach((t, i) => h += `<div class="th ${state.sel === i ? 'sel' : ''}" data-t="${i}" style="background:${clipColour(i)}">${t.name}</div>`);
+    h += `<div class="th ret">A Reverb</div><div class="th ret">B Delay</div><div class="th master">Master</div>`;
+    scenes.forEach((sc, r) => {
+      tracks.forEach((t, i) => {
+        const name = grid[i][r];
+        if (!name) { h += `<div class="slot empty ${state.armed === i ? 'armed' : ''}" data-t="${i}" data-r="${r}"></div>`; return; }
+        const pl = state.playingScene[i] === r, q = state.queued[i] === r;
+        h += `<div class="slot clip ${pl ? 'playing' : ''} ${q ? 'queued' : ''}" data-t="${i}" data-r="${r}" style="background:${clipColour(i, pl ? 1 : .55)};--hue-glow:${clipColour(i, .7)}">${name}${pl ? '<span class="prog"></span>' : ''}${pl && !reduce ? '<span class="sheen"></span>' : ''}</div>`;
+      });
+      h += `<div class="slot ret"></div><div class="slot ret"></div><div class="scene" data-r="${r}">${sc}</div>`;
+    });
+    tracks.forEach((t, i) => h += strip(i));
+    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.4"></div>Pan</div></div><div class="fader"><canvas class="meter" data-m="r1" width="14" height="200"></canvas><input type="range" value="70" aria-label="Громкость Reverb"></div><div class="vol num">−6.0</div></div>`;
+    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.5"></div>Pan</div></div><div class="fader"><canvas class="meter" data-m="r2" width="14" height="200"></canvas><input type="range" value="62" aria-label="Громкость Delay"></div><div class="vol num">−9.5</div></div>`;
+    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.5;--k:var(--fg)"></div>Cue</div></div><div class="fader"><canvas class="meter" data-m="master" width="14" height="200"></canvas><input type="range" value="80" aria-label="Громкость мастер"></div><div class="vol num">0.0</div></div>`;
+    s.innerHTML = h;
+    s.querySelectorAll('.th[data-t]').forEach(el => { const t = +el.dataset.t; el.onclick = () => { state.sel = t; renderAll(); }; wireDrop(el, t); });
+    s.querySelectorAll('.slot[data-t]').forEach(el => {
+      const t = +el.dataset.t, r = +el.dataset.r;
+      wireDrop(el, t);
+      el.onclick = () => {
+        state.sel = t;
+        if (!grid[t][r]) { state.queued[t] = -1; state.playingScene[t] = -1; }
+        else if (state.playing) state.queued[t] = r; else state.playingScene[t] = r;
+        renderAll();
+      };
+    });
+    s.querySelectorAll('.scene').forEach(el => el.onclick = () => {
+      const r = +el.dataset.r;
+      tracks.forEach((t, i) => { if (state.playing) state.queued[i] = grid[i][r] ? r : -2; else state.playingScene[i] = grid[i][r] ? r : -1; });
+      if (!state.playing) togglePlay();
+      renderAll();
+    });
+    s.querySelectorAll('.btns button').forEach(b => b.onclick = e => {
+      const t = +b.dataset.t, k = b.dataset.k;
+      if (k === 'm') state.mute[t] = !state.mute[t];
+      if (k === 's') state.solo[t] = !state.solo[t];
+      if (k === 'a') state.armed = state.armed === t ? -1 : t;
+      renderAll();
+    });
+  }
+  function strip(i) {
+    const sends = [[.35, 'A'], [.15, 'B']].map(([v, n]) => `<div class="knob-wrap"><div class="knob" style="--v:${v};--k:${clipColour(i)}"></div>${n}</div>`).join('');
+    const db = ((state.vol[i] - 80) * 0.4).toFixed(1).replace('-', '−');
+    return `<div class="strip"><div class="sends">${sends}<div class="knob-wrap"><div class="knob" style="--v:.5;--k:var(--fg)"></div>Pan</div></div>
+      <div class="fader"><canvas class="meter" data-m="${i}" width="14" height="200"></canvas><input type="range" value="${state.vol[i]}" data-v="${i}" aria-label="Громкость ${tracks[i].name}"></div>
+      <div class="vol num">${db}</div>
+      <div class="btns"><button class="m ${state.mute[i] ? '' : 'on'}" data-t="${i}" data-k="m" title="Дорожка включена">${i + 1}</button><button class="s ${state.solo[i] ? 'on' : ''}" data-t="${i}" data-k="s">S</button><button class="a ${state.armed === i ? 'on' : ''}" data-t="${i}" data-k="a" title="Arm">●</button></div></div>`;
+  }
+
+  /* ---------- arrangement ---------- */
+  const arrClips = [ // [track, startBar, lengthBars, name]
+    [0, 0, 8, 'Kick hat'], [0, 8, 8, 'Build roll'], [0, 16, 16, 'Drop beat'],
+    [1, 8, 8, 'Sub long'], [1, 16, 16, 'Reese A'],
+    [2, 16, 8, 'Lead hook'], [2, 24, 8, 'Lead hook 2'],
+    [3, 0, 16, 'Pad Am'], [3, 16, 16, 'Pad Am'],
+    [4, 10, 6, 'Vox chop'], [4, 18, 10, 'Vox take 3'],
+    [5, 0, 12, 'Arp 16th'], [5, 20, 12, 'Arp 16th'],
+  ];
+  const markers = [[0, 'Интро'], [8, 'Билд'], [16, 'Дроп'], [24, 'Дроп 2']];
+  const BARS = 32, LANE = 56, AUTO = 44;
+  function renderArrHeads() {
+    let h = '';
+    tracks.forEach((t, i) => {
+      h += `<div class="lane-h"><i style="background:${clipColour(i)}"></i>${t.name}<span class="lbl">${t.kind === 'audio' ? 'аудио' : 'midi'}</span></div>`;
+      if (i === 1) h += `<div class="lane-h auto"><i></i>↳ Prisma · Cutoff</div>`;
+    });
+    $('#heads').innerHTML = h;
+  }
+  function sizeCanvas(c) {
+    const r = c.getBoundingClientRect(), d = devicePixelRatio || 1;
+    if (c.width !== Math.round(r.width * d) || c.height !== Math.round(r.height * d)) { c.width = Math.round(r.width * d); c.height = Math.round(r.height * d); }
+    const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); return [g, r.width, r.height];
+  }
+  function laneY(i) { return i * LANE + (i > 1 ? AUTO : 0); }
+  function noteRand(seed) { let s = seed * 9301 + 49297; return () => (s = (s * 9301 + 49297) % 233280) / 233280; }
+  function drawArrangement() {
+    if (state.view !== 'arr') return;
+    const [g, w] = sizeCanvas($('#rulerC'));
+    const bw = w / BARS;
+    g.clearRect(0, 0, w, 26);
+    g.font = `11px ${css('--font-num')}`; g.textBaseline = 'middle';
+    for (let b = 0; b <= BARS; b++) {
+      g.fillStyle = css('--line'); g.fillRect(b * bw, b % 4 ? 18 : 10, 1, 26);
+      if (b % 4 === 0 && b < BARS) { g.fillStyle = css('--dim'); g.fillText(String(b + 1), b * bw + 4, 8); }
+    }
+    for (const [b, n] of markers) { g.fillStyle = css('--accent-2'); g.fillRect(b * bw, 14, 2, 12); g.fillText(n, b * bw + 6, 20); }
+    // loop brace over the drop
+    g.fillStyle = css('--accent');
+    g.globalAlpha = state.loop ? .6 : .15; g.fillRect(16 * bw, 0, 8 * bw, 4); g.globalAlpha = 1;
+
+    const [l, lw, lh] = sizeCanvas($('#lanesC'));
+    l.clearRect(0, 0, lw, lh);
+    for (let b = 0; b <= BARS; b++) { l.fillStyle = css('--line'); l.globalAlpha = b % 4 ? .35 : .9; l.fillRect(b * (lw / BARS), 0, 1, lh); }
+    l.globalAlpha = 1;
+    tracks.forEach((t, i) => { l.fillStyle = css('--line'); l.fillRect(0, laneY(i) + LANE - 1, lw, 1); });
+    l.fillRect(0, laneY(2) - 1, lw, 1);
+    const bwl = lw / BARS;
+    for (const [t, s, len, name] of arrClips) {
+      const x = s * bwl + 1, y = laneY(t) + 4, cw = len * bwl - 2, ch = LANE - 9;
+      l.fillStyle = clipColour(t, .9); roundRect(l, x, y, cw, ch, parseFloat(css('--radius')) || 0); l.fill();
+      l.fillStyle = css('--clip-ink'); l.font = `500 11px ${css('--font-ui')}`; l.fillText(name, x + 6, y + 12);
+      l.globalAlpha = .55;
+      const rnd = noteRand(t * 31 + s);
+      if (tracks[t].kind === 'audio') {
+        for (let px = 0; px < cw - 4; px += 2) { const a = (Math.sin(px * .09 + s) * .5 + .5) * rnd() * (ch - 22) / 2; l.fillRect(x + 2 + px, y + 18 + (ch - 22) / 2 - a, 1.4, a * 2 + 1); }
+      } else {
+        const steps = len * (tracks[t].kind === 'pad' ? 1 : 4);
+        for (let k = 0; k < steps; k++) {
+          if (tracks[t].kind !== 'pad' && rnd() < .3) continue;
+          const nx = x + 3 + k * (cw - 6) / steps, ny = y + 18 + rnd() * (ch - 26);
+          l.fillRect(nx, ny, Math.max(2, (cw - 6) / steps - 2), 3);
+        }
+      }
+      l.globalAlpha = 1;
+    }
+    // automation on Reese: filter cutoff
+    const ay = laneY(2) - AUTO, ah = AUTO;
+    l.strokeStyle = clipColour(1); l.lineWidth = 1.5; l.beginPath();
+    const pts = [[0, .2], [8, .2], [15.5, .95], [16, .35], [20, .55], [24, .3], [31.5, .9], [32, .2]];
+    pts.forEach(([b, v], k) => { const px = b * bwl, py = ay + ah - 6 - v * (ah - 12); k ? l.lineTo(px, py) : l.moveTo(px, py); });
+    l.stroke();
+    pts.forEach(([b, v]) => { l.fillStyle = css('--panel'); l.beginPath(); l.arc(b * bwl, ay + ah - 6 - v * (ah - 12), 3, 0, 7); l.fill(); l.stroke(); });
+    // the light-beam playhead: white core, spectral dispersion where it crosses clips
+    const px = (state.beat / 4 % BARS) * bwl;
+    if (parseFloat(css('--glow')) > 0) {
+      const spec = ['#ff5d7a', '#ffb35c', '#f6ef6b', '#6bf0a6', '#6bd5ff', '#9b8cff'];
+      for (const [t, s, len] of arrClips) {
+        if (px < s * bwl || px > (s + len) * bwl) continue;
+        spec.forEach((c, k) => { l.fillStyle = c; l.globalAlpha = .55; l.fillRect(px + 1 + k * 1.6, laneY(t) + 4, 1.4, LANE - 9); });
+      }
+      l.globalAlpha = 1;
+      l.shadowColor = css('--accent'); l.shadowBlur = 10 * parseFloat(css('--glow'));
+    }
+    l.fillStyle = css('--fg'); l.fillRect(px - .5, 0, 1.5, lh); l.shadowBlur = 0;
+  }
+  function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+
+  /* ---------- device chain ---------- */
+  const SNAP_A = [.25, .62, .30, .45, .20, .70, .35, .50], SNAP_B = [.85, .30, .78, .90, .65, .25, .80, .95];
+  const MACROS = ['Морф WT', 'Детюн', 'Срез', 'Резонанс', 'Драйв', 'Атака', 'LFO', 'Ширина'];
+  function renderChain() {
+    const t = state.sel, tr = tracks[t];
+    $('#info').innerHTML = `<div class="lbl">Дорожка</div><div><b style="color:${clipColour(t)}">${tr.name}</b></div>
+      <div>${tr.kind === 'audio' ? 'Вход: <b>Вход 1 · Микрофон</b>' : 'Вход: <b>Все MIDI · Launchkey 49</b>'}</div>
+      <div>Мониторинг: <b>Auto</b></div><div>Цепочка: <b>${state.chains[t].length} устр.</b></div>
+      <div class="lbl" style="margin-top:6px">Shift+Tab: редактор клипа</div>`;
+    const parts = state.chains[t].map((d, k) => device(d, t, k));
+    $('#chain').innerHTML = parts.join('<span class="arrow">→</span>') + '<span class="arrow">→</span><div class="drop" id="drop">Перетащите сюда эффект или плагин из браузера</div>';
+    wireDrop($('#drop'), t);
+    drawDevices();
+  }
+  function device(d, t, k) {
+    if (d === 'prisma') {
+      const knobs = MACROS.map((m, j) => `<div class="knob-wrap"><div class="knob" data-macro="${j}" style="--k:${clipColour(t)}"></div>${m}</div>`).join('');
+      return `<div class="dev" style="width:470px"><header><span class="pw"></span>${tracks[t].dev}<small>32 гол. · ↗ открыть</small></header><div class="body"><canvas id="wt" width="300" height="240" style="width:150px;height:120px"></canvas><div class="macros">${knobs}</div></div></div>`;
+    }
+    if (d === 'eq') return `<div class="dev" style="width:250px"><header><span class="pw"></span>Эквалайзер<small>8 полос</small></header><div class="body"><canvas class="eq" width="460" height="240" style="width:230px;height:120px"></canvas></div></div>`;
+    if (d === 'comp') return `<div class="dev" style="width:200px"><header><span class="pw"></span>Компрессор<small>−4.2 дБ</small></header><div class="body"><canvas class="comp" width="360" height="240" style="width:180px;height:120px"></canvas></div></div>`;
+    if (d === 'verb') return `<div class="dev" style="width:200px"><header><span class="pw"></span>Реверберация<small>2.8 с</small></header><div class="body"><canvas class="verb" width="360" height="240" style="width:180px;height:120px"></canvas></div></div>`;
+    return `<div class="dev" style="width:190px"><header><span class="pw"></span>${d.name}<small>${d.plugin ? 'VST3' : 'встр.'}</small></header><div class="body" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${[...Array(8)].map((_, j) => `<div class="knob" style="--v:${(j * 37 % 10) / 10}"></div>`).join('')}</div></div>`;
+  }
+  function drawDevices() {
+    const m = state.morph / 100;
+    document.querySelectorAll('[data-macro]').forEach(k => { const j = +k.dataset.macro; k.style.setProperty('--v', (SNAP_A[j] + (SNAP_B[j] - SNAP_A[j]) * m).toFixed(3)); });
+    const wt = $('#wt');
+    if (wt) {
+      const g = wt.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 150, 120);
+      const pos = SNAP_A[0] + (SNAP_B[0] - SNAP_A[0]) * m;
+      for (let f = 15; f >= 0; f--) {
+        const ox = 14 + f * 4, oy = 28 + f * 4.4, active = Math.abs(f / 15 - pos) < .04;
+        g.strokeStyle = active ? clipColour(state.sel) : css('--dim'); g.globalAlpha = active ? 1 : .28; g.lineWidth = active ? 1.6 : 1;
+        g.beginPath();
+        for (let x = 0; x <= 80; x++) {
+          const ph = x / 80 * Math.PI * 2, mix = f / 15;
+          const y = Math.sin(ph) * (1 - mix) + (((ph / Math.PI) % 2) - 1) * mix * .9;
+          x ? g.lineTo(ox + x, oy - y * 16) : g.moveTo(ox + x, oy - y * 16);
+        }
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
+    document.querySelectorAll('canvas.eq').forEach(c => {
+      const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 230, 120);
+      g.strokeStyle = css('--line'); for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, i * 30); g.lineTo(230, i * 30); g.stroke(); }
+      g.strokeStyle = css('--accent'); g.lineWidth = 2; g.beginPath();
+      for (let x = 0; x <= 230; x++) { const f = x / 230; const y = 60 - 26 * Math.exp(-((f - .12) ** 2) / .004) + 18 * Math.exp(-((f - .45) ** 2) / .01) - 14 / (1 + Math.exp(-(f - .82) * 30)); x ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.stroke(); g.lineTo(230, 120); g.lineTo(0, 120); g.closePath(); g.fillStyle = css('--accent'); g.globalAlpha = .12; g.fill(); g.globalAlpha = 1;
+    });
+    document.querySelectorAll('canvas.verb').forEach(c => {
+      const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 180, 120);
+      const rnd = noteRand(7);
+      for (let x = 0; x < 180; x += 2) { const a = Math.exp(-x / 55) * 46 * (.4 + rnd() * .6); g.fillStyle = css('--accent-2'); g.globalAlpha = .7; g.fillRect(x, 62 - a, 1.4, a * 2); }
+      g.globalAlpha = 1;
+    });
+  }
+  function drawComp(level) {
+    document.querySelectorAll('canvas.comp').forEach(c => {
+      const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 180, 120);
+      g.strokeStyle = css('--line'); g.beginPath(); g.moveTo(10, 110); g.lineTo(110, 10); g.stroke();
+      g.strokeStyle = css('--fg'); g.lineWidth = 2; g.beginPath(); g.moveTo(10, 110); g.lineTo(70, 50); g.lineTo(110, 36); g.stroke();
+      g.fillStyle = css('--panel'); g.fillRect(130, 10, 14, 100);
+      g.fillStyle = css('--rec'); g.fillRect(130, 10, 14, level * 60);
+      g.fillStyle = css('--dim'); g.font = `10px ${css('--font-num')}`; g.fillText('GR', 129, 118);
+    });
+  }
+
+  /* ---------- logo, ribbon, meters ---------- */
+  function drawLogo() {
+    const c = $('#logo'), g = c.getContext('2d'); g.clearRect(0, 0, 44, 44);
+    g.fillStyle = css('--fg'); g.beginPath(); g.moveTo(22, 5); g.lineTo(39, 37); g.lineTo(5, 37); g.closePath(); g.globalAlpha = .9; g.fill(); g.globalAlpha = 1;
+    (SKIN_HUES[state.skin] || SKIN_HUES.prism).forEach((h, k) => { g.fillStyle = `hsl(${h} 90% 62%)`; g.fillRect(30 + k * 0, 21 + k * 2.4, 14, 2.2); });
+  }
+  function drawRibbon(now) {
+    const c = $('#ribbon'), g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 150, 24);
+    g.fillStyle = css('--panel-2'); g.fillRect(0, 0, 150, 24);
+    const span = 30000; // compressed: 10 min shown over 30 s for the demo
+    state.activity = state.activity.filter(a => now - a.t < span);
+    for (const a of state.activity) {
+      const x = 150 - (now - a.t) / span * 150;
+      g.fillStyle = clipColour(a.track, .9); g.fillRect(x, 23 - a.v * 20, 1.5, a.v * 20);
+    }
+    g.fillStyle = css('--rec'); g.globalAlpha = .9; g.fillRect(148, 0, 2, 24); g.globalAlpha = 1;
+  }
+  const levels = {};
+  function drawMeters() {
+    document.querySelectorAll('canvas.meter').forEach(c => {
+      const id = c.dataset.m, g = c.getContext('2d');
+      let target = 0;
+      if (state.playing) {
+        if (id === 'master') target = .82; else if (id[0] === 'r') target = .45;
+        else { const t = +id; target = state.playingScene[t] >= 0 && !state.mute[t] ? .55 + .3 * Math.abs(Math.sin(state.beat * Math.PI + t)) : 0; }
+      }
+      const cur = levels[id] || 0; levels[id] = cur + (target * (0.85 + Math.random() * .15) - cur) * (target > cur ? .5 : .12);
+      const h = c.height, v = levels[id];
+      g.clearRect(0, 0, 14, h);
+      const grd = g.createLinearGradient(0, h, 0, 0); grd.addColorStop(0, css('--play')); grd.addColorStop(.75, '#f6e05e'); grd.addColorStop(1, css('--rec'));
+      g.fillStyle = grd; g.fillRect(1, h - v * h, 12, v * h);
+    });
+  }
+
+  /* ---------- transport ---------- */
+  function togglePlay() {
+    state.playing = !state.playing;
+    if (!state.playing) { state.beat = 0; }
+    $('#play').classList.toggle('on', state.playing);
+    renderSession();
+  }
+  $('#play').onclick = togglePlay;
+  $('#stop').onclick = () => { if (state.playing) togglePlay(); state.beat = 0; state.playingScene = state.playingScene.map(() => -1); state.queued.fill(-1); renderAll(); };
+  $('#rec').onclick = () => { state.rec = !state.rec; $('#rec').classList.toggle('on', state.rec); };
+  $('#loop').onclick = () => { state.loop = !state.loop; $('#loop').classList.toggle('on', state.loop); drawArrangement(); };
+  $('#metro').onclick = e => e.currentTarget.classList.toggle('on');
+  $('#loop').classList.toggle('on', state.loop);
+  $('#morph').oninput = e => { state.morph = +e.target.value; drawDevices(); };
+  $('#verBtn').onclick = () => { $('#verPop').hidden = !$('#verPop').hidden; };
+  $('#capture').onclick = () => {
+    const t = state.armed >= 0 ? state.armed : state.sel;
+    const r = grid[t].indexOf('');
+    if (r >= 0) { grid[t][r] = 'Захват 8 т.'; }
+    state.activity = [];
+    toast(r >= 0 ? `Захвачено 8 тактов в ${tracks[t].name}: новый клип в сцене ${scenes[r]}` : `Захвачено 8 тактов в ${tracks[t].name}`);
+    renderSession();
+  };
+  function setView(v) {
+    state.view = v;
+    $('#session').hidden = v !== 'session'; $('#arr').hidden = v !== 'arr';
+    $('#tabSession').classList.toggle('on', v === 'session'); $('#tabArr').classList.toggle('on', v === 'arr');
+    $('#tabSession').setAttribute('aria-selected', v === 'session'); $('#tabArr').setAttribute('aria-selected', v === 'arr');
+    if (v === 'arr') { renderArrHeads(); requestAnimationFrame(drawArrangement); }
+  }
+  $('#tabSession').onclick = () => setView('session');
+  $('#tabArr').onclick = () => setView('arr');
+  $('#mock').addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); setView(state.view === 'session' ? 'arr' : 'session'); }
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  });
+
+  let toastTimer;
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
+
+  /* ---------- main loop ---------- */
+  let last = performance.now(), lastBar = -1, lastStep = -1;
+  function frame(now) {
+    const dt = (now - last) / 1000; last = now;
+    if (state.playing) {
+      state.beat += dt * state.tempo / 60;
+      const bar = Math.floor(state.beat / 4);
+      if (bar !== lastBar) { // quantised launches land on the bar
+        lastBar = bar; let changed = false;
+        state.queued.forEach((q, i) => { if (q !== -1) { state.playingScene[i] = q === -2 ? -1 : q; state.queued[i] = -1; changed = true; } });
+        if (changed) renderSession();
+      }
+      const step = Math.floor(state.beat * 2);
+      if (step !== lastStep) { lastStep = step; state.playingScene.forEach((p, i) => { if (p >= 0 && Math.random() < .5) state.activity.push({ t: now, track: i, v: .3 + Math.random() * .7 }); }); }
+      const b = state.beat, bar1 = Math.floor(b / 4) + 1, beat1 = Math.floor(b % 4) + 1, six = Math.floor((b % 1) * 4) + 1;
+      $('#pos').textContent = `${bar1}. ${beat1}. ${six}`;
+      document.querySelectorAll('.clip.playing .prog').forEach(p => p.style.width = ((b % 16) / 16 * 100) + '%');
+      $('#cpu').style.width = (12 + Math.sin(now / 900) * 3 + 6) + '%';
+    }
+    drawMeters(); drawRibbon(now); drawComp(state.playing ? .35 + .25 * Math.abs(Math.sin(state.beat * Math.PI)) : 0);
+    if (state.view === 'arr') drawArrangement();
+    requestAnimationFrame(frame);
+  }
+
+  function renderAll() { renderBrowser(); renderSession(); renderChain(); drawLogo(); if (state.view === 'arr') { renderArrHeads(); drawArrangement(); } }
+
+  let initial = null;
+  try { initial = localStorage.getItem('daw-skin'); } catch (e) {}
+  if (!initial) {
+    const t = root.getAttribute('data-theme');
+    initial = t === 'light' || (!t && matchMedia('(prefers-color-scheme: light)').matches) ? 'paper' : 'prism';
+  }
+  // Start mid-song so the first frame shows a working session.
+  state.beat = 0; state.playing = false;
+  setSkin(initial, false);
+  for (let k = 0; k < 90; k++) state.activity.push({ t: performance.now() - 30000 + k * 300 + Math.random() * 200, track: [0, 3, 5][k % 3], v: .25 + Math.random() * .7 });
+  requestAnimationFrame(frame);
+})();
+</script>
