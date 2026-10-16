@@ -34,7 +34,7 @@ namespace
 double defaultClock() { return juce::Time::getMillisecondCounterHiRes(); }
 } // namespace
 
-AudioEngine::AudioEngine (Settings& s) : settings (s), clock (&defaultClock)
+AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (&defaultClock)
 {
     formatManager.addDefaultFormats();
 
@@ -48,18 +48,21 @@ AudioEngine::AudioEngine (Settings& s) : settings (s), clock (&defaultClock)
     hardwareMidi.ensureSize (4096);
     keyboardMidi.ensureSize (4096);
 
-    auto savedDevice = settings.audioDeviceState();
-    const auto error = deviceManager.initialise (0, 2, savedDevice.get(), true);
-    if (error.isNotEmpty())
+    if (openDevices)
     {
-        DBG ("Audio device error: " << error);
-    }
-    deviceManager.addChangeListener (this);
+        auto savedDevice = settings.audioDeviceState();
+        const auto error = deviceManager.initialise (0, 2, savedDevice.get(), true);
+        if (error.isNotEmpty())
+        {
+            DBG ("Audio device error: " << error);
+        }
+        deviceManager.addChangeListener (this);
 
-    updateMidiInputs();
-    deviceManager.addMidiInputDeviceCallback ({}, this);
+        updateMidiInputs();
+        deviceManager.addMidiInputDeviceCallback ({}, this);
+        deviceManager.addAudioCallback (this);
+    }
     keyboardState.addListener (this);
-    deviceManager.addAudioCallback (this);
     startTimerHz (60);
 }
 

@@ -30,9 +30,10 @@ public:
         model.reset (new ProjectModel (ProjectModel::createEmpty()));
         populateDemoProject (*model);
 
-        engine = std::make_unique<AudioEngine> (*settings);
+        const bool nullAudio = juce::SystemStats::getEnvironmentVariable ("DAW_NULL_AUDIO", {}).isNotEmpty();
+        engine = std::make_unique<AudioEngine> (*settings, ! nullAudio);
         engine->setModel (model.get());
-        if (juce::SystemStats::getEnvironmentVariable ("DAW_NULL_AUDIO", {}).isNotEmpty())
+        if (nullAudio)
             nullDriver = std::make_unique<NullAudioDriver> (*engine); // no sound card: tick the engine from a timer thread
         mainWindow = std::make_unique<MainWindow> (*engine, *model, *settings);
     }
