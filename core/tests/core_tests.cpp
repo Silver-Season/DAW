@@ -5,6 +5,7 @@
 #include "daw/dsp/Wavetable.h"
 #include "daw/dsp/WavetableOscillator.h"
 #include "daw/engine/Clip.h"
+#include "daw/project/VersionHistory.h"
 #include "daw/synth/PrismaSynth.h"
 
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <cstdio>
 #include <functional>
 #include <numbers>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -309,6 +311,73 @@ int main()
         check (ons == 0, "no restart after relocation");
         player.clipChanged (3, nullptr);
         check (player.playingSlot() == engine::ClipPlayer::kNoClip, "a deleted clip stops the player");
+    });
+
+    test ("version history thinning (test 9): 300 autosaves over 5 days, 5 saves, 2 labels", [] {
+        using namespace project;
+        constexpr int64_t kStep = 24LL * 60 * 1000; // 24 minutes: 300 steps cover exactly 5 days
+        const int64_t t0 = 1'700'000'000'000LL;
+        std::vector<VersionInfo> all;
+        int number = 1;
+        for (int i = 0; i < 300; ++i)
+            all.push_back ({ number++, t0 + i * kStep, VersionKind::autosave, i == 100 || i == 101 });
+        for (int i = 0; i < 5; ++i)
+            all.push_back ({ number++, t0 + (i * 60 + 7) * kStep, VersionKind::save, false });
+        all.push_back ({ number++, t0 + 150 * kStep + 1, VersionKind::restore, false });
+
+        const auto removed = versionsToPrune (all);
+        std::set<int> gone (removed.begin(), removed.end());
+        check (gone.size() == removed.size(), "no version is listed twice");
+
+        std::vector<VersionInfo> kept;
+        for (const auto& v : all)
+            if (! gone.count (v.number))
+                kept.push_back (v);
+
+        int saves = 0, labelled = 0, restores = 0, recent = 0, hourly = 0;
+        std::set<int64_t> hours;
+        bool hourUnique = true;
+        for (const auto& v : kept)
+        {
+            if (v.kind == VersionKind::save)
+                ++saves;
+            else if (v.kind == VersionKind::restore)
+                ++restores;
+            else if (v.labelled)
+                ++labelled;
+            else if (v.timeMs >= t0 + (300 - kRecentAutosavesKept) * kStep)
+                ++recent;
+            else
+            {
+                ++hourly;
+                hourUnique = hourUnique && hours.insert (v.timeMs / 3'600'000LL).second;
+            }
+        }
+        check (saves == 5 && restores == 1 && labelled == 2, "every save, restore and labelled version is kept");
+        check (recent == kRecentAutosavesKept, "the newest 50 autosaves are kept one by one");
+        check (hourUnique, "older autosaves: at most one per clock hour");
+
+        // expected count of hourly ones, counted independently: distinct hours among the older, unlabelled autosaves
+        std::set<int64_t> expectedHours;
+        for (int i = 0; i < 300 - kRecentAutosavesKept; ++i)
+            if (i != 100 && i != 101)
+                expectedHours.insert ((t0 + i * kStep) / 3'600'000LL);
+        check (hourly == (int) expectedHours.size(), "one autosave for every hour that has any (" + std::to_string (hourly) + " of "
+                                                         + std::to_string (expectedHours.size()) + ")");
+        check ((int) kept.size() == 5 + 1 + 2 + 50 + (int) expectedHours.size(), "total of the kept list");
+        // the newest autosave of each older hour is the one that stays
+        bool newestOfHour = true;
+        for (const auto& v : kept)
+            if (v.kind == VersionKind::autosave && ! v.labelled && v.timeMs < t0 + (300 - kRecentAutosavesKept) * kStep)
+                for (const auto& w : all)
+                    if (w.kind == VersionKind::autosave && ! w.labelled && w.timeMs < t0 + (300 - kRecentAutosavesKept) * kStep
+                        && w.timeMs / 3'600'000LL == v.timeMs / 3'600'000LL && w.timeMs > v.timeMs)
+                        newestOfHour = false;
+        check (newestOfHour, "the newest autosave of an hour is the one that stays");
+
+        // pruning again changes nothing, and a short list is untouched
+        check (versionsToPrune (kept).empty(), "pruning is idempotent");
+        check (versionsToPrune ({}).empty(), "empty list");
     });
 
     std::printf ("\n%d checks, %d failures\n", checks, failures);
