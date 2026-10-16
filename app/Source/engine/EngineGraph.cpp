@@ -101,7 +101,20 @@ void AudioEngine::retireEverything()
         retiredDevices.push_back ({ std::move (d), gen });
     devices.clear();
     pendingProcessors.clear();
+    loadingDevices.clear();
+    ++modelEpoch;
     clipCache.clear();
+}
+
+void AudioEngine::valueTreeRedirected (juce::ValueTree&)
+{
+    // The whole project was replaced. Device ids of the new project mean other devices than the same ids
+    // of the old one, so nothing may be reused.
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    retireEverything();
+    if (model != nullptr)
+        applyProjectProperties();
+    graphDirty = true;
 }
 
 void AudioEngine::setDeviceFactory (DeviceFactory f)
@@ -216,7 +229,94 @@ std::unique_ptr<juce::AudioProcessor> AudioEngine::makeProcessor (const DeviceRe
         }
         return prisma;
     }
-    return nullptr; // plugins arrive through registerProcessor; "missing" devices pass the sound through
+    return nullptr; // plugins arrive through registerProcessor or startPluginLoad; "missing" devices pass the sound through
+}
+
+bool AudioEngine::isDeviceLoading (int64_t deviceId) const
+{
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    return loadingDevices.count (deviceId) > 0;
+}
+
+void AudioEngine::reviveMissingDevices()
+{
+    if (model == nullptr)
+        return;
+    const std::function<void (const juce::ValueTree&)> visit = [&] (const juce::ValueTree& node) {
+        if (node.hasType (ids::DEVICE))
+        {
+            DeviceRef device (node);
+            juce::PluginDescription desc;
+            if (device.kind() == "missing")
+                if (const auto xml = juce::XmlDocument::parse (device.pluginDesc()); xml != nullptr && desc.loadFromXml (*xml)
+                                                                                      && formatManager.doesPluginStillExist (desc))
+                    device.setKind ("plugin", nullptr);
+        }
+        for (const auto& child : node)
+            visit (child);
+    };
+    visit (model->root);
+}
+
+void AudioEngine::markDeviceMissing (int64_t deviceId)
+{
+    // Not undoable: the node only admits what is true. The state stays in the node.
+    if (model != nullptr)
+        if (const auto device = model->findDevice (deviceId); device.isValid() && device.kind() == "plugin")
+            device.setKind ("missing", nullptr);
+    ++deviceEpoch;
+}
+
+void AudioEngine::startPluginLoad (const DeviceRef& d)
+{
+    const auto id = d.id();
+    if (loadingDevices.count (id) > 0)
+        return;
+
+    juce::PluginDescription desc;
+    const auto xml = juce::XmlDocument::parse (d.pluginDesc());
+    if (xml == nullptr || ! desc.loadFromXml (*xml) || ! formatManager.doesPluginStillExist (desc))
+    {
+        markDeviceMissing (id);
+        return;
+    }
+
+    loadingDevices.insert (id);
+    ++deviceEpoch;
+    formatManager.createPluginInstanceAsync (
+        desc, sampleRate.load(), blockSize,
+        [this, flag = alive, id, epoch = modelEpoch, state = d.stateBase64()] (std::unique_ptr<juce::AudioPluginInstance> instance, const juce::String& error) {
+            if (flag->load())
+                finishPluginLoad (id, epoch, std::move (instance), error, state);
+        });
+}
+
+void AudioEngine::finishPluginLoad (int64_t deviceId, uint64_t epoch, std::unique_ptr<juce::AudioPluginInstance> instance,
+                                    const juce::String& error, const juce::String& stateBase64)
+{
+    juce::ignoreUnused (error);
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    if (epoch != modelEpoch)
+        return; // another project is open now
+    loadingDevices.erase (deviceId);
+    ++deviceEpoch;
+
+    const auto device = model != nullptr ? model->findDevice (deviceId) : DeviceRef();
+    if (! device.isValid() || device.kind() != "plugin")
+        return; // deleted again while it was loading: the instance is simply dropped
+
+    if (instance == nullptr)
+    {
+        markDeviceMissing (deviceId);
+        return;
+    }
+    if (stateBase64.isNotEmpty())
+    {
+        juce::MemoryBlock block;
+        if (block.fromBase64Encoding (stateBase64))
+            instance->setStateInformation (block.getData(), (int) block.getSize());
+    }
+    registerProcessor (deviceId, std::move (instance));
 }
 
 DeviceInstance* AudioEngine::acquireDevice (const DeviceRef& d, std::set<int64_t>& used)
@@ -247,7 +347,11 @@ DeviceInstance* AudioEngine::acquireDevice (const DeviceRef& d, std::set<int64_t
         processor = makeProcessor (d);
 
     if (processor == nullptr)
+    {
+        if (d.kind() == "plugin")
+            startPluginLoad (d);
         return nullptr;
+    }
 
     auto instance = std::make_unique<DeviceInstance>();
     instance->deviceId = id;

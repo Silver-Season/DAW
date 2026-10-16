@@ -67,6 +67,12 @@ inline const juce::String tipArm = utf8 ("Запись: MIDI-клавиатур�
 inline const juce::String statusAudioDeviceFallback = utf8 ("Сохранённая звуковая карта не найдена, выбрана системная");
 inline const juce::String errorPluginLoad = utf8 ("Не удалось загрузить плагин: ");
 inline const juce::String errorNewerProject = utf8 ("Проект создан в более новой версии DAW");
+inline const juce::String errorBrokenProject = utf8 ("Файл проекта повреждён или не является проектом DAW");
+inline juce::String errorFileMissing (const juce::String& path) { return utf8 ("Файл не найден: ") + path; }
+inline juce::String errorMidiRead (const juce::String& n) { return utf8 ("Не удалось прочитать MIDI-файл «") + n + utf8 ("»"); }
+inline juce::String errorMidiTiming (const juce::String& n) { return utf8 ("MIDI-файл «") + n + utf8 ("» использует тайм-код SMPTE, он не поддерживается"); }
+inline juce::String errorMidiNoNotes (const juce::String& n) { return utf8 ("В MIDI-файле «") + n + utf8 ("» нет нот"); }
+inline juce::String errorWriteFile (const juce::String& path) { return utf8 ("Не удалось записать файл: ") + path; }
 inline const juce::String dialogPluginTitle = utf8 ("Плагин");
 inline const juce::String windowPlugins = utf8 ("Плагины (AU / VST3)");
 inline const juce::String windowAudioSettings = utf8 ("Настройки звука и MIDI");
@@ -87,6 +93,18 @@ inline const juce::String undoMoveDevice = utf8 ("Переместить уст�
 inline const juce::String undoRemoveDevice = utf8 ("Удалить устройство");
 inline const juce::String undoToggleDevice = utf8 ("Включить или выключить устройство");
 inline const juce::String undoFoldDevice = utf8 ("Свернуть устройство");
+
+// Drops from the browser (task 1.5): the name of the transaction says what was dropped
+inline juce::String undoAddDevice (const juce::String& what) { return utf8 ("Добавить ") + what; }
+inline juce::String undoReplaceInstrument (const juce::String& what) { return utf8 ("Заменить инструмент · ") + what; }
+inline juce::String undoApplyPreset (const juce::String& what) { return utf8 ("Применить пресет · ") + what; }
+inline juce::String undoAddEffect (const juce::String& what) { return utf8 ("Добавить эффект · ") + what; }
+inline juce::String undoAddChain (const juce::String& what) { return utf8 ("Добавить цепочку · ") + what; }
+inline juce::String undoReplaceChain (const juce::String& what) { return utf8 ("Заменить цепочку · ") + what; }
+inline juce::String undoAddMidiClip (const juce::String& what) { return utf8 ("Добавить MIDI-клип · ") + what; }
+inline juce::String errorChainRead (const juce::String& n) { return utf8 ("Не удалось прочитать цепочку «") + n + utf8 ("»"); }
+inline juce::String errorPluginUnknown (const juce::String& n) { return utf8 ("Плагин «") + n + utf8 ("» не найден в списке плагинов"); }
+inline const juce::String errorNoSlot = utf8 ("Некуда положить клип");
 
 // Window
 inline const juce::String windowUntitled = utf8 ("Без названия");
@@ -165,6 +183,27 @@ inline const juce::String midiFiles = utf8 ("MIDI-файлы");
 inline const juce::String places = utf8 ("Места");
 inline const juce::String emptyCategory = utf8 ("Здесь появятся элементы категории");
 inline juce::String notFound (const juce::String& query) { return utf8 ("Ничего не найдено по «") + query + utf8 ("»"); }
+inline const juce::String chains = utf8 ("Цепочки");
+inline const juce::String recent = utf8 ("Недавние");
+inline const juce::String builtIn = utf8 ("встроенный");
+inline const juce::String otherVendor = utf8 ("Другие производители");
+inline const juce::String builtinGroup = utf8 ("Встроенные");
+inline const juce::String builtinEffectsSoon = utf8 ("Появятся на этапе 6");
+inline const juce::String userChains = utf8 ("Мои цепочки");
+inline const juce::String devicesShort = utf8 ("устр.");
+inline juce::String userGroup (const juce::String& device) { return utf8 ("Мои пресеты · ") + device; }
+inline juce::String projectPlace (const juce::String& folderName) { return utf8 ("Проект · ") + folderName; }
+inline const juce::String addFolder = utf8 ("Добавить папку…");
+inline const juce::String addFolderTitle = utf8 ("Выберите папку для «Мест»");
+inline const juce::String removeFolder = utf8 ("Убрать из «Мест»");
+inline const juce::String noPlaces = utf8 ("Добавьте папку со звуками и MIDI-файлами");
+inline const juce::String previewToggle = utf8 ("Предпрослушивание");
+inline const juce::String labelColour = utf8 ("Цвет метки");
+inline const juce::String labelNone = utf8 ("Без метки");
+inline const juce::String renamePreset = utf8 ("Переименовать…");
+inline const juce::String deletePreset = utf8 ("Удалить…");
+inline const juce::String showInFinder = utf8 ("Показать в Finder");
+inline const juce::String useOnTrack = utf8 ("Поставить на выбранную дорожку");
 } // namespace browser
 
 // Detail panel and device chain

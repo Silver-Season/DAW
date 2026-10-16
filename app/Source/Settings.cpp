@@ -101,6 +101,75 @@ void Settings::setPlaceFolders (const juce::StringArray& folders)
 double Settings::previewVolumeDb() const { return props->getDoubleValue ("previewVolumeDb", -12.0); }
 void Settings::setPreviewVolumeDb (double db) { props->setValue ("previewVolumeDb", juce::jlimit (-60.0, 0.0, db)); }
 
+bool Settings::previewEnabled() const { return props->getBoolValue ("previewEnabled", false); }
+void Settings::setPreviewEnabled (bool on) { props->setValue ("previewEnabled", on); }
+juce::String Settings::libraryPath() const { return props->getValue ("libraryPath"); }
+void Settings::setLibraryPath (const juce::String& p)
+{
+    if (p.isEmpty())
+        props->removeValue ("libraryPath");
+    else
+        props->setValue ("libraryPath", p);
+}
+
+std::map<juce::String, int> Settings::favourites() const
+{
+    std::map<juce::String, int> out;
+    juce::StringArray lines;
+    lines.addLines (props->getValue ("favourites"));
+    for (const auto& line : lines)
+    {
+        const int tab = line.lastIndexOfChar ('\t');
+        if (tab > 0)
+            out[line.substring (0, tab)] = line.substring (tab + 1).getIntValue();
+    }
+    return out;
+}
+
+int Settings::favouriteColour (const juce::String& key) const
+{
+    const auto all = favourites();
+    const auto it = all.find (key);
+    return it == all.end() ? -1 : it->second;
+}
+
+void Settings::setFavouriteColour (const juce::String& key, int colour)
+{
+    auto all = favourites();
+    if (colour < 0)
+        all.erase (key);
+    else
+        all[key] = juce::jlimit (0, 6, colour);
+    juce::StringArray lines;
+    for (const auto& [k, c] : all)
+        lines.add (k + "\t" + juce::String (c));
+    props->setValue ("favourites", lines.joinIntoString ("\n"));
+}
+
+juce::StringArray Settings::recentItems() const
+{
+    juce::StringArray list;
+    list.addLines (props->getValue ("recentItems"));
+    list.removeEmptyStrings();
+    return list;
+}
+
+void Settings::addRecentItem (const juce::String& key)
+{
+    auto list = recentItems();
+    list.removeString (key);
+    list.insert (0, key);
+    while (list.size() > kMaxRecentItems)
+        list.remove (list.size() - 1);
+    props->setValue ("recentItems", list.joinIntoString ("\n"));
+}
+
+bool Settings::firstRunDone() const { return props->getBoolValue ("firstRunDone", false); }
+void Settings::setFirstRunDone() { props->setValue ("firstRunDone", true); }
+
+bool Settings::midiInputPlays (const juce::String& id) const { return props->getBoolValue ("midiPlays/" + id, true); }
+void Settings::setMidiInputPlays (const juce::String& id, bool on) { props->setValue ("midiPlays/" + id, on); }
+
 //==============================================================================
 // "audioDevice" is the key the phase-0 build already used, so existing user settings keep working.
 std::unique_ptr<juce::XmlElement> Settings::audioDeviceState() const { return props->getXmlValue ("audioDevice"); }

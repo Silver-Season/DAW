@@ -4,6 +4,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_events/juce_events.h>
 
+#include <map>
 #include <memory>
 
 // Application settings: a thin typed layer over juce::PropertiesFile. Keys are private to this class,
@@ -53,6 +54,20 @@ public:
     void setPlaceFolders (const juce::StringArray&);
     double previewVolumeDb() const; // -12 dB by default
     void setPreviewVolumeDb (double);
+    bool previewEnabled() const; // the headphones button of the browser
+    void setPreviewEnabled (bool);
+    juce::String libraryPath() const; // User Library; empty = ~/Music/Prisma DAW/User Library
+    void setLibraryPath (const juce::String&);
+    // Colour labels of browser items (0..6, -1 = none), by item key.
+    int favouriteColour (const juce::String& key) const;
+    void setFavouriteColour (const juce::String& key, int colour);
+    std::map<juce::String, int> favourites() const;
+    // The last 30 items used from the browser, newest first.
+    static constexpr int kMaxRecentItems = 30;
+    juce::StringArray recentItems() const;
+    void addRecentItem (const juce::String& key);
+    bool firstRunDone() const; // false until the demo project was shown once
+    void setFirstRunDone();
 
     // Audio
     std::unique_ptr<juce::XmlElement> audioDeviceState() const;
@@ -60,6 +75,10 @@ public:
     // User names of the channels of a device ("Microphone", "Guitar"), keyed by device name.
     juce::String channelName (const juce::String& device, bool isInput, int channel) const;
     void setChannelName (const juce::String& device, bool isInput, int channel, const juce::String& name);
+
+    // MIDI inputs: whether a device plays the armed tracks (on by default), by device identifier.
+    bool midiInputPlays (const juce::String& identifier) const;
+    void setMidiInputPlays (const juce::String& identifier, bool);
 
     // Plugins (list written by the plugin scanner)
     std::unique_ptr<juce::XmlElement> knownPlugins() const;

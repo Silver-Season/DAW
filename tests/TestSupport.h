@@ -130,4 +130,5 @@ void runModelTests();
 void runGraphTests();
 void runHostingTests();
 void runUiTests();
+void runProjectTests();
 } // namespace tests

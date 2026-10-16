@@ -58,6 +58,10 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectFile.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/RecoveryCheck.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/MidiImport.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/library/UserLibrary.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Theme.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/UiCommon.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Controls.cpp
@@ -66,6 +70,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioEngine.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/EngineGraph.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RtCheck.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PreviewPlayer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaEditor.cpp)
 
@@ -80,6 +85,7 @@ if(DAW_BUILD_JUCE)
             tests/GraphTests.cpp
             tests/HostingTests.cpp
             tests/UiTests.cpp
+            tests/ProjectTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0

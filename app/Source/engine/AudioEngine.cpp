@@ -65,6 +65,7 @@ AudioEngine::AudioEngine (Settings& s) : settings (s), clock (&defaultClock)
 
 AudioEngine::~AudioEngine()
 {
+    alive->store (false);
     stopTimer();
     deviceManager.removeAudioCallback (this);
     deviceManager.removeMidiInputDeviceCallback ({}, this);
@@ -187,6 +188,26 @@ bool AudioEngine::stopAllClips()
     return pushCommand ({ EngineCommand::Type::stopAll, -1, -1 });
 }
 
+void AudioEngine::previewFactoryPreset (int program)
+{
+    preview.playFactoryProgram (program);
+}
+
+void AudioEngine::previewPresetState (const juce::MemoryBlock& state)
+{
+    preview.playState (state.getData(), (int) state.getSize());
+}
+
+void AudioEngine::stopPreview()
+{
+    preview.stop();
+}
+
+void AudioEngine::playTestTone()
+{
+    toneSamplesLeft.store (juce::roundToInt (sampleRate.load()));
+}
+
 void AudioEngine::prepareDevice (DeviceInstance& d) const
 {
     auto& p = *d.processor;
@@ -205,6 +226,7 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     blockSize = juce::jmax (16, device->getCurrentBufferSizeSamples());
     transport.prepare (sampleRate);
     master.setSize (kMaxChannels, blockSize);
+    preview.prepare (sampleRate, blockSize);
 
     for (auto& [id, rt] : runtimes)
         rt->prepare (blockSize);
@@ -222,6 +244,7 @@ void AudioEngine::audioDeviceStopped()
 {
     std::lock_guard<std::recursive_mutex> sl (buildLock);
     audioRunning = false;
+    preview.release();
     for (auto& [id, d] : devices)
         d->processor->releaseResources();
     collectGarbage(); // nobody can see the old graphs any more
@@ -515,6 +538,37 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     for (int ch = 0; ch < juce::jmin (2, numOutputs); ++ch)
         if (outputs[ch] != nullptr)
             juce::FloatVectorOperations::copy (outputs[ch], master.getReadPointer (ch), numSamples);
+
+    if (numOutputs >= 2 && outputs[0] != nullptr && outputs[1] != nullptr)
+    {
+        juce::AudioBuffer<float> outView (const_cast<float**> (outputs), 2, numSamples);
+        preview.process (outView, numSamples, tempo.load());
+
+        if (const int left = toneSamplesLeft.load (std::memory_order_relaxed); left > 0)
+        {
+            if (toneSamplesTotal == 0 || left > toneSamplesTotal)
+            {
+                toneSamplesTotal = left;
+                tonePhase = 0.0;
+            }
+            const double inc = 2.0 * juce::MathConstants<double>::pi * 440.0 / rate;
+            const int fade = juce::jmax (1, (int) (0.005 * rate));
+            const int n = juce::jmin (numSamples, left);
+            for (int i = 0; i < n; ++i)
+            {
+                const int pos = toneSamplesTotal - (left - i); // samples played so far
+                const int toEnd = left - i;
+                const float env = juce::jmin (1.0f, (float) pos / (float) fade, (float) toEnd / (float) fade);
+                const float s = 0.1f * env * (float) std::sin (tonePhase); // 0.1 = -20 dBFS
+                tonePhase += inc;
+                outputs[0][i] += s;
+                outputs[1][i] += s;
+            }
+            toneSamplesLeft.store (left - n, std::memory_order_relaxed);
+            if (left - n == 0)
+                toneSamplesTotal = 0;
+        }
+    }
 
     positionBeats = transport.getPositionBeats();
 }
