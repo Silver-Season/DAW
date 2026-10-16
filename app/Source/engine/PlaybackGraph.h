@@ -49,6 +49,7 @@ struct TrackRuntime
     // written by the audio thread, read by the UI timer
     std::atomic<float> meterL { 0.0f }, meterR { 0.0f };
     std::atomic<int> playingSlot { -1 }, queuedSlot { -1 };
+    std::atomic<double> playingStartBeat { 0.0 }; // lets the UI draw the progress bar of the playing clip
 
     // audio thread only
     daw::engine::ClipPlayer player;

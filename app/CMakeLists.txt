@@ -9,6 +9,12 @@ target_sources(DAW PRIVATE
     Source/Main.cpp
     Source/DemoProject.cpp
     Source/MainComponent.cpp
+    Source/ui/AppMenu.cpp
+    Source/ui/BrowserPanel.cpp
+    Source/ui/DetailPanel.cpp
+    Source/ui/SessionView.cpp
+    Source/ui/ThemeLookAndFeel.cpp
+    Source/ui/TopBar.cpp
     # Model, settings, engine and Prisma (compiled into the DAW as its built-in instrument), see the top-level CMakeLists.
     ${DAW_APP_SHARED_SOURCES})
 
@@ -25,6 +31,7 @@ target_compile_definitions(DAW PRIVATE
 target_link_libraries(DAW
     PRIVATE
         daw_core
+        DawResources
         juce::juce_audio_utils
         juce::juce_audio_processors
     PUBLIC

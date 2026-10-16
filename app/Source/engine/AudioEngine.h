@@ -109,6 +109,9 @@ public:
 
     std::atomic<float> masterMeterL { 0.0f }, masterMeterR { 0.0f };
 
+    // Number of events received from MIDI hardware so far; the transport's MIDI indicator blinks when it changes.
+    uint32_t getHardwareMidiCount() const { return hardwareMidiCount.load (std::memory_order_relaxed); }
+
     // juce::AudioIODeviceCallback
     void audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
                                            int numSamples, const juce::AudioIODeviceCallbackContext&) override;
@@ -200,6 +203,7 @@ private:
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };
     std::atomic<float> masterGain { 1.0f };
     std::atomic<int64_t> selectedTrackId { -1 };
+    std::atomic<uint32_t> hardwareMidiCount { 0 };
 
     std::atomic<double> sampleRate { 44100.0 };
     int blockSize = 512;

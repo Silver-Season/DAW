@@ -213,7 +213,7 @@ void testStringsAndSettings()
 {
     std::printf ("[test] Strings and Settings\n");
     check (Strings::trackTypeMidi.isNotEmpty() && Strings::undoNewTrack.containsNonWhitespaceChars(), "strings exist");
-    check (Strings::undoNewTrack.length() == 13, "Russian strings are decoded as UTF-8 (\"Новая дорожка\" is 13 characters)");
+    check (Strings::undoNewTrack.length() == 13, "Russian strings are decoded as UTF-8 (13 characters for the \"new track\" name)");
     check (Strings::defaultTrackName (3).endsWith ("3"), "default track names are numbered");
 
     juce::TemporaryFile file (".settings");

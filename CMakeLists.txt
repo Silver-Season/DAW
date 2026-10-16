@@ -40,11 +40,29 @@ if(DAW_BUILD_JUCE)
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(JUCE)
 
-    # Sources shared by the app and the engine tests: model, settings, engine, built-in Prisma.
+    # Fonts (Onest and JetBrains Mono, SIL OFL 1.1) and theme files, embedded as BinaryData.
+    juce_add_binary_data(DawResources SOURCES
+        app/Resources/fonts/Onest-Regular.ttf
+        app/Resources/fonts/Onest-Medium.ttf
+        app/Resources/fonts/Onest-SemiBold.ttf
+        app/Resources/fonts/JetBrainsMono-Regular.ttf
+        app/Resources/fonts/JetBrainsMono-Bold.ttf
+        app/Resources/themes/prism.json
+        app/Resources/themes/neon.json
+        app/Resources/themes/studio.json
+        app/Resources/themes/paper.json)
+
+    # Sources shared by the app and the engine tests: model, settings, engine, theme, built-in Prisma.
     set(DAW_APP_SHARED_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Settings.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Theme.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/UiCommon.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Controls.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Chrome.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/EditCommands.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioEngine.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/EngineGraph.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RtCheck.cpp
@@ -61,6 +79,7 @@ if(DAW_BUILD_JUCE)
             tests/ModelTests.cpp
             tests/GraphTests.cpp
             tests/HostingTests.cpp
+            tests/UiTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
@@ -68,7 +87,7 @@ if(DAW_BUILD_JUCE)
             # the VST3 built from plugins/prisma in this same build, hosted by the hosting test
             DAW_TEST_VST3_DIR="${CMAKE_BINARY_DIR}/plugins/prisma/Prisma_artefacts/$<CONFIG>/VST3")
         add_dependencies(daw_engine_tests Prisma_VST3)
-        target_link_libraries(daw_engine_tests PRIVATE daw_core juce::juce_audio_utils
+        target_link_libraries(daw_engine_tests PRIVATE daw_core DawResources juce::juce_audio_utils
             juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
         add_test(NAME daw_engine_tests COMMAND daw_engine_tests)
     endif()

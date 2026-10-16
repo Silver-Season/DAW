@@ -120,6 +120,8 @@ bool AudioEngine::pushLiveMidi (const uint8_t* bytes, int size, bool fromKeyboar
         e.bytes[i] = bytes[i];
     e.size = (uint8_t) size;
     e.source = fromKeyboard ? MidiInputQueue::keyboard : MidiInputQueue::hardware;
+    if (! fromKeyboard)
+        hardwareMidiCount.fetch_add (1, std::memory_order_relaxed);
     e.timeMs = timeMs;
     return midiQueue.push (e);
 }
@@ -372,6 +374,7 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
 
     rt.playingSlot.store (rt.player.playingSlot(), std::memory_order_relaxed);
     rt.queuedSlot.store (rt.player.queuedSlot(), std::memory_order_relaxed);
+    rt.playingStartBeat.store (rt.player.playingStartBeat(), std::memory_order_relaxed);
 
     rt.midi.clear();
     if (killNotes)
