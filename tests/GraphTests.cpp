@@ -7,6 +7,7 @@
 
 #include "../app/Source/engine/RtCheck.h"
 
+#include <array>
 #include <atomic>
 #include <thread>
 
@@ -29,7 +30,11 @@ public:
         {
             const auto status = meta.data[0] & 0xF0;
             if (status == 0x90 && meta.data[2] > 0)
-                noteOns.fetch_add (1, std::memory_order_relaxed);
+            {
+                const int n = noteOns.fetch_add (1, std::memory_order_relaxed);
+                if (n < (int) onOffsets.size())
+                    onOffsets[(size_t) n] = meta.samplePosition;
+            }
             else if (status == 0x80 || status == 0x90)
                 noteOffs.fetch_add (1, std::memory_order_relaxed);
         }
@@ -50,6 +55,7 @@ public:
     void setStateInformation (const void*, int) override {}
 
     std::atomic<int> noteOns { 0 }, noteOffs { 0 };
+    std::array<int, 64> onOffsets {}; // sample position of each note-on, in arrival order
 };
 
 //==============================================================================
@@ -207,6 +213,71 @@ void testDeletion()
 }
 
 //==============================================================================
+// Live MIDI timing
+double scriptedClockMs = 0.0;
+double scriptedClock() { return scriptedClockMs; }
+
+void testMidiTiming()
+{
+    std::printf ("[test] live MIDI keeps its timing inside the block\n");
+    Fixture f;
+    CountingProcessor* counter = nullptr;
+    f.engine.setDeviceFactory ([&counter] (const DeviceRef&) -> std::unique_ptr<juce::AudioProcessor> {
+        auto p = std::make_unique<CountingProcessor>();
+        counter = p.get();
+        return p;
+    });
+    const auto track = f.model.addTrack ("midi");
+    f.model.addDevice (track, "prisma", "Counter");
+    track.setArm (true, nullptr);
+
+    constexpr int kBlock = 256;
+    constexpr double kRate = 48000.0;
+    FakeDevice fake (kBlock, kRate);
+    f.engine.audioDeviceAboutToStart (&fake);
+    f.engine.rebuildGraphIfNeeded();
+    f.engine.setClockForTesting (&scriptedClock);
+    Runner runner { f.engine, kBlock };
+    const double blockMs = kBlock * 1000.0 / kRate;
+
+    scriptedClockMs = 1000.0; // block 1: the reference for the events below
+    runner.run (1);
+    // eight key presses spread evenly over the next block, pushed "while block 1 was playing"
+    const uint8_t on[8][3] = { { 0x90, 60, 100 }, { 0x90, 61, 100 }, { 0x90, 62, 100 }, { 0x90, 63, 100 },
+                               { 0x90, 64, 100 }, { 0x90, 65, 100 }, { 0x90, 66, 100 }, { 0x90, 67, 100 } };
+    for (int k = 0; k < 8; ++k)
+        f.engine.pushLiveMidi (on[k], 3, k % 2 == 0, 1000.0 + k * blockMs / 8.0 + 0.01);
+    scriptedClockMs = 1000.0 + blockMs;
+    runner.run (1);
+
+    bool monotonic = true, withinOneMs = true;
+    for (int k = 0; k < 8; ++k)
+    {
+        const int got = counter->onOffsets[(size_t) k];
+        const double expected = (k * blockMs / 8.0 + 0.01) * kRate / 1000.0;
+        if (k > 0)
+            monotonic = monotonic && got >= counter->onOffsets[(size_t) k - 1];
+        withinOneMs = withinOneMs && std::abs (got - expected) <= kRate / 1000.0;
+        std::printf ("    event %d: offset %d (expected %.1f)\n", k, got, expected);
+    }
+    check (counter->noteOns.load() == 8, "all 8 events arrived");
+    check (monotonic, "offsets grow with the event times");
+    check (withinOneMs, "every offset is within 1 ms of its time");
+    check (counter->onOffsets[7] > counter->onOffsets[0] + kBlock / 2, "the events really are spread over the block");
+
+    // an event from the future goes to the end of the block, an old one to the start
+    const uint8_t late[3] { 0x90, 70, 100 }, old[3] { 0x90, 71, 100 };
+    f.engine.pushLiveMidi (late, 3, false, scriptedClockMs + 50.0 + blockMs);
+    f.engine.pushLiveMidi (old, 3, false, scriptedClockMs - 50.0);
+    scriptedClockMs += blockMs;
+    runner.run (1);
+    // (the block's events come out sorted by position: the old one first)
+    check (counter->onOffsets[8] == 0, "an event that is too old lands at the start of the block");
+    check (counter->onOffsets[9] == kBlock - 1, "an event in the future lands at the end of the block");
+    f.engine.audioDeviceStopped();
+}
+
+//==============================================================================
 // Test 6
 void testLockFree()
 {
@@ -316,6 +387,7 @@ void testLockFree()
 void tests::runGraphTests()
 {
     testLockFree();
+    testMidiTiming();
     testContinuity();
     testDeletion();
 }

@@ -29,7 +29,12 @@ private:
 };
 
 //==============================================================================
-AudioEngine::AudioEngine (Settings& s) : settings (s)
+namespace
+{
+double defaultClock() { return juce::Time::getMillisecondCounterHiRes(); }
+} // namespace
+
+AudioEngine::AudioEngine (Settings& s) : settings (s), clock (&defaultClock)
 {
     formatManager.addDefaultFormats();
 
@@ -106,39 +111,37 @@ void AudioEngine::timerCallback()
 
 //==============================================================================
 // Live MIDI input: pushed lock-free, from any thread, to the audio thread.
-void AudioEngine::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
+bool AudioEngine::pushLiveMidi (const uint8_t* bytes, int size, bool fromKeyboard, double timeMs)
 {
-    const int size = m.getRawDataSize();
     if (size < 1 || size > 3)
-        return; // sysex and the like are not routed to tracks
+        return false; // sysex and the like are not routed to tracks
     MidiInputQueue::Event e;
     for (int i = 0; i < size; ++i)
-        e.bytes[i] = m.getRawData()[i];
+        e.bytes[i] = bytes[i];
     e.size = (uint8_t) size;
-    e.source = MidiInputQueue::hardware;
-    midiQueue.push (e);
+    e.source = fromKeyboard ? MidiInputQueue::keyboard : MidiInputQueue::hardware;
+    e.timeMs = timeMs;
+    return midiQueue.push (e);
+}
+
+void AudioEngine::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
+{
+    // JUCE stamps device messages in seconds on the same clock as getMillisecondCounterHiRes
+    const double stamp = m.getTimeStamp() * 1000.0;
+    pushLiveMidi (m.getRawData(), m.getRawDataSize(), false, stamp > 0.0 ? stamp : juce::Time::getMillisecondCounterHiRes());
 }
 
 void AudioEngine::handleNoteOn (juce::MidiKeyboardState*, int channel, int note, float velocity)
 {
-    MidiInputQueue::Event e;
-    e.bytes[0] = (uint8_t) (0x90 | juce::jlimit (0, 15, channel - 1));
-    e.bytes[1] = (uint8_t) juce::jlimit (0, 127, note);
-    e.bytes[2] = (uint8_t) juce::jlimit (1, 127, juce::roundToInt (velocity * 127.0f));
-    e.size = 3;
-    e.source = MidiInputQueue::keyboard;
-    midiQueue.push (e);
+    const uint8_t bytes[3] { (uint8_t) (0x90 | juce::jlimit (0, 15, channel - 1)), (uint8_t) juce::jlimit (0, 127, note),
+                             (uint8_t) juce::jlimit (1, 127, juce::roundToInt (velocity * 127.0f)) };
+    pushLiveMidi (bytes, 3, true, juce::Time::getMillisecondCounterHiRes());
 }
 
 void AudioEngine::handleNoteOff (juce::MidiKeyboardState*, int channel, int note, float)
 {
-    MidiInputQueue::Event e;
-    e.bytes[0] = (uint8_t) (0x80 | juce::jlimit (0, 15, channel - 1));
-    e.bytes[1] = (uint8_t) juce::jlimit (0, 127, note);
-    e.bytes[2] = 0;
-    e.size = 3;
-    e.source = MidiInputQueue::keyboard;
-    midiQueue.push (e);
+    const uint8_t bytes[3] { (uint8_t) (0x80 | juce::jlimit (0, 15, channel - 1)), (uint8_t) juce::jlimit (0, 127, note), 0 };
+    pushLiveMidi (bytes, 3, true, juce::Time::getMillisecondCounterHiRes());
 }
 
 //==============================================================================
@@ -457,9 +460,21 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     // Live MIDI
     hardwareMidi.clear();
     keyboardMidi.clear();
+    // Like MidiMessageCollector: events that happened since the previous callback are spread over this
+    // block by their time; future events go to the end of the block, too old ones to the start.
+    const double nowMs = clock.load (std::memory_order_relaxed)();
+    const double rate = sampleRate.load();
+    const double blockMs = numSamples * 1000.0 / rate;
+    double refMs = lastCallbackMs < 0.0 ? nowMs - blockMs : lastCallbackMs;
+    if (nowMs - refMs > 2.0 * blockMs || nowMs < refMs)
+        refMs = nowMs - blockMs; // after a pause the old reference would push everything to the end
+    lastCallbackMs = nowMs;
     MidiInputQueue::Event e;
     while (midiQueue.pop (e))
-        (e.source == MidiInputQueue::keyboard ? keyboardMidi : hardwareMidi).addEvent (e.bytes, e.size, 0);
+    {
+        const int offset = juce::jlimit (0, numSamples - 1, (int) std::lround ((e.timeMs - refMs) * rate / 1000.0));
+        (e.source == MidiInputQueue::keyboard ? keyboardMidi : hardwareMidi).addEvent (e.bytes, e.size, offset);
+    }
 
     const bool killNotes = stopRequested.exchange (false);
     if (killNotes)

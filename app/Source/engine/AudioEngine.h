@@ -57,6 +57,18 @@ public:
     // Hands over a plugin loaded asynchronously by the UI for a DEVICE node of the model.
     void registerProcessor (int64_t deviceId, std::unique_ptr<juce::AudioProcessor>);
 
+    // Edits that remove devices. Each first writes the live state of every affected processor into
+    // DEVICE.state (outside the undo history, so that undoing the removal does not undo it), then removes the node, so that undo brings the device back with its parameters. The caller
+    // opens the undo transaction.
+    void removeDevice (const DeviceRef&);
+    void deleteTrack (int64_t trackId);
+    void captureDeviceStates (const juce::ValueTree& subtree); // all DEVICE nodes at or below `subtree`
+
+    // Loads a hosted plugin asynchronously and, when it is ready, replaces the track's first device with it
+    // (one undo transaction), registers the instance and publishes the graph. `done` gets an error text
+    // (empty on success) and the new device id. This is the path the UI uses.
+    void loadPluginInstrument (int64_t trackId, const juce::PluginDescription&, std::function<void (juce::String error, int64_t deviceId)> done);
+
     // Message thread only; the pointers stay valid until the next graph rebuild that drops them.
     juce::AudioProcessor* findProcessor (int64_t deviceId) const;
     TrackRuntime* findRuntime (int64_t trackId) const;
@@ -84,6 +96,16 @@ public:
     bool launchScene (int scene);
     bool stopTrack (int64_t trackId);
     bool stopAllClips();
+
+    // Live MIDI from any thread, with the time (ms, juce::Time::getMillisecondCounterHiRes) it happened.
+    // The audio thread turns the time into a sample offset inside the block. Used by the device callbacks
+    // and the on-screen keyboard; tests call it with made-up times.
+    bool pushLiveMidi (const uint8_t* bytes, int size, bool fromKeyboard, double timeMs);
+
+    // The clock the audio thread reads once per block (default: the hi-res millisecond counter). Tests
+    // replace it with a function returning a scripted time.
+    using ClockFn = double (*) ();
+    void setClockForTesting (ClockFn fn) { clock.store (fn); }
 
     std::atomic<float> masterMeterL { 0.0f }, masterMeterR { 0.0f };
 
@@ -185,6 +207,8 @@ private:
     // audio thread only
     daw::engine::Transport transport;
     uint64_t lastGeneration = 0;
+    double lastCallbackMs = -1.0;
+    std::atomic<ClockFn> clock;
     juce::MidiBuffer hardwareMidi, keyboardMidi, masterMidi, masterFxMidi;
     juce::AudioBuffer<float> master;
 

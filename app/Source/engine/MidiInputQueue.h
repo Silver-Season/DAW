@@ -22,6 +22,7 @@ public:
         uint8_t bytes[3] {};
         uint8_t size = 0;
         Source source = hardware;
+        double timeMs = 0.0; // juce::Time::getMillisecondCounterHiRes() when the event happened
     };
 
     MidiInputQueue()
