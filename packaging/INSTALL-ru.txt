@@ -1,0 +1,21 @@
+Установка DAW
+=============
+
+1. Перетащите DAW.app на ярлык Applications в этом окне.
+
+2. Первый запуск. Программа пока не подписана сертификатом Apple, поэтому macOS её заблокирует:
+   - нажмите «Готово» (не «В Корзину»);
+   - откройте Системные настройки → Конфиденциальность и безопасность;
+   - внизу у строки про «DAW» нажмите «Всё равно открыть» и подтвердите.
+   Или одной командой в Терминале:
+       xattr -dr com.apple.quarantine /Applications/DAW.app
+
+3. Плагин Prisma для Logic, Ableton и других программ (необязательно):
+   скопируйте из папки Plugins
+       Prisma.component  →  ~/Library/Audio/Plug-Ins/Components
+       Prisma.vst3       →  ~/Library/Audio/Plug-Ins/VST3
+   (в Finder: Переход → Переход к папке… и вставьте путь). Затем в Терминале:
+       xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Prisma.component ~/Library/Audio/Plug-Ins/VST3/Prisma.vst3
+   Prisma.app в той же папке — синт как отдельная программа.
+
+4. В DAW нажмите «▶ Scene 1» справа, чтобы услышать демо. Звуковая карта выбирается в «Audio/MIDI».

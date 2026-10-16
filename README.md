@@ -24,6 +24,10 @@
 
 Демо, отрендеренное движком без участия человека: [media/prisma_demo.mp3](media/prisma_demo.mp3).
 
+## Скачать для Mac
+
+Свежая сборка из ветки main: [DAW-macOS.dmg](https://github.com/Silver-Season/DAW/releases/download/nightly/DAW-macOS.dmg). Внутри DAW.app, плагин Prisma (AU, VST3, отдельное приложение) и инструкция по установке `INSTALL-ru.txt`. Программа пока не подписана сертификатом Apple, поэтому при первом запуске macOS попросит разрешение: Системные настройки → Конфиденциальность и безопасность → «Всё равно открыть».
+
 ## Сборка на Mac
 
 Нужны Xcode (или Command Line Tools) и CMake:

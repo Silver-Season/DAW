@@ -7,8 +7,10 @@ on:
 jobs:
   macos:
     runs-on: macos-14
+    permissions:
+      contents: write # to publish the nightly release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install tools
         run: brew install ninja
       - name: Configure
@@ -21,18 +23,35 @@ jobs:
         run: |
           killall -9 AudioComponentRegistrar || true
           auval -v aumu Prsm Dawp
+      - name: Package DMG
+        run: |
+          set -e
+          R=build/plugins/prisma/Prisma_artefacts/Release
+          mkdir -p dist/DAW/Plugins
+          cp -R build/app/DAW_artefacts/Release/DAW.app dist/DAW/
+          cp -R "$R/AU/Prisma.component" "$R/VST3/Prisma.vst3" "$R/Standalone/Prisma.app" dist/DAW/Plugins/
+          # Ad-hoc signature: required on Apple Silicon; not notarised, so Gatekeeper still asks once.
+          codesign --force --deep --sign - dist/DAW/DAW.app dist/DAW/Plugins/*
+          ln -s /Applications dist/DAW/Applications
+          cp packaging/INSTALL-ru.txt dist/DAW/
+          hdiutil create -volname DAW -srcfolder dist/DAW -ov -format UDZO dist/DAW-macOS.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: DAW-macOS
-          path: |
-            build/app/DAW_artefacts/Release/DAW.app
-            build/plugins/prisma/Prisma_artefacts/Release/AU/Prisma.component
-            build/plugins/prisma/Prisma_artefacts/Release/VST3/Prisma.vst3
+          path: dist/DAW-macOS.dmg
+      - name: Publish nightly release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete nightly --yes --cleanup-tag || true
+          gh release create nightly dist/DAW-macOS.dmg --prerelease --target "${{ github.sha }}" \
+            --title "Nightly build" --notes "Automatic build of the latest main (${{ github.sha }}). See INSTALL-ru.txt inside the image."
 
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         run: |
           sudo apt-get update
