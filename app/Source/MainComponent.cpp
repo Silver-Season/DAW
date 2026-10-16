@@ -199,6 +199,18 @@ public:
     int trackWidth() const { return (getWidth() - kSceneColumnWidth) / juce::jmax (1, model.numTracks()); }
     int preferredHeight() const { return kHeaderHeight + model.numScenes() * kSlotHeight + kStopRowHeight + 8; }
 
+    // "Prisma: Glass Pad": the device name plus, for a Prisma, the preset it was last set to.
+    juce::String instrumentLabel (const TrackRef& track) const
+    {
+        if (track.numDevices() == 0)
+            return Strings::labelNoInstrument;
+        const auto device = track.device (0);
+        auto label = device.name();
+        if (auto* processor = engine.findProcessor (device.id()); processor != nullptr && device.kind() == "prisma")
+            label += ": " + processor->getProgramName (processor->getCurrentProgram());
+        return label + juce::String::fromUTF8 (" \xe2\x96\xbe");
+    }
+
     void paint (juce::Graphics& g) override
     {
         g.fillAll (colours::background);
@@ -223,9 +235,7 @@ public:
             g.drawText (track.name(), header.removeFromTop (20).reduced (6, 0), juce::Justification::centredLeft);
             g.setColour (colours::dimText);
             g.setFont (juce::FontOptions (11.0f));
-            g.drawText (track.numDevices() == 0 ? Strings::labelNoInstrument
-                                                : track.device (0).name() + juce::String::fromUTF8 (" \xe2\x96\xbe"),
-                        header.reduced (6, 0), juce::Justification::centredLeft, true);
+            g.drawText (instrumentLabel (track), header.reduced (6, 0), juce::Justification::centredLeft, true);
 
             const int playingScene = runtime != nullptr ? runtime->playingSlot.load() : -1;
             const int queuedScene = runtime != nullptr ? runtime->queuedSlot.load() : -1;

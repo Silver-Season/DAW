@@ -2,6 +2,7 @@
 #include "MainComponent.h"
 #include "Settings.h"
 #include "engine/AudioEngine.h"
+#include "engine/NullAudioDriver.h"
 
 class DawApplication final : public juce::JUCEApplication
 {
@@ -20,12 +21,15 @@ public:
 
         engine = std::make_unique<AudioEngine> (*settings);
         engine->setModel (model.get());
+        if (juce::SystemStats::getEnvironmentVariable ("DAW_NULL_AUDIO", {}).isNotEmpty())
+            nullDriver = std::make_unique<NullAudioDriver> (*engine); // no sound card: tick the engine from a timer thread
         mainWindow = std::make_unique<MainWindow> (*engine, *model);
     }
 
     void shutdown() override
     {
         mainWindow.reset();
+        nullDriver.reset();
         engine.reset(); // detaches from the model first
         model.reset();
         settings.reset();
@@ -54,6 +58,7 @@ private:
     std::unique_ptr<Settings> settings;
     std::unique_ptr<ProjectModel> model;
     std::unique_ptr<AudioEngine> engine;
+    std::unique_ptr<NullAudioDriver> nullDriver;
     std::unique_ptr<MainWindow> mainWindow;
 };
 
