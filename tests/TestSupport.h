@@ -115,7 +115,7 @@ inline void putClip (ProjectModel& model, const TrackRef& track, int scene, cons
 struct Fixture
 {
     Fixture()
-        : settingsFile (".settings"), settings (settingsFile.getFile()), model (ProjectModel::createEmpty()), engine (settings)
+        : settingsFile (".settings"), settings (settingsFile.getFile()), model (ProjectModel::createEmpty()), engine (settings, false)
     {
         engine.setModel (&model);
     }

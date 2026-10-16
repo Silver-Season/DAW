@@ -33,7 +33,9 @@ class AudioEngine final : public juce::AudioIODeviceCallback,
 public:
     using DeviceFactory = std::function<std::unique_ptr<juce::AudioProcessor> (const DeviceRef&)>;
 
-    explicit AudioEngine (Settings&);
+    // openDevices = false leaves the sound card and MIDI inputs closed, for an engine whose callback is
+    // driven by hand (tests, DAW_NULL_AUDIO): a real device would call it concurrently from its own thread.
+    explicit AudioEngine (Settings&, bool openDevices = true);
     ~AudioEngine() override;
 
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
