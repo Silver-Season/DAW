@@ -1,70 +1,12 @@
-// Headless end-to-end tests of the JUCE layer: Prisma as a juce::AudioProcessor and the DAW AudioEngine
-// (clip launch -> instrument -> mixer -> output), driven by a fake audio device.
-#include "../app/Source/AudioEngine.h"
-#include "../plugins/prisma/Source/PrismaProcessor.h"
+// Headless end-to-end tests of the JUCE layer: Prisma as a juce::AudioProcessor, the project model, and the
+// DAW AudioEngine (model -> playback graph -> clip launch -> instrument -> mixer -> output), driven by a
+// fake audio device.
+#include "TestSupport.h"
 
-#include "daw/engine/DemoContent.h"
-
-#include <cstdio>
+using namespace tests;
 
 namespace
 {
-int failures = 0, checks = 0;
-
-void check (bool ok, const juce::String& what)
-{
-    ++checks;
-    if (! ok)
-    {
-        ++failures;
-        std::printf ("  FAIL: %s\n", what.toRawUTF8());
-    }
-}
-
-class FakeDevice final : public juce::AudioIODevice
-{
-public:
-    FakeDevice() : AudioIODevice ("Fake", "Fake") {}
-    juce::StringArray getOutputChannelNames() override { return { "L", "R" }; }
-    juce::StringArray getInputChannelNames() override { return {}; }
-    juce::Array<double> getAvailableSampleRates() override { return { 48000.0 }; }
-    juce::Array<int> getAvailableBufferSizes() override { return { 512 }; }
-    int getDefaultBufferSize() override { return 512; }
-    juce::String open (const juce::BigInteger&, const juce::BigInteger&, double, int) override { return {}; }
-    void close() override {}
-    bool isOpen() override { return true; }
-    void start (juce::AudioIODeviceCallback*) override {}
-    void stop() override {}
-    bool isPlaying() override { return true; }
-    juce::String getLastError() override { return {}; }
-    int getCurrentBufferSizeSamples() override { return 512; }
-    double getCurrentSampleRate() override { return 48000.0; }
-    int getCurrentBitDepth() override { return 32; }
-    juce::BigInteger getActiveOutputChannels() const override { return 3; }
-    juce::BigInteger getActiveInputChannels() const override { return 0; }
-    int getOutputLatencyInSamples() override { return 0; }
-    int getInputLatencyInSamples() override { return 0; }
-};
-
-struct Runner
-{
-    AudioEngine& engine;
-    juce::AudioBuffer<float> out { 2, 512 };
-
-    // Runs n blocks and returns the RMS of the output.
-    double run (int blocks)
-    {
-        double sum = 0.0;
-        for (int b = 0; b < blocks; ++b)
-        {
-            engine.audioDeviceIOCallbackWithContext (nullptr, 0, out.getArrayOfWritePointers(), 2, 512, {});
-            for (int i = 0; i < 512; ++i)
-                sum += (double) out.getSample (0, i) * out.getSample (0, i);
-        }
-        return std::sqrt (sum / (blocks * 512.0));
-    }
-};
-
 void testPrismaProcessor()
 {
     std::printf ("[test] Prisma processor: render, programs, state\n");
@@ -101,19 +43,25 @@ void testPrismaProcessor()
 
 void testEngine()
 {
-    std::printf ("[test] AudioEngine: clips -> instruments -> mixer\n");
-    AudioEngine engine;
+    std::printf ("[test] AudioEngine: model -> clips -> instruments -> mixer\n");
+    Fixture f;
+    auto& model = f.model;
+    auto& engine = f.engine;
     FakeDevice device;
 
-    for (int t = 0; t < 2; ++t)
-    {
-        auto prisma = std::make_unique<PrismaProcessor>();
-        prisma->setCurrentProgram (t == 0 ? 5 : 2); // Pluck, Reese Bass
-        engine.setInstrument (t, std::move (prisma), "Prisma");
-    }
+    for (int i = 0; i < 8; ++i)
+        model.insertScene (-1);
+    const auto track0 = addPrismaTrack (model, 5); // Pluck
+    const auto track1 = addPrismaTrack (model, 2); // Reese Bass
+    putClip (model, track0, 0, daw::engine::demo::arpClip());
+    putClip (model, track1, 0, daw::engine::demo::bassClip (false));
+    const auto id0 = track0.id(), id1 = track1.id();
+
     engine.audioDeviceAboutToStart (&device);
-    engine.setClip (0, 0, std::make_unique<daw::engine::MidiClip> (daw::engine::demo::arpClip()));
-    engine.setClip (1, 0, std::make_unique<daw::engine::MidiClip> (daw::engine::demo::bassClip (false)));
+    engine.rebuildGraphIfNeeded();
+    const auto* rt0 = engine.findRuntime (id0);
+    const auto* rt1 = engine.findRuntime (id1);
+    check (rt0 != nullptr && rt1 != nullptr, "the graph has a runtime per model track");
 
     Runner runner { engine };
     check (runner.run (20) < 1e-6, "silent before anything is launched");
@@ -123,32 +71,43 @@ void testEngine()
     std::printf ("    scene 1 RMS %.4f\n", both);
     check (both > 0.01, "scene launch plays both tracks");
     check (engine.isPlaying() && engine.getPositionBeats() > 3.0, "transport started by the launch");
-    check (engine.getPlayingScene (0) == 0 && engine.getPlayingScene (1) == 0, "both tracks report the playing scene");
+    check (rt0->playingSlot == 0 && rt1->playingSlot == 0, "both tracks report the playing scene");
 
-    engine.getTrack (1).solo = true;
+    track1.setSolo (true, &model.undo);
     runner.run (5);
     const double solo = runner.run (100);
-    engine.getTrack (1).mute = true;
+    track1.setMute (true, &model.undo);
     runner.run (5);
     const double soloMuted = runner.run (100);
     std::printf ("    solo bass RMS %.4f, solo+mute %.6f\n", solo, soloMuted);
-    check (solo > 0.005 && soloMuted < 1e-5, "solo and mute");
-    engine.getTrack (1).solo = false;
-    engine.getTrack (1).mute = false;
+    check (solo > 0.005 && soloMuted < 1e-5, "solo and mute (live parameters, no graph rebuild)");
+    check (! engine.isGraphDirty(), "mixer parameters do not mark the graph as outdated");
+    track1.setSolo (false, &model.undo);
+    track1.setMute (false, &model.undo);
 
     engine.stopAllClips();
     runner.run (200); // quantised stop on the next bar, then release tails
-    check (engine.getPlayingScene (0) == -1 && engine.getPlayingScene (1) == -1, "stop all stops at the bar");
+    check (rt0->playingSlot == -1 && rt1->playingSlot == -1, "stop all stops at the bar");
     check (runner.run (50) < 1e-4, "silence after stop");
 
     // Live MIDI from the on-screen keyboard reaches only the armed track.
-    engine.armExclusive (0);
+    track0.setArm (true, nullptr);
     engine.getKeyboardState().noteOn (1, 64, 1.0f);
     const double live = runner.run (20);
     engine.getKeyboardState().noteOff (1, 64, 0.0f);
     std::printf ("    live note RMS %.4f\n", live);
     check (live > 0.005, "on-screen keyboard plays the armed track");
+    runner.run (200);
 
+    // Without a manually armed track the selected one is armed automatically.
+    track0.setArm (false, nullptr);
+    model.setSelectedTrack (id1);
+    engine.getKeyboardState().noteOn (1, 40, 1.0f);
+    const double autoArm = runner.run (20);
+    engine.getKeyboardState().noteOff (1, 40, 0.0f);
+    check (autoArm > 0.005, "the selected track is armed when nothing is armed by hand");
+
+    check (runner.nonFinite == 0, "no NaN or Inf in the output");
     engine.audioDeviceStopped();
 }
 } // namespace
@@ -158,6 +117,9 @@ int main()
     juce::ScopedJuceInitialiser_GUI juce;
     testPrismaProcessor();
     testEngine();
+    runModelTests();
+    runGraphTests();
+    runHostingTests();
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

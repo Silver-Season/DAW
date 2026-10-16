@@ -274,6 +274,43 @@ int main()
         check (balance == 0, "no hanging note after stop");
     });
 
+    test ("sortEvents is stable, puts note-offs first and works without allocating", [] {
+        std::vector<MidiEvent> ev;
+        ev.reserve (8);
+        ev.push_back (MidiEvent::noteOn (10, 60, 100));
+        ev.push_back (MidiEvent::noteOn (5, 64, 100));
+        ev.push_back (MidiEvent::noteOn (5, 67, 100));
+        ev.push_back (MidiEvent::noteOff (10, 62));
+        ev.push_back (MidiEvent::noteOff (5, 59));
+        const auto* before = ev.data();
+        engine::sortEvents (ev);
+        check (ev.data() == before, "sorted in place");
+        check (ev[0].sampleOffset == 5 && ev[0].status == 0x80 && ev[0].data1 == 59, "note-off first at equal offsets");
+        check (ev[1].data1 == 64 && ev[2].data1 == 67, "equal events keep their order");
+        check (ev[3].sampleOffset == 10 && ev[3].status == 0x80 && ev[4].data1 == 60, "later offsets follow");
+    });
+
+    test ("relocate keeps a playing clip going when its slot index moves", [] {
+        engine::MidiClip clip;
+        clip.lengthBeats = 4;
+        clip.notes.push_back ({ 0.0, 1.0, 60, 100 });
+        engine::ClipPlayer player;
+        std::vector<MidiEvent> out;
+        player.launch (2, &clip, 0.0, 0.0);
+        player.process (0.0, 0.5, 24000, 12000, out);
+        check (player.playingSlot() == 2 && player.playingClipPtr() == &clip, "playing slot 2");
+        player.relocate (3, engine::ClipPlayer::kNoClip);
+        check (player.playingSlot() == 3 && player.playingClipPtr() == &clip, "now slot 3, same clip");
+        out.clear();
+        player.process (0.5, 1.5, 24000, 24000, out);
+        int ons = 0;
+        for (auto& e : out)
+            ons += ((e.status & 0xF0) == 0x90) ? 1 : 0;
+        check (ons == 0, "no restart after relocation");
+        player.clipChanged (3, nullptr);
+        check (player.playingSlot() == engine::ClipPlayer::kNoClip, "a deleted clip stops the player");
+    });
+
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

@@ -57,12 +57,24 @@ void renderClip (const MidiClip& clip, double clipStartBeat, double blockStartBe
 
 void sortEvents (std::vector<MidiEvent>& events)
 {
-    std::stable_sort (events.begin(), events.end(), [] (const MidiEvent& x, const MidiEvent& y) {
+    // std::stable_sort allocates a temporary buffer, which is not allowed on the audio thread.
+    const auto before = [] (const MidiEvent& x, const MidiEvent& y) {
         if (x.sampleOffset != y.sampleOffset)
             return x.sampleOffset < y.sampleOffset;
         const bool xOff = (x.status & 0xF0) == 0x80, yOff = (y.status & 0xF0) == 0x80;
         return xOff && ! yOff;
-    });
+    };
+    for (size_t i = 1; i < events.size(); ++i)
+    {
+        const MidiEvent v = events[i];
+        size_t j = i;
+        while (j > 0 && before (v, events[j - 1]))
+        {
+            events[j] = events[j - 1];
+            --j;
+        }
+        events[j] = v;
+    }
 }
 
 //==============================================================================
@@ -103,6 +115,14 @@ void ClipPlayer::clipChanged (int slot, const MidiClip* clip)
         playing = kNoClip;
     if (slot == queued && clip == nullptr)
         queued = kNoClip;
+}
+
+void ClipPlayer::relocate (int newPlayingSlot, int newQueuedSlot) noexcept
+{
+    if (playing != kNoClip)
+        playing = newPlayingSlot;
+    if (queued != kNoClip)
+        queued = newQueuedSlot;
 }
 
 void ClipPlayer::releaseHeld (int offset, std::vector<MidiEvent>& out)

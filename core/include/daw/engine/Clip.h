@@ -24,6 +24,7 @@ struct MidiClip
     uint32_t colour = 0xff5fa8d3;
     double lengthBeats = 4.0; // loop length
     std::vector<Note> notes;
+    int64_t id = 0; // model clip id (0 = none): lets the engine recognise "the same clip" in a new playback graph
 };
 
 // Renders a looping clip into MIDI events for one audio block.
@@ -32,7 +33,8 @@ struct MidiClip
 void renderClip (const MidiClip& clip, double clipStartBeat, double blockStartBeat, double blockEndBeat,
                  double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out);
 
-// Sorts events by offset; at equal offsets note-offs come before note-ons.
+// Sorts events by offset; at equal offsets note-offs come before note-ons. Stable, never allocates
+// (insertion sort: a block holds a handful of events), so it is safe on the audio thread.
 void sortEvents (std::vector<MidiEvent>& events);
 
 // Session View slot logic for one track: launch quantisation, looping, stop, hanging-note cleanup.
@@ -56,6 +58,14 @@ public:
 
     // The clip pointer must stay valid while it plays; call this when it is edited or deleted.
     void clipChanged (int slot, const MidiClip* clip);
+
+    // The clips the player currently points at (may be null). The engine compares them with the slots of a
+    // newly published graph to find out whether the playing clip moved, changed or went away.
+    const MidiClip* playingClipPtr() const noexcept { return playingClip; }
+    const MidiClip* queuedClipPtr() const noexcept { return queuedClip; }
+
+    // Scenes were inserted or removed: the same clips now sit in other slots. Nothing restarts.
+    void relocate (int newPlayingSlot, int newQueuedSlot) noexcept;
 
 private:
     void releaseHeld (int offset, std::vector<MidiEvent>& out);
