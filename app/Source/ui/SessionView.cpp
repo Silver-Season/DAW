@@ -359,6 +359,19 @@ public:
             visible.push_back ({ c, view.model.findTrack (view.columnTrack[(size_t) c]) });
         }
 
+        // A hairline in the middle of each gap between two tracks, down the whole column, so that a column
+        // reads as one track rather than a row of loose cells.
+        {
+            const int bottom = numScenes * kStep - view.scrollY + kStopHeight;
+            g.setColour (t.line);
+            for (const auto& v : visible)
+                if (v.column + 1 < view.numColumns())
+                {
+                    const auto b = cellBounds (v.column, 0);
+                    g.fillRect (b.getRight() + kGap / 2, juce::jmax (0, b.getY()), 1, juce::jmax (0, bottom - juce::jmax (0, b.getY())));
+                }
+        }
+
         // glow first, so that neighbouring cells draw over it
         if (t.glow > 0.0f)
             for (const auto& v : visible)
@@ -384,6 +397,8 @@ public:
             const int playingScene = rt != nullptr ? rt->playingSlot.load() : -1;
             const int queuedScene = rt != nullptr ? rt->queuedSlot.load() : -1;
             const bool armed = v.track.arm();
+            // empty slots carry a trace of the track colour, so neighbouring columns differ
+            const auto emptyFill = t.panel.interpolatedWith (t.palette (v.track.colour()), 0.08f);
 
             for (int s = 0; s < numScenes; ++s)
             {
@@ -397,7 +412,7 @@ public:
 
                 if (! clip.isValid())
                 {
-                    fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : t.panel);
+                    fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
                     strokeCell (g, cell, dropTarget || selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
                     const auto mark = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
                     g.setColour (armed ? t.record : t.line);
@@ -1066,6 +1081,7 @@ SessionView::SessionView (AudioEngine& e, ProjectModel& m, ProjectActions& a, Se
 
     mixerTab.setHelpText (Strings::help::splitterMixer);
     mixerTab.onClick = [this] { setMixerVisible (! mixerVisible); };
+    mixerTab.setTooltips (Strings::tips::hideMixer, Strings::tips::showMixer);
     addAndMakeVisible (mixerTab);
 
     model.root.addListener (this);

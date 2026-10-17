@@ -58,11 +58,19 @@ private:
 };
 
 // Small triangle tab at the edge of a panel that hides and shows the panel.
-class EdgeTab final : public juce::Component
+class EdgeTab final : public juce::Component, public juce::TooltipClient
 {
 public:
     // direction: which way the triangle points while the panel is open (0 up, 1 right, 2 down, 3 left)
     explicit EdgeTab (int openDirection) : direction (openDirection) {}
+
+    // The tooltip says what a click does: hide the panel while it is open, show it while it is hidden.
+    void setTooltips (const juce::String& whenOpen, const juce::String& whenClosed)
+    {
+        openTip = whenOpen;
+        closedTip = whenClosed;
+    }
+    juce::String getTooltip() override { return open ? openTip : closedTip; }
 
     void setOpen (bool o)
     {
@@ -83,6 +91,7 @@ public:
 private:
     int direction;
     bool open = true, hover = false;
+    juce::String openTip, closedTip;
 };
 
 // Dark horizontal lines over the whole window for the Neon skin. One 3-pixel tile, drawn once.

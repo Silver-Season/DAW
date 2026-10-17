@@ -617,4 +617,15 @@ inline const juce::String projectAuthor = make (utf8 ("Автор"), utf8 ("Им
 inline const juce::String projectNotes = make (utf8 ("Заметки"), utf8 ("Свободный текст, сохраняется вместе с проектом."));
 inline const juce::String infoBar = make (utf8 ("Строка подсказок"), utf8 ("Показывает название и действие элемента под мышью."));
 } // namespace help
+
+// Tooltips of the small tabs that hide and show panels: what a click will do.
+namespace tips
+{
+inline const juce::String hideBrowser = utf8 ("Скрыть браузер (Cmd+Alt+B)");
+inline const juce::String showBrowser = utf8 ("Показать браузер (Cmd+Alt+B)");
+inline const juce::String hideDetail = utf8 ("Скрыть нижнюю панель (Cmd+Alt+L)");
+inline const juce::String showDetail = utf8 ("Показать нижнюю панель (Cmd+Alt+L)");
+inline const juce::String hideMixer = utf8 ("Скрыть микшер (Cmd+Alt+M)");
+inline const juce::String showMixer = utf8 ("Показать микшер (Cmd+Alt+M)");
+} // namespace tips
 } // namespace Strings

@@ -545,9 +545,27 @@ void testComputerKeys()
     keys.projectScale = [] { return ui::ComputerKeys::ScaleInfo { 0, "" }; };
     check (panel.noteForKey (1, 60) == prisma_ui::KeyboardPanel::kDefaultNote, "no project scale: chromatic");
 
+    // Russian layout: the keys type Cyrillic letters, but their key codes are still the Latin ones
+    const auto pressRu = [&] (juce::juce_wchar code, juce::juce_wchar typed) { return keys.keyPressed (juce::KeyPress (code, {}, typed)); };
+    const int before = keys.panel().getBaseNote();
+    check (pressRu ('X', 0x447 /* ч */) && keys.panel().getBaseNote() == before + 12, "Russian layout: X (types ч) moves the octave up");
+    check (pressRu ('Z', 0x44f /* я */) && keys.panel().getBaseNote() == before, "Russian layout: Z (types я) moves it down");
+    const int velocity = keys.panel().getVelocity();
+    check (pressRu ('C', 0x441 /* с */) && keys.panel().getVelocity() == velocity - 20, "Russian layout: C (types с) lowers the velocity");
+    check (pressRu ('A', 0x444 /* ф */), "Russian layout: a note key is swallowed, not beeped at");
+
+    // A Prisma window's Oct buttons move the DAW keyboard, and the window shows the DAW's octave
+    prisma_ui::KeyboardPanel windowPanel (state);
+    windowPanel.onOctaveButton = [&] (int delta) { keys.panel().shiftOctave (delta); };
+    windowPanel.showState (keys.panel().getBaseNote(), keys.panel().getVelocity());
+    check (windowPanel.getBaseNote() == keys.panel().getBaseNote(), "the window panel shows the DAW octave");
+    windowPanel.onOctaveButton (1);
+    check (keys.panel().getBaseNote() == before + 12, "Oct + in the window moves the DAW octave");
+
     keys.setOn (false);
     messages.clear();
     check (! press ('x') && messages.size() == 1 && messages[0] == K::keysOffHint, "off again: the hint returns");
+    check (! pressRu ('Z', 0x44f) && messages.size() == 2, "off: the hint also appears with the Russian layout");
 }
 } // namespace
 

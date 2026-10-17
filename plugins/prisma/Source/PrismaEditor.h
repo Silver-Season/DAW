@@ -113,6 +113,8 @@ public:
     ~KeyboardPanel() override;
 
     bool handleKeyPressed (const juce::KeyPress&);
+    // The Latin letter of the key ('z', ';' ...) whatever the keyboard layout, or 0.
+    static juce::juce_wchar keyLetter (const juce::KeyPress&);
     bool handleKeyStateChanged();
     void releaseAll();
     // Releases the notes whose keys are up, without starting any: for key-ups that went to another window.
@@ -129,6 +131,11 @@ public:
     // Replaces the English caption beside the keys (base note, velocity).
     std::function<juce::String (int baseNote, int velocity)> captionFormatter;
     void refreshCaption() { updateLabel(); }
+    // Set by a host that plays the computer keyboard itself (the DAW): the Oct buttons then move the host's
+    // octave, and the host shows its octave and velocity here with showState, so this panel never disagrees
+    // with what the keys actually play.
+    std::function<void (int delta)> onOctaveButton;
+    void showState (int newBaseNote, int newVelocity);
     // Which note a key plays. Key i is the i-th of "awsedftgyhujkolp;" (a semitone each, from the base note).
     // Return kDefaultNote to keep baseNote + i, or kNoNote to leave the key silent (the scale mode skips the black ones).
     static constexpr int kDefaultNote = -2, kNoNote = -1;
@@ -171,6 +178,7 @@ public:
         if (ownsComputerKeys())
             keyboard.releaseAll();
     }
+    prisma_ui::KeyboardPanel& getKeyboardPanel() { return keyboard; }
 
 private:
     bool ownsComputerKeys() const { return processor.wrapperType != juce::AudioProcessor::wrapperType_Undefined; }

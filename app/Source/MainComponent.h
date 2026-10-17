@@ -112,6 +112,7 @@ private:
     void saveChainOf (int64_t trackId);
     void reportDrop (const browser::DropResult&, const browser::DragItem&);
 
+    void syncEditorKeyboards();
     void openInstrumentEditor (int64_t deviceId);
     void closeEditorsOfMissingDevices();
     void showSettings (ui::SettingsWindow::Tab);
@@ -140,6 +141,7 @@ private:
     double stripFraction = 0.0; // 0 hidden, 1 shown; slides in the 30 Hz timer
     ui::Splitter browserSplitter { true }, detailSplitter { false };
     ui::EdgeTab browserTab { 3 }, detailTab { 2 };
+    juce::TooltipWindow tooltips { this, 500 }; // shows EdgeTab tooltips after half a second
     ui::ScanlineOverlay scanlines;
 
     juce::ApplicationCommandManager commandManager;
