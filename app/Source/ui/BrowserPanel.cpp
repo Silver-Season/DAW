@@ -553,6 +553,11 @@ void BrowserPanel::previewSelected()
         else
             engine.stopPreview();
     }
+    else if (item.kind == browser::kinds::audioFile)
+    {
+        if (! engine.previewAudioFile (juce::File (item.path)))
+            engine.stopPreview();
+    }
     else
         engine.stopPreview(); // no pre-listening for hosted plugins
 }

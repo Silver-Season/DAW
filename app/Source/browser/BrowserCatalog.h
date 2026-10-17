@@ -32,7 +32,7 @@ inline const juce::String userPreset = "userPreset";     // a .dawpreset file, p
 inline const juce::String plugin = "plugin";             // a hosted AU / VST3, id = PluginDescription identifier string
 inline const juce::String chain = "chain";               // a .dawchain file
 inline const juce::String midiFile = "midi";             // a .mid file
-inline const juce::String audioFile = "audio";           // a sound file; lists only in this stage
+inline const juce::String audioFile = "audio";           // a sound file
 } // namespace kinds
 
 struct Item
