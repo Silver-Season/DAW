@@ -125,6 +125,8 @@ private:
     ui::AppMenuModel menuModel;
     std::unique_ptr<juce::MenuBarComponent> menuBar;
     std::unique_ptr<ShortcutRouter> router;
+    class NoteKeysListener;
+    std::unique_ptr<NoteKeysListener> noteKeys;
     prisma_ui::KeyboardPanel keyboard; // not shown: it turns the computer keys into notes (key M switches it on)
     bool computerKeysOn = false;
 

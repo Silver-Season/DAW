@@ -52,6 +52,19 @@ private:
     juce::KeyPressMappingSet& mappings;
 };
 
+// The computer keyboard keeps playing while a plugin window has the focus (turning a knob with a note held),
+// and its note keys are swallowed there instead of making macOS beep.
+class MainComponent::NoteKeysListener final : public juce::KeyListener
+{
+public:
+    explicit NoteKeysListener (MainComponent& o) : owner (o) {}
+    bool keyPressed (const juce::KeyPress& key, juce::Component*) override { return owner.keyPressed (key); }
+    bool keyStateChanged (bool isDown, juce::Component*) override { return owner.keyStateChanged (isDown); }
+
+private:
+    MainComponent& owner;
+};
+
 //==============================================================================
 MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     : engine (e), model (m), settings (e.getSettings()), actions (m, &e),
@@ -120,6 +133,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     commandManager.setFirstCommandTarget (this);
     router = std::make_unique<ShortcutRouter> (*commandManager.getKeyMappings());
     addKeyListener (router.get());
+    noteKeys = std::make_unique<NoteKeysListener> (*this);
 
     menuModel.themeIds = [] {
         juce::StringArray ids;
@@ -448,12 +462,18 @@ bool MainComponent::keyStateChanged (bool)
 
 void MainComponent::focusLost (FocusChangeType)
 {
-    keyboard.releaseAll();
+    // Focus moving to a child or to a plugin window keeps held notes; key-ups that land elsewhere are caught
+    // by the timer, and leaving the app releases everything.
 }
 
 //==============================================================================
 void MainComponent::timerCallback()
 {
+    if (! juce::Process::isForegroundProcess())
+        keyboard.releaseAll();
+    else
+        keyboard.releaseKeysNotDown();
+
     topBar->tick();
     topBar->setVersionText (doc.versionButtonText());
     session->tick();
@@ -869,13 +889,16 @@ void MainComponent::openInstrumentEditor (int64_t deviceId)
     juce::AudioProcessorEditor* editor = processor->hasEditor() ? processor->createEditorIfNeeded() : nullptr;
     if (editor == nullptr)
         editor = new juce::GenericAudioProcessorEditor (*processor);
-    editorWindows[deviceId] = std::make_unique<PluginWindow> (editor, processor->getName(), [this, deviceId] {
+    auto window = std::make_unique<PluginWindow> (editor, processor->getName(), [this, deviceId] {
         // Defer deletion: this runs from the window's own close button.
         juce::MessageManager::callAsync ([this, alive = juce::Component::SafePointer<MainComponent> (this), deviceId] {
             if (alive != nullptr)
                 editorWindows.erase (deviceId);
         });
     });
+    window->addKeyListener (noteKeys.get());
+    window->addKeyListener (router.get());
+    editorWindows[deviceId] = std::move (window);
 }
 
 void MainComponent::showSettings (ui::SettingsWindow::Tab tab)

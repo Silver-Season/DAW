@@ -57,6 +57,7 @@ struct TrackRuntime
     juce::MidiBuffer midi, fxMidi;
     std::vector<daw::MidiEvent> events;
     float lastGainL = 0.0f, lastGainR = 0.0f;
+    int resumeSlot = -1; // the clip that played when the transport was stopped; Play starts it again
 };
 
 // A plugin or Prisma. Survives graph rebuilds; only a change of the device itself replaces it.
@@ -108,6 +109,7 @@ struct EngineCommand
     {
         launchClip,
         launchScene,
+        resume,
         stopTrack,
         stopAll
     };

@@ -277,6 +277,16 @@ void KeyboardPanel::releaseAll()
         }
 }
 
+void KeyboardPanel::releaseKeysNotDown()
+{
+    for (int i = 0; kKeys[i] != 0; ++i)
+        if (auto& held = heldNote[(size_t) i]; held >= 0 && ! juce::KeyPress::isKeyCurrentlyDown (kKeys[i]))
+        {
+            state.noteOff (1, held, 0.0f);
+            held = -1;
+        }
+}
+
 bool KeyboardPanel::handleKeyPressed (const juce::KeyPress& key)
 {
     if (key.getModifiers().isCommandDown() || key.getModifiers().isCtrlDown())

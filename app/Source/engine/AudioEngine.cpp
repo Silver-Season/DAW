@@ -165,7 +165,9 @@ void AudioEngine::handleNoteOff (juce::MidiKeyboardState*, int channel, int note
 //==============================================================================
 void AudioEngine::play()
 {
-    playing = true;
+    // Like Live: Play brings back the Session clips that were playing when the transport was stopped.
+    if (! pushCommand ({ EngineCommand::Type::resume, -1, -1 }))
+        playing = true;
 }
 
 void AudioEngine::stop()
@@ -346,6 +348,13 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                         t.runtime->player.stop (now, q);
                 }
                 break;
+            case EngineCommand::Type::resume:
+                for (const auto& t : graph.tracks)
+                    if (t.runtime->resumeSlot >= 0 && t.runtime->player.playingSlot() < 0)
+                        if (auto* clip = slotClip (t, t.runtime->resumeSlot))
+                            t.runtime->player.launch (t.runtime->resumeSlot, clip, now, 0.0);
+                playing = true;
+                break;
             case EngineCommand::Type::stopTrack:
                 if (auto* t = findTrack (c.trackId))
                     t->runtime->player.stop (now, q);
@@ -521,7 +530,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     if (killNotes)
     {
         for (const auto& t : graph->tracks)
+        {
+            t.runtime->resumeSlot = t.runtime->player.playingSlot();
             t.runtime->player.stopImmediately();
+        }
         transport.stop();
     }
     if (! juce::exactlyEqual (transport.getTempo(), tempo.load()))
