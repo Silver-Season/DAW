@@ -72,7 +72,7 @@ public:
     void itemDragExit (const SourceDetails&) override { setDropSpot ({}); }
     void itemDropped (const SourceDetails&) override;
     bool isInterestedInFileDrag (const juce::StringArray&) override;
-    void fileDragEnter (const juce::StringArray&, int x, int y) override { fileDragMove ({}, x, y); }
+    void fileDragEnter (const juce::StringArray& files, int x, int y) override { fileDragMove (files, x, y); }
     void fileDragMove (const juce::StringArray&, int x, int y) override;
     void fileDragExit (const juce::StringArray&) override { setDropSpot ({}); }
     void filesDropped (const juce::StringArray&, int x, int y) override;

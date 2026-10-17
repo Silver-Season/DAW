@@ -110,6 +110,8 @@ private:
     void showVersionHistory();
     void doOpenDialog();
     void doOpen (const juce::File&);
+    bool hasMissingFiles() const;
+    void findMissingFilesClicked();
     void documentChanged();
     juce::File projectsFolder() const;
 

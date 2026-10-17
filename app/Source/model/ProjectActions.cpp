@@ -90,6 +90,12 @@ TrackRef ProjectActions::addMidiTrack (int insertIndex)
     return track;
 }
 
+TrackRef ProjectActions::addAudioTrack (int insertIndex)
+{
+    begin (Strings::sessionAudio::undoNewAudioTrack);
+    return model.addTrack ("audio", insertIndex);
+}
+
 void ProjectActions::renameTrack (int64_t trackId, const juce::String& name)
 {
     const auto track = model.findTrack (trackId);
@@ -180,8 +186,8 @@ void ProjectActions::setTrackArm (int64_t trackId, bool on, bool exclusive)
 ClipRef ProjectActions::createEmptyClip (int64_t trackId, int scene)
 {
     const auto track = model.findTrack (trackId);
-    if (! track.isValid() || scene < 0 || scene >= model.numScenes() || track.clipAt (scene).isValid())
-        return {};
+    if (! track.isValid() || track.isAudio() || scene < 0 || scene >= model.numScenes() || track.clipAt (scene).isValid())
+        return {}; // an audio track holds sounds, not empty MIDI clips
     begin (Strings::undoNewClip);
     return model.createClip (track, scene, model.beatsPerBar());
 }
@@ -258,11 +264,17 @@ bool ProjectActions::deleteClip (int64_t trackId, int scene)
     return true;
 }
 
+namespace
+{
+// A sound lives on an audio track and a MIDI clip on a MIDI track; moving one across would leave a clip that cannot play.
+bool clipFitsTrack (const ClipRef& clip, const TrackRef& track) { return clip.isAudio() == track.isAudio(); }
+} // namespace
+
 bool ProjectActions::moveClip (int64_t fromTrack, int fromScene, int64_t toTrack, int toScene, bool copy)
 {
     const auto src = model.findTrack (fromTrack), dst = model.findTrack (toTrack);
     if (! src.isValid() || ! dst.isValid() || ! src.clipAt (fromScene).isValid() || toScene < 0 || toScene >= model.numScenes()
-        || (fromTrack == toTrack && fromScene == toScene))
+        || (fromTrack == toTrack && fromScene == toScene) || ! clipFitsTrack (src.clipAt (fromScene), dst))
         return false;
     begin (copy ? Strings::undoCopyClip : Strings::undoMoveClip);
     model.moveClip (fromTrack, fromScene, toTrack, toScene, copy);
@@ -291,7 +303,7 @@ bool ProjectActions::cutClip (int64_t trackId, int scene)
 bool ProjectActions::pasteClip (int64_t trackId, int scene)
 {
     const auto track = model.findTrack (trackId);
-    if (! clipboard.isValid() || ! track.isValid() || scene < 0 || scene >= model.numScenes())
+    if (! clipboard.isValid() || ! track.isValid() || scene < 0 || scene >= model.numScenes() || ! clipFitsTrack (ClipRef (clipboard), track))
         return false;
     begin (Strings::undoPasteClip);
     model.setClip (track, scene, ClipRef (clipboard));

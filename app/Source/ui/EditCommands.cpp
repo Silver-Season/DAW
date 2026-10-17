@@ -152,6 +152,16 @@ void EditCommands::newTrack (int afterTrackId)
     selectTrack (track.id());
 }
 
+void EditCommands::newAudioTrack (int afterTrackId)
+{
+    int index = -1;
+    const int64_t reference = afterTrackId >= 0 ? afterTrackId : model.selectedTrack();
+    if (const int i = model.indexOfTrack (reference); i >= 0)
+        index = i + 1;
+    auto track = actions.addAudioTrack (index);
+    selectTrack (track.id());
+}
+
 void EditCommands::newScene()
 {
     const auto& s = selection.get();

@@ -249,6 +249,8 @@ inline const juce::String noPlaces = utf8 ("Папок пока нет");
 inline const juce::String add = utf8 ("Добавить…");
 inline const juce::String remove = utf8 ("Убрать");
 inline const juce::String rescan = utf8 ("Повторно сканировать плагины…");
+inline const juce::String copySamples = utf8 ("Копировать сэмплы в проект");
+inline const juce::String copySamplesHint = utf8 ("Звук, брошенный в проект извне, копируется в папку Samples проекта, чтобы проект не ломался при переносе");
 } // namespace settingsui
 
 // Window
@@ -282,7 +284,9 @@ inline const juce::String paste = utf8 ("Вставить");
 inline const juce::String duplicate = utf8 ("Дублировать");
 inline const juce::String remove = utf8 ("Удалить");
 inline const juce::String rename = utf8 ("Переименовать");
-inline const juce::String newTrack = utf8 ("MIDI-дорожка");
+inline const juce::String newTrack = utf8 ("Новая MIDI-дорожка");
+inline const juce::String newAudioTrack = utf8 ("Новая аудиодорожка");
+inline const juce::String findMissing = utf8 ("Найти потерянные файлы…");
 inline const juce::String newScene = utf8 ("Сцена");
 inline const juce::String captureScene = utf8 ("Сцена с играющими клипами");
 inline const juce::String newClip = utf8 ("Пустой MIDI-клип");
@@ -298,6 +302,7 @@ inline const juce::String playStop = utf8 ("Играть / стоп");
 inline const juce::String computerKeys = utf8 ("Игра на клавиатуре компьютера");
 inline const juce::String find = utf8 ("Поиск в браузере");
 inline const juce::String insertTrackHere = utf8 ("Вставить MIDI-дорожку");
+inline const juce::String insertAudioTrackHere = utf8 ("Вставить аудиодорожку");
 inline const juce::String colour = utf8 ("Цвет");
 inline const juce::String createClipHere = utf8 ("Создать MIDI-клип");
 inline const juce::String stopAll = utf8 ("Остановить все клипы");
@@ -308,6 +313,19 @@ inline const juce::String keyboardStrip = utf8 ("Экранная клавиат
 inline const juce::String projectProperties = utf8 ("Свойства проекта…");
 inline const juce::String openClip = utf8 ("Открыть в редакторе");
 } // namespace menu
+
+// Audio in Session View
+namespace sessionAudio
+{
+inline const juce::String fileNotFound = utf8 ("Файл не найден");
+inline const juce::String undoNewAudioTrack = utf8 ("Новая аудиодорожка");
+inline const juce::String audioTag = utf8 ("Аудио");
+inline const juce::String findMissingTitle = utf8 ("Выберите папку, где искать потерянные файлы");
+inline const juce::String undoRelink = utf8 ("Найти потерянные файлы");
+inline juce::String foundFiles (int n) { return utf8 ("Найдено файлов: ") + juce::String (n); }
+inline const juce::String nothingFound = utf8 ("Ничего не найдено");
+inline const juce::String diskBehind = utf8 ("Диск не успевает: часть звука пропущена");
+} // namespace sessionAudio
 
 // Transport bar
 namespace transport
@@ -733,7 +751,8 @@ inline juce::String browserCategory (const juce::String& name) { return make (na
 
 inline const juce::String trackHeader = make (utf8 ("Заголовок дорожки"), utf8 ("Щелчок выделяет дорожку, двойной щелчок переименовывает, правая кнопка открывает меню. Правый край тянется, меняя ширину столбца."));
 inline const juce::String clipSlot = make (utf8 ("Клип"), utf8 ("Щелчок выбирает клип, треугольник слева запускает. Двойной щелчок по пустому слоту создаёт клип. Клип можно перетащить в другой слот (Alt: копия)."));
-inline const juce::String emptySlot = make (utf8 ("Пустой слот"), utf8 ("Щелчок останавливает дорожку, двойной щелчок создаёт пустой MIDI-клип на такт."));
+inline const juce::String emptyAudioSlot = make (utf8 ("Пустой слот аудиодорожки"), utf8 ("Перетащите сюда звуковой файл из браузера или из Finder. Cmd при отпускании нескольких файлов кладёт каждый на свою дорожку."));
+inline const juce::String emptySlot =make (utf8 ("Пустой слот"), utf8 ("Щелчок останавливает дорожку, двойной щелчок создаёт пустой MIDI-клип на такт."));
 inline const juce::String sceneLaunch = make (utf8 ("Запуск сцены"), utf8 ("Запускает все клипы этой сцены. Двойной щелчок по названию переименовывает."));
 inline const juce::String sceneName = make (utf8 ("Сцена"), utf8 ("Щелчок выделяет сцену, двойной щелчок переименовывает, правая кнопка открывает меню."));
 inline const juce::String stopAllClips = make (utf8 ("Остановить все клипы"), utf8 ("Останавливает клипы всех дорожек на ближайшей границе квантизации."));

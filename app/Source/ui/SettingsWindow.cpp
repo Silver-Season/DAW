@@ -735,8 +735,12 @@ public:
         addButton.setButtonText (Strings::settingsui::add);
         rescanButton.setButtonText (Strings::settingsui::rescan);
         for (auto* c : std::initializer_list<juce::Component*> { &pathHeading, &pathValue, &placesHeading, &placesEmpty, &changeButton, &defaultButton,
-                                                                  &addButton, &rescanButton, &places })
+                                                                  &addButton, &rescanButton, &places, &copySamples })
             addAndMakeVisible (c);
+        copySamples.setButtonText (Strings::settingsui::copySamples);
+        copySamples.setTooltip (Strings::settingsui::copySamplesHint);
+        copySamples.setToggleState (settings.copySamplesIntoProject(), juce::dontSendNotification);
+        copySamples.onClick = [this] { settings.setCopySamplesIntoProject (copySamples.getToggleState()); };
         changeButton.onClick = [this] { chooseLibrary(); };
         defaultButton.onClick = [this] { setLibraryRoot (library::UserLibrary::defaultRoot(), true); };
         addButton.onClick = [this] { addPlace(); };
@@ -756,7 +760,9 @@ public:
         changeButton.setBounds (buttons.removeFromLeft (130));
         buttons.removeFromLeft (8);
         defaultButton.setBounds (buttons.removeFromLeft (130));
-        r.removeFromTop (18);
+        r.removeFromTop (12);
+        copySamples.setBounds (r.removeFromTop (kRowHeight));
+        r.removeFromTop (12);
         placesHeading.setBounds (r.removeFromTop (24));
         auto bottom = r.removeFromBottom (30);
         rescanButton.setBounds (bottom.removeFromRight (280));
@@ -852,6 +858,7 @@ private:
     SettingsWindow::Hooks& hooks;
     juce::Label pathHeading, pathValue, placesHeading, placesEmpty;
     juce::TextButton changeButton, defaultButton, addButton, rescanButton;
+    juce::ToggleButton copySamples;
     RowList places;
     std::unique_ptr<juce::FileChooser> chooser;
 };

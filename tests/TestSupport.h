@@ -163,4 +163,5 @@ void runArrangementUiTests();
 void runArrangementRecordingTests();
 void runAudioTests();
 void runAudioUiTests();
+void runSessionAudioUiTests();
 } // namespace tests

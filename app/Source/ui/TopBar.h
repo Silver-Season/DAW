@@ -55,6 +55,7 @@ private:
     class IconButton;
     class Lamp;
     class CpuMeter;
+    class DiskLamp;
     class FakeSlider;
     class Tabs;
 
@@ -67,6 +68,9 @@ private:
     std::unique_ptr<Tabs> tabs;
     std::unique_ptr<Lamp> midiLamp, keysLamp;
     std::unique_ptr<CpuMeter> cpu;
+    std::unique_ptr<DiskLamp> diskLamp;
+    uint32_t lastDiskMisses = 0;
+    juce::uint32 diskShownUntil = 0;
 
     juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea;
     bool compact = false;

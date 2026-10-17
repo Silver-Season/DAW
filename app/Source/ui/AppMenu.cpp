@@ -50,6 +50,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             menu.addSeparator();
             add (commands::exportAudio);
             add (commands::showInFinder);
+            add (commands::findMissingFiles);
             menu.addSeparator();
             add (commands::scanPlugins);
 #if ! JUCE_MAC
@@ -80,6 +81,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             break;
         case 2:
             add (commands::newTrack);
+            add (commands::newAudioTrack);
             add (commands::newScene);
             add (commands::captureScene);
             add (commands::newClip);

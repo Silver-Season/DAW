@@ -125,6 +125,8 @@ if(DAW_BUILD_JUCE)
             tests/ArrangementRecordingTests.cpp
             tests/AudioTests.cpp
             tests/AudioUiTests.cpp
+            tests/SessionAudioUiTests.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1

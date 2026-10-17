@@ -201,6 +201,34 @@ private:
 };
 
 //==============================================================================
+// A small disk that shows for a moment when the disk could not keep up with playback (AudioEngine::getDiskMisses).
+class TopBar::DiskLamp final : public juce::Component
+{
+public:
+    DiskLamp()
+    {
+        setHelpText (Strings::sessionAudio::diskBehind); // shown in the info bar like every other hint
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        const auto box = juce::Rectangle<float> (14.0f, 14.0f).withCentre (getLocalBounds().toFloat().getCentre());
+        juce::Path body; // a floppy disk: a square with a cut corner, a shutter on top and a label below
+        body.startNewSubPath (box.getX(), box.getY());
+        body.lineTo (box.getRight() - 3.5f, box.getY());
+        body.lineTo (box.getRight(), box.getY() + 3.5f);
+        body.lineTo (box.getRight(), box.getBottom());
+        body.lineTo (box.getX(), box.getBottom());
+        body.closeSubPath();
+        g.setColour (t.warning);
+        g.strokePath (body, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved));
+        g.fillRect (box.getX() + 3.5f, box.getY(), 5.0f, 3.5f);
+        g.drawRect (juce::Rectangle<float> (box.getX() + 3.0f, box.getBottom() - 5.5f, box.getWidth() - 6.0f, 5.5f), 1.2f);
+    }
+};
+
+//==============================================================================
 // The A <-> B morph slider; it only looks like the final control (stage 6).
 class TopBar::FakeSlider final : public juce::Component
 {
@@ -429,6 +457,8 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     };
     midiLamp = std::make_unique<Lamp> (Strings::transport::midi, Strings::help::midiIn);
     keysLamp = std::make_unique<Lamp> (Strings::transport::keysOn, Strings::help::keysIndicator);
+    diskLamp = std::make_unique<DiskLamp>();
+    lastDiskMisses = engine.getDiskMisses();
     cpu = std::make_unique<CpuMeter>();
     cpu->onClick = [this] {
         if (onCpuClicked)
@@ -436,8 +466,9 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     };
 
     for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), overdub.get(), loop.get(), punchIn.get(), punchOut.get(), follow.get(), backToArrangement.get(), capture.get(),
-                                                              version.get(), scaleButton.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
+                                                              version.get(), scaleButton.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), diskLamp.get(), cpu.get() })
         addAndMakeVisible (c);
+    diskLamp->setVisible (false);
     lastMidiCount = engine.getHardwareMidiCount();
     tick();
 }
@@ -536,6 +567,17 @@ void TopBar::tick()
         scaleButton->text = label;
         scaleButton->accentInk = model.scaleMode().isNotEmpty();
         scaleButton->repaint();
+    }
+    {
+        // The icon stays for two seconds after the last miss, so a glitch that is over before the eye turns still shows.
+        const auto misses = engine.getDiskMisses();
+        const auto now = juce::Time::getMillisecondCounter();
+        if (misses != lastDiskMisses)
+        {
+            lastDiskMisses = misses;
+            diskShownUntil = now + 2000;
+        }
+        diskLamp->setVisible (now < diskShownUntil);
     }
     cpu->setLoad ((float) engine.getDeviceManager().getCpuUsage());
     wasPlaying = playing;
@@ -693,7 +735,8 @@ void TopBar::resized()
         r.removeFromRight (w);
     };
     takeRight (*cpu, compact ? 56 : 80, 20);
-    r.removeFromRight (gap);
+    takeRight (*diskLamp, 20, 20);
+    r.removeFromRight (small);
     takeRight (*keysLamp, compact ? 70 : 80, 20);
     takeRight (*midiLamp, 52, 20);
     r.removeFromRight (gap);
