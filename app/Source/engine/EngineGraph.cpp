@@ -45,6 +45,13 @@ uint64_t hashClip (const ClipRef& clip)
         h.add (n.pitch);
         h.add (n.velocity);
     }
+    for (const auto& c : clip.controllers())
+    {
+        h.add (c.time);
+        h.add (c.status);
+        h.add (c.data1);
+        h.add (c.data2);
+    }
     return h.h;
 }
 
@@ -177,6 +184,15 @@ void AudioEngine::applyProjectProperties()
     for (auto& [id, d] : devices)
         if (auto* prisma = dynamic_cast<PrismaProcessor*> (d->processor.get()))
             prisma->setTuneA4 (tuneA4.load());
+    beatsPerBar = model->beatsPerBar();
+    metronomeOn = model->metronome();
+    metronomeOnlyRecording = model->metronomeOnlyRecording();
+    metronomeWood = model->metronomeSound() == "wood";
+    const double clickDb = model->metronomeVolumeDb();
+    metronomeGain = clickDb <= ProjectModel::kMinMetronomeDb ? 0.0f : juce::Decibels::decibelsToGain ((float) clickDb);
+    countInBars = model->countInBars();
+    overdubOn = model->overdub();
+    recordFixedBars = model->recordFixedBars();
     const float db = model->masterVolumeDb();
     masterGain = db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db);
 }
@@ -211,13 +227,15 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     else if (type == ids::MASTER || type == ids::PROJECT)
     {
         if (property == ids::volumeDb || property == ids::tempo || property == ids::launchQuantise || property == ids::selectedTrack
-            || property == ids::tuningA4)
+            || property == ids::tuningA4 || property == ids::sigNum || property == ids::sigDen || property == ids::metronome
+            || property == ids::metronomeVolumeDb || property == ids::metronomeOnlyRecording || property == ids::metronomeSound
+            || property == ids::countInBars || property == ids::overdub || property == ids::recordFixedBars)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             applyProjectProperties();
         }
     }
-    else if (type == ids::CLIP || type == ids::NOTE)
+    else if (type == ids::CLIP || type == ids::NOTE || type == ids::CC || type == ids::BEND || type == ids::PRESSURE)
         graphDirty = true;
 }
 
@@ -400,6 +418,7 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
         c->startOffset = clip.startOffset();
         c->loop = clip.loopEnabled();
         c->notes = clip.notes();
+        c->controllers = clip.controllers();
         entry.clip = std::move (c);
         entry.hash = hash;
     }
