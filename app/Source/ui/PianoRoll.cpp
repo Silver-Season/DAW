@@ -138,7 +138,7 @@ void PianoRoll::tick()
         updateScrollBars();
         props->refresh();
         repaint();
-        for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), keys.get(), grid.get(), velocityLane.get() })
+        for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), keys.get(), grid.get(), velocityLane.get(), controllers.get() })
             c->repaint();
     }
 
@@ -292,7 +292,7 @@ void PianoRoll::zoomHorizontally (double factor, double anchorX)
     clampView();
     updateScrollBars();
     props->refresh();
-    for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), grid.get(), velocityLane.get() })
+    for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), grid.get(), velocityLane.get(), controllers.get() })
         c->repaint();
 }
 
@@ -368,7 +368,7 @@ void PianoRoll::scrollBarMoved (juce::ScrollBar* bar, double start)
     else
         v.scrollY = juce::roundToInt (start);
     clampView();
-    for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), keys.get(), grid.get(), velocityLane.get() })
+    for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), keys.get(), grid.get(), velocityLane.get(), controllers.get() })
         c->repaint();
 }
 

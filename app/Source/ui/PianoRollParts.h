@@ -225,7 +225,8 @@ private:
 };
 
 //==============================================================================
-// The collapsible controller strip. Its content (modwheel, pitch bend, sustain) comes with recording.
+// The collapsible controller strip: modwheel, pitch bend or sustain of the clip as a step line over the same time axis
+// as the note grid. A mouse stroke draws values; the whole stroke is one undo transaction.
 class PianoRoll::ControllerStrip final : public juce::Component, public HelpProvider
 {
 public:
@@ -233,10 +234,22 @@ public:
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
-    juce::String helpAt (juce::Point<int>) const override { return {}; }
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    juce::String helpAt (juce::Point<int> p) const override
+    {
+        return owner.v.controllersOpen && p.y >= PianoRoll::kControllerHeader && p.x >= PianoRoll::kKeysWidth ? Strings::help::controllerLane : juce::String();
+    }
 
 private:
     juce::Rectangle<int> tabArea (int i) const;
+    juce::Rectangle<int> bodyArea() const; // the lane itself, aligned with the note grid
+    clipedit::ControllerLane lane() const { return (clipedit::ControllerLane) juce::jlimit (0, 2, owner.v.controller); }
+    void addStrokePoint (juce::Point<int>);
+
     PianoRoll& owner;
+    bool drawing = false, transactionOpen = false;
+    std::vector<daw::engine::ControllerEvent> original;
+    std::vector<std::pair<double, double>> stroke;
 };
 } // namespace ui

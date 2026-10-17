@@ -198,4 +198,91 @@ Scale effectiveScale (const ClipRef& clip, int projectRoot, const juce::String& 
     const auto mode = own ? clip.scaleMode() : projectMode;
     return { root, daw::music::findScale (mode.toRawUTF8()) };
 }
+
+//==============================================================================
+bool isLaneEvent (const daw::engine::ControllerEvent& e, ControllerLane lane)
+{
+    switch (lane)
+    {
+        case ControllerLane::modwheel: return (e.status & 0xF0) == 0xB0 && e.data1 == 1;
+        case ControllerLane::pitchBend: return (e.status & 0xF0) == 0xE0;
+        case ControllerLane::sustain: return (e.status & 0xF0) == 0xB0 && e.data1 == 64;
+    }
+    return false;
+}
+
+double laneValue (const daw::engine::ControllerEvent& e, ControllerLane lane)
+{
+    switch (lane)
+    {
+        case ControllerLane::modwheel: return (double) e.data2 / 127.0;
+        case ControllerLane::pitchBend: return (double) ((e.data2 << 7) | e.data1) / 16383.0;
+        case ControllerLane::sustain: return e.data2 >= 64 ? 1.0 : 0.0;
+    }
+    return 0.0;
+}
+
+daw::engine::ControllerEvent laneEvent (ControllerLane lane, double timeBeats, double value01)
+{
+    daw::engine::ControllerEvent e;
+    e.time = timeBeats;
+    const double v = juce::jlimit (0.0, 1.0, value01);
+    switch (lane)
+    {
+        case ControllerLane::modwheel:
+            e.status = 0xB0;
+            e.data1 = 1;
+            e.data2 = (uint8_t) juce::roundToInt (v * 127.0);
+            break;
+        case ControllerLane::pitchBend:
+        {
+            // a little magnet at the centre, so that the wheel can be put back to rest with the mouse
+            const int bend = std::abs (v - 0.5) < 0.03 ? 8192 : juce::roundToInt (v * 16383.0);
+            e.status = 0xE0;
+            e.data1 = (uint8_t) (bend & 0x7F);
+            e.data2 = (uint8_t) (bend >> 7);
+            break;
+        }
+        case ControllerLane::sustain:
+            e.status = 0xB0;
+            e.data1 = 64;
+            e.data2 = v >= 0.5 ? 127 : 0;
+            break;
+    }
+    return e;
+}
+
+std::vector<daw::engine::ControllerEvent> drawControllerStroke (const std::vector<daw::engine::ControllerEvent>& original, ControllerLane lane,
+                                                                const std::vector<std::pair<double, double>>& stroke, double clipLengthBeats)
+{
+    if (stroke.empty())
+        return original;
+    const auto snap = [clipLengthBeats] (double beat) {
+        return juce::jlimit (0.0, juce::jmax (0.0, clipLengthBeats), std::round (beat * 32.0) / 32.0);
+    };
+    auto points = stroke;
+    for (auto& p : points)
+        p.first = snap (p.first);
+    std::stable_sort (points.begin(), points.end(), [] (const auto& a, const auto& b) { return a.first < b.first; });
+    const double lo = points.front().first, hi = points.back().first;
+
+    std::vector<daw::engine::ControllerEvent> out;
+    out.reserve (original.size() + points.size());
+    for (const auto& e : original)
+        if (! (isLaneEvent (e, lane) && e.time >= lo - 1.0e-9 && e.time <= hi + 1.0e-9))
+            out.push_back (e);
+
+    std::vector<daw::engine::ControllerEvent> drawn;
+    for (const auto& [beat, value] : points)
+    {
+        const auto e = laneEvent (lane, beat, value);
+        if (! drawn.empty() && std::abs (drawn.back().time - beat) < 1.0e-9)
+            drawn.back() = e; // the same slot twice: the later point wins
+        else if (drawn.empty() || drawn.back().status != e.status || drawn.back().data1 != e.data1 || drawn.back().data2 != e.data2)
+            drawn.push_back (e);
+    }
+    out.insert (out.end(), drawn.begin(), drawn.end());
+    std::stable_sort (out.begin(), out.end(), [] (const auto& a, const auto& b) { return a.time < b.time; });
+    return out;
+}
 } // namespace clipedit
