@@ -206,7 +206,7 @@ TrackRef ProjectModel::addTrack (const juce::String& type, int insertIndex)
     juce::ValueTree t (ids::TRACK);
     t.setProperty (ids::id, (juce::int64) newId(), nullptr);
     t.setProperty (ids::type, type, nullptr);
-    t.setProperty (ids::name, Strings::defaultTrackName (numTracks() + 1), nullptr);
+    t.setProperty (ids::name, type == "audio" ? Strings::defaultAudioTrackName (numTracks() + 1) : Strings::defaultTrackName (numTracks() + 1), nullptr);
     t.setProperty (ids::colour, paletteIndexForTrack (numTracks()), nullptr);
     t.setProperty (ids::volumeDb, 0.0, nullptr);
     t.setProperty (ids::pan, 0.0, nullptr);

@@ -17,6 +17,7 @@ inline const juce::String trackTypeGroup = utf8 ("Групповая дорож�
 
 // Default names of new objects
 inline juce::String defaultTrackName (int number) { return utf8 ("MIDI ") + juce::String (number); }
+inline juce::String defaultAudioTrackName (int number) { return utf8 ("Аудио ") + juce::String (number); }
 inline juce::String defaultSceneName (int number) { return utf8 ("Сцена ") + juce::String (number); }
 inline const juce::String defaultClipName = utf8 ("Клип");
 inline juce::String defaultMarkerName (int number) { return utf8 ("Маркер ") + juce::String (number); }
