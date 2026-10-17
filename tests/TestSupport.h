@@ -33,7 +33,13 @@ class FakeDevice final : public juce::AudioIODevice
 public:
     explicit FakeDevice (int block = 512, double rate = 48000.0) : AudioIODevice ("Fake", "Fake"), blockSize (block), sampleRate (rate) {}
     juce::StringArray getOutputChannelNames() override { return { "L", "R" }; }
-    juce::StringArray getInputChannelNames() override { return {}; }
+    juce::StringArray getInputChannelNames() override
+    {
+        juce::StringArray names;
+        for (int i = 0; i < numInputs; ++i)
+            names.add (juce::String (i + 1));
+        return names;
+    }
     juce::Array<double> getAvailableSampleRates() override { return { sampleRate }; }
     juce::Array<int> getAvailableBufferSizes() override { return { blockSize }; }
     int getDefaultBufferSize() override { return blockSize; }
@@ -48,12 +54,13 @@ public:
     double getCurrentSampleRate() override { return sampleRate; }
     int getCurrentBitDepth() override { return 32; }
     juce::BigInteger getActiveOutputChannels() const override { return 3; }
-    juce::BigInteger getActiveInputChannels() const override { return 0; }
-    int getOutputLatencyInSamples() override { return 0; }
-    int getInputLatencyInSamples() override { return 0; }
+    juce::BigInteger getActiveInputChannels() const override { return (int) ((1u << numInputs) - 1u); }
+    int getOutputLatencyInSamples() override { return outputLatency; }
+    int getInputLatencyInSamples() override { return inputLatency; }
 
     const int blockSize;
     const double sampleRate;
+    int numInputs = 0, inputLatency = 0, outputLatency = 0; // set before audioDeviceAboutToStart
 };
 
 // Calls the engine's audio callback by hand, the way a device would.
@@ -164,4 +171,5 @@ void runArrangementRecordingTests();
 void runAudioTests();
 void runAudioUiTests();
 void runSessionAudioUiTests();
+void runAudioRecordingTests();
 } // namespace tests

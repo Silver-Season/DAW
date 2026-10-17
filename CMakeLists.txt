@@ -128,6 +128,7 @@ if(DAW_BUILD_JUCE)
             tests/AudioTests.cpp
             tests/AudioUiTests.cpp
             tests/SessionAudioUiTests.cpp
+            tests/AudioRecordingTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE

@@ -87,6 +87,7 @@ private:
     AudioEngine& engine;
     ProjectModel& model;
     mutable std::mutex jobsLock; // message thread and the writer thread; never the audio thread
+    std::mutex writeLock;        // one writer at a time (the thread, or a test calling processNowForTesting)
     std::map<int64_t, std::shared_ptr<Job>> jobs;
     std::atomic<bool> writerPaused { false };
     juce::AudioBuffer<float> scratch { 2, 8192 }; // writer thread

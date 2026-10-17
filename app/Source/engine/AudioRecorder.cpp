@@ -183,6 +183,7 @@ void AudioRecorder::process()
 {
     if (writerPaused.load())
         return;
+    std::lock_guard<std::mutex> wl (writeLock);
     std::vector<std::shared_ptr<Job>> active;
     {
         std::lock_guard<std::mutex> sl (jobsLock);
