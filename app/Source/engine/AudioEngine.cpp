@@ -288,17 +288,28 @@ void AudioEngine::updateRecordCompensation()
 
 void AudioEngine::previewFactoryPreset (int program)
 {
+    audioPreview.stop();
     preview.playFactoryProgram (program);
 }
 
 void AudioEngine::previewPresetState (const juce::MemoryBlock& state)
 {
+    audioPreview.stop();
     preview.playState (state.getData(), (int) state.getSize());
 }
 
 void AudioEngine::stopPreview()
 {
     preview.stop();
+    audioPreview.stop();
+}
+
+bool AudioEngine::previewAudioFile (const juce::File& file)
+{
+    preview.stop();
+    auto source = audioPool.acquire (file);
+    audioPreview.play (source);
+    return source != nullptr;
 }
 
 void AudioEngine::playTestTone()
@@ -912,6 +923,72 @@ void addTransposed (juce::MidiBuffer& dest, const uint8_t* data, int size, int o
 }
 } // namespace
 
+// The Session View clip of an audio track: what played from the start of the block (until it stopped or gave way) and
+// what began inside it. Both are placed by their launch beat, so the audio stays on the beat however the blocks fall.
+void AudioEngine::renderSessionAudio (const PlaybackGraph::Track& t, const daw::engine::MidiClip* before, double startBefore,
+                                      const daw::engine::Transport::Block& block, double spb, int numSamples)
+{
+    auto& rt = *t.runtime;
+    const double rate = sampleRate.load();
+    const double blockBeats = block.endBeat - block.startBeat;
+    const auto* now = rt.player.playingClipPtr();
+    const double startNow = rt.player.playingStartBeat();
+    const bool same = now == before && juce::exactlyEqual (startNow, startBefore);
+    daw::engine::AudioFades fades;
+    fades.fadeIn = kAutoFadeSeconds * rate / spb;
+
+    const auto render = [&] (const daw::engine::MidiClip& clip, double launchBeat, double from, double to) {
+        if (clip.audio == nullptr || to <= from)
+            return;
+        const int a = (int) std::llround ((from - block.startBeat) * spb), b = (int) std::llround ((to - block.startBeat) * spb);
+        const int first = std::clamp (a, 0, numSamples), last = std::clamp (b, 0, numSamples);
+        if (last <= first)
+            return;
+        const double elapsed = from - launchBeat + (double) (first - a) / spb;
+        daw::engine::renderAudioClip (clip, clip.playStart(), clip.loop, elapsed, spb, rate, fades, rt.buffer.getWritePointer (0) + first,
+                                      rt.buffer.getWritePointer (1) + first, last - first, audioStats);
+    };
+
+    if (before != nullptr)
+    {
+        const double end = same ? block.endBeat : std::clamp (rt.player.lastEndBeat(), block.startBeat, block.endBeat);
+        render (*before, startBefore, std::max (block.startBeat, startBefore), end);
+    }
+    if (now != nullptr && ! same && blockBeats > 0.0)
+        render (*now, startNow, std::max (block.startBeat, startNow), block.endBeat);
+}
+
+// The arrangement clips of an audio track in one window of the song, with their fades (at least 4 ms at each edge, so
+// that a cut never clicks).
+void AudioEngine::renderArrangementAudio (const PlaybackGraph::Track& t, double startBeat, double endBeat, int sampleOffset, int numSamples,
+                                          double spb)
+{
+    auto& rt = *t.runtime;
+    const double rate = sampleRate.load();
+    const double autoFade = kAutoFadeSeconds * rate / spb;
+    const auto& clips = t.arrangement;
+    auto it = std::partition_point (clips.begin(), clips.end(), [startBeat] (const auto& c) { return c.endBeat <= startBeat; });
+    for (; it != clips.end() && it->startBeat < endBeat; ++it)
+    {
+        const auto& a = *it;
+        if (a.clip == nullptr || a.clip->audio == nullptr)
+            continue;
+        const double from = std::max (startBeat, a.startBeat), to = std::min (endBeat, a.endBeat);
+        const int first = std::clamp ((int) std::llround ((from - startBeat) * spb), 0, numSamples);
+        const int last = std::clamp ((int) std::llround ((to - startBeat) * spb), 0, numSamples);
+        if (last <= first)
+            continue;
+        daw::engine::AudioFades fades;
+        fades.length = a.endBeat - a.startBeat;
+        fades.fadeIn = std::min (fades.length * 0.5, std::max (autoFade, a.clip->audio->fadeIn));
+        fades.fadeOut = std::min (fades.length * 0.5, std::max (autoFade, a.clip->audio->fadeOut));
+        const double entry = daw::engine::normaliseOffset (*a.clip, a.offsetBeats, a.loop);
+        const double elapsed = (startBeat + (double) first / spb) - a.startBeat;
+        daw::engine::renderAudioClip (*a.clip, entry, a.loop, elapsed, spb, rate, fades, rt.buffer.getWritePointer (0) + sampleOffset + first,
+                                      rt.buffer.getWritePointer (1) + sampleOffset + first, last - first, audioStats);
+    }
+}
+
 void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine::Transport::Block& block, double spb, int numSamples,
                                bool killNotes, bool anySolo, bool anyArmed)
 {
@@ -920,7 +997,17 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     rt.events.clear();
     const int slotBefore = rt.player.playingSlot();
     const double startBefore = rt.player.playingStartBeat();
+    const auto* clipBefore = rt.player.playingClipPtr();
     rt.player.process (block.startBeat, block.endBeat, spb, numSamples, rt.events);
+
+    // An audio track starts every block from silence and adds its clips; its devices are effects.
+    if (t.audio)
+    {
+        rt.buffer.clear (0, 0, numSamples);
+        rt.buffer.clear (1, 0, numSamples);
+        audioStats.missedFrames = 0;
+        renderSessionAudio (t, clipBefore, startBefore, block, spb, numSamples);
+    }
 
     // Arrangement recording logs when a session clip starts or stops (the song beat comes from the windows of the block).
     if (logEvents)
@@ -1005,7 +1092,11 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
                 w.numSamples -= cut;
             }
             rt.arrangement.process (t.arrangement, w.startBeat, w.endBeat, spb, w.sampleOffset, w.numSamples, rt.events);
+            if (t.audio)
+                renderArrangementAudio (t, w.startBeat, w.endBeat, w.sampleOffset, w.numSamples, spb);
         }
+    if (t.audio && audioStats.missedFrames > 0)
+        diskMisses.fetch_add (1, std::memory_order_relaxed);
     daw::engine::sortEvents (rt.events);
 
     rt.playingSlot.store (rt.player.playingSlot(), std::memory_order_relaxed);
@@ -1037,13 +1128,17 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     if (acceptsLiveMidi (rt, true, anyArmed))
         addLive (keyboardMidi);
 
-    if (t.chain.empty())
-        return;
-
-    // Start from silence so that a missing or disabled instrument cannot feed old audio into the effects.
-    rt.buffer.clear (0, 0, numSamples);
-    rt.buffer.clear (1, 0, numSamples);
-    processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true);
+    if (t.audio)
+        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false);
+    else
+    {
+        if (t.chain.empty())
+            return;
+        // Start from silence so that a missing or disabled instrument cannot feed old audio into the effects.
+        rt.buffer.clear (0, 0, numSamples);
+        rt.buffer.clear (1, 0, numSamples);
+        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true);
+    }
 
     const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load());
     const float vol = audible ? rt.volumeGain.load() : 0.0f;
@@ -1208,6 +1303,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         juce::AudioBuffer<float> outView (const_cast<float**> (outputs), 2, numSamples);
         preview.process (outView, numSamples, tempo.load());
+        audioPreview.process (outView, numSamples, rate);
 
         if (const int left = toneSamplesLeft.load (std::memory_order_relaxed); left > 0)
         {

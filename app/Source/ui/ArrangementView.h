@@ -4,8 +4,10 @@
 #include "Selection.h"
 
 #include "../model/ArrangementEdit.h"
+#include "../browser/BrowserActions.h"
 #include "../model/ProjectActions.h"
 
+#include <cmath>
 #include <optional>
 
 class AudioEngine;
@@ -30,6 +32,7 @@ class ArrangementPlayhead;
 class ArrangementView final : public juce::Component,
                               public HelpProvider,
                               public juce::DragAndDropTarget,
+                              public juce::FileDragAndDropTarget,
                               private juce::ValueTree::Listener,
                               private juce::ScrollBar::Listener
 {
@@ -218,6 +221,13 @@ public:
         bool valid = false;
         int row = -1;
         double beat = 0.0, length = 0.0;
+        bool audio = false;     // sound files: the whole lane lights up, `beat` is where the first one lands
+        bool newTracks = false; // sound files below the last lane: they get audio tracks of their own
+        bool operator== (const DropHint& o) const
+        {
+            return valid == o.valid && row == o.row && std::abs (beat - o.beat) < 1.0e-6 && std::abs (length - o.length) < 1.0e-6 && audio == o.audio
+                   && newTracks == o.newTracks;
+        }
     };
     const DropHint& dropHint() const { return drop; }
 
@@ -231,6 +241,16 @@ public:
     void itemDragMove (const SourceDetails&) override;
     void itemDragExit (const SourceDetails&) override { setDropHint ({}); }
     void itemDropped (const SourceDetails&) override;
+    // Sound files from the browser and from Finder (task 5.6): onto the lane of an audio track, or below the lanes for new
+    // audio tracks. Cmd held: one after another on the lane instead of under each other. Set by the window.
+    void setBrowserActions (browser::BrowserActions* a) { dropActions = a; }
+    bool isInterestedInFileDrag (const juce::StringArray&) override;
+    void fileDragEnter (const juce::StringArray& f, int x, int y) override { fileDragMove (f, x, y); }
+    void fileDragMove (const juce::StringArray&, int x, int y) override;
+    void fileDragExit (const juce::StringArray&) override { setDropHint ({}); }
+    void filesDropped (const juce::StringArray&, int x, int y) override;
+    // Drops sound files at a point of this view (one undo transaction); the result says why nothing happened.
+    browser::DropResult dropSoundFiles (const juce::Array<juce::File>&, juce::Point<int> viewPoint, bool alternate);
     static juce::String sessionClipDescription (int64_t trackId, int scene);
     static bool parseSessionClip (const juce::var& description, int64_t& trackId, int& scene);
 
@@ -260,6 +280,7 @@ private:
     void followPlayhead();
     void selectionChanged();
     void setDropHint (const DropHint&);
+    DropHint soundDropHintAt (juce::Point<int> viewPoint) const;
     int fittedHeight (const TrackRef&) const;
     void message (const juce::String& text) const
     {
@@ -300,6 +321,7 @@ private:
     std::vector<ClipboardEntry> clipboardEntries;
     juce::ValueTree clipboard; // marker that something was copied
     DropHint drop;
+    browser::BrowserActions* dropActions = nullptr;
 
     std::unique_ptr<ArrangementLanes> lanesPart;
     std::unique_ptr<ArrangementRuler> rulerPart;

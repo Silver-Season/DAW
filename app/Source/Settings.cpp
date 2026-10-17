@@ -175,6 +175,25 @@ void Settings::setMidiInputPlays (const juce::String& id, bool on) { props->setV
 double Settings::recordCorrectionMs() const { return juce::jlimit (-50.0, 50.0, props->getDoubleValue ("recordCorrectionMs", 0.0)); }
 void Settings::setRecordCorrectionMs (double ms) { props->setValue ("recordCorrectionMs", juce::jlimit (-50.0, 50.0, ms)); }
 
+bool Settings::copySamplesIntoProject() const { return props->getBoolValue ("copySamples", true); }
+void Settings::setCopySamplesIntoProject (bool on) { props->setValue ("copySamples", on); }
+int Settings::recordBitDepth() const
+{
+    const int v = props->getIntValue ("recordBitDepth", 24);
+    return v == 16 || v == 32 ? v : 24;
+}
+void Settings::setRecordBitDepth (int bits) { props->setValue ("recordBitDepth", bits == 16 || bits == 32 ? bits : 24); }
+double Settings::audioLatencyCorrectionMs() const { return juce::jlimit (-100.0, 100.0, props->getDoubleValue ("audioLatencyMs", 0.0)); }
+void Settings::setAudioLatencyCorrectionMs (double ms) { props->setValue ("audioLatencyMs", std::round (juce::jlimit (-100.0, 100.0, ms) * 10.0) / 10.0); }
+int Settings::audioCaptureMinutes() const
+{
+    const int v = props->getIntValue ("audioCaptureMinutes", 5);
+    return v == 1 || v == 2 || v == 10 ? v : 5;
+}
+void Settings::setAudioCaptureMinutes (int m) { props->setValue ("audioCaptureMinutes", m == 1 || m == 2 || m == 10 ? m : 5); }
+bool Settings::trimRecordedSilence() const { return props->getBoolValue ("trimSilence", false); }
+void Settings::setTrimRecordedSilence (bool on) { props->setValue ("trimSilence", on); }
+
 //==============================================================================
 // "audioDevice" is the key the phase-0 build already used, so existing user settings keep working.
 std::unique_ptr<juce::XmlElement> Settings::audioDeviceState() const { return props->getXmlValue ("audioDevice"); }

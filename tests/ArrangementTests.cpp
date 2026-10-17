@@ -423,7 +423,7 @@ void testSessionAndMarkers()
 void testSchema()
 {
     std::printf ("[arrangement test] schema 2: a version 1 file still loads\n");
-    check (ProjectModel::kSchemaVersion == 2, "the schema version is 2");
+    check (ProjectModel::kSchemaVersion >= 2, "the schema version is at least 2");
 
     auto model = ProjectModel::createDefault();
     auto root = model.root.createCopy();
@@ -433,7 +433,7 @@ void testSchema()
     root.setProperty (ids::schemaVersion, 1, nullptr);
     const auto result = project::parseProject (project::serialise (root));
     check (result.ok(), "a version 1 file without ARRANGEMENT and MARKERS loads: " + result.error);
-    check ((int) result.tree.getProperty (ids::schemaVersion) == 2, "and is brought to version 2");
+    check ((int) result.tree.getProperty (ids::schemaVersion) == ProjectModel::kSchemaVersion, "and is brought to the current version");
     check (result.tree.getChildWithName (ids::TRACKS).getChild (0).getChildWithName (ids::ARRANGEMENT).isValid(), "every track has an ARRANGEMENT");
 
     ProjectModel loaded (result.tree);
@@ -446,7 +446,7 @@ void testSchema()
     const auto again = project::parseProject (text);
     ProjectModel back (again.tree);
     check (again.ok() && back.trackAt (0).arrangementClips().size() == 1 && back.trackAt (0).arrangementClips()[0].clip().isValid(), "an arrangement clip is saved and loaded");
-    check (project::migrations().size() == 1, "one migration (1 to 2)");
+    check (project::migrations().size() >= 1, "the migration 1 to 2 exists");
 
     // a track copied with its arrangement gets new ids
     const auto copy = loaded.duplicateTrack (loaded.trackAt (0).id());

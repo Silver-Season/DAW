@@ -1,10 +1,12 @@
 #pragma once
 
+#include "daw/engine/AudioClip.h"
 #include "daw/synth/PrismaSynth.h" // daw::MidiEvent
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -41,6 +43,8 @@ struct MidiClip
     std::vector<Note> notes;
     std::vector<ControllerEvent> controllers; // sorted by time
     int64_t id = 0; // model clip id (0 = none): lets the engine recognise "the same clip" in a new playback graph
+    // Set for an audio clip (stage 5): the clip then has no notes and the beats above place its audio (renderAudioClip).
+    std::shared_ptr<const AudioPart> audio;
 
     // Sanitised copies of the three positions: 0 <= loopStart < end, loopStart <= ... , start < end.
     double endBeat() const noexcept { return lengthBeats < kMinLength ? kMinLength : lengthBeats; }

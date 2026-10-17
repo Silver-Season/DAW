@@ -6,6 +6,8 @@
 
 #include "../Settings.h"
 #include "../model/ProjectModel.h"
+#include "AudioFilePool.h"
+#include "AudioPreview.h"
 #include "Metronome.h"
 #include "MidiInputQueue.h"
 #include "PlaybackGraph.h"
@@ -86,6 +88,22 @@ public:
     void reviveMissingDevices();
     // Bumped when a plugin load finishes (either way), so that views can refresh themselves.
     uint32_t getDeviceEpoch() const { return deviceEpoch.load(); }
+
+    //==========================================================================
+    // Audio files (docs/spec/05-audio-recording.md, task 5.1). The project folder resolves the relative paths of the pool.
+    void setProjectFolder (const juce::File&);
+    juce::File getProjectFolder() const { return projectFolder; }
+    AudioFilePool& getAudioPool() { return audioPool; }
+    // Where a FILE of the pool is: inside the project folder if its relative path is found there, else its absolute path.
+    juce::File resolveAudioFile (const AudioFileRef&) const;
+    // The decoded file of a FILE id (loading in the background), null if it is missing. Message thread.
+    std::shared_ptr<daw::engine::AudioSource> audioSourceFor (int64_t fileId);
+    // The same, cheap enough to call from paint(): remembers what it found (and what was missing) until the next graph
+    // rebuild, so it does not look at the disk again for every repaint.
+    std::shared_ptr<daw::engine::AudioSource> peekAudioSource (int64_t fileId);
+    // Blocks of the audio thread in which an audio clip wanted samples the loader had not decoded yet. The transport
+    // shows a disk symbol while it grows.
+    uint32_t getDiskMisses() const { return diskMisses.load (std::memory_order_relaxed); }
 
     // Message thread only; the pointers stay valid until the next graph rebuild that drops them.
     juce::AudioProcessor* findProcessor (int64_t deviceId) const;
@@ -204,8 +222,14 @@ public:
     void previewFactoryPreset (int program);
     void previewPresetState (const juce::MemoryBlock& prismaState);
     void stopPreview();
-    void setPreviewVolumeDb (float db) { preview.setGainDb (db); }
-    bool isPreviewSounding() const { return preview.isSounding(); }
+    void setPreviewVolumeDb (float db)
+    {
+        preview.setGainDb (db);
+        audioPreview.setGain (db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db));
+    }
+    bool isPreviewSounding() const { return preview.isSounding() || audioPreview.isSounding(); }
+    // A sound file of the browser plays once from its start (task 5.6). False if it cannot be read.
+    bool previewAudioFile (const juce::File&);
 
     // 440 Hz at -20 dBFS for one second on the first two outputs (settings, Sound).
     void playTestTone();
@@ -278,6 +302,10 @@ private:
     void logSongWindows (const daw::engine::Transport::Block&, double samplesPerBeat);
     void pushEngineEvent (const EngineEvent&);
     bool isRecordTarget (const TrackRuntime&, bool anyArmed) const;
+    void renderSessionAudio (const PlaybackGraph::Track&, const daw::engine::MidiClip* before, double startBefore,
+                             const daw::engine::Transport::Block&, double samplesPerBeat, int numSamples);
+    void renderArrangementAudio (const PlaybackGraph::Track&, double startBeat, double endBeat, int sampleOffset, int numSamples,
+                                 double samplesPerBeat);
     void renderTrack (const PlaybackGraph::Track&, const daw::engine::Transport::Block&, double samplesPerBeat, int numSamples,
                       bool killNotes, bool anySolo, bool anyArmed);
 
@@ -285,6 +313,9 @@ private:
     juce::AudioDeviceManager deviceManager;
     juce::AudioPluginFormatManager formatManager;
     juce::KnownPluginList knownPlugins;
+    AudioFilePool audioPool;
+    juce::File projectFolder;
+    std::map<int64_t, std::shared_ptr<daw::engine::AudioSource>> peekedSources; // by FILE id, null = missing; cleared by rebuilds
     juce::MidiKeyboardState keyboardState;
     MidiInputQueue midiQueue;
     std::unique_ptr<PlayHead> playHead;
@@ -326,6 +357,7 @@ private:
     bool pushCommand (const EngineCommand&);
 
     PreviewPlayer preview;
+    AudioPreview audioPreview;
     std::atomic<int> toneSamplesLeft { 0 };
     int toneSamplesTotal = 0;   // audio thread
     double tonePhase = 0.0;     // audio thread
@@ -380,6 +412,9 @@ private:
     std::atomic<float> tuneA4 { 440.0f }; // project tuning, given to every Prisma
     std::atomic<int64_t> selectedTrackId { -1 };
     std::atomic<uint32_t> hardwareMidiCount { 0 };
+    std::atomic<uint32_t> diskMisses { 0 };
+    daw::engine::AudioRenderStats audioStats; // audio thread
+    static constexpr double kAutoFadeSeconds = 0.004;
 
     std::atomic<double> sampleRate { 44100.0 };
     int blockSize = 512;

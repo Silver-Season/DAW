@@ -156,6 +156,9 @@ int main()
     runArrangementTests();
     runArrangementUiTests();
     runArrangementRecordingTests();
+    runAudioTests();
+    runAudioUiTests();
+    runSessionAudioUiTests();
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

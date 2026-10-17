@@ -17,6 +17,7 @@ inline const juce::String trackTypeGroup = utf8 ("Групповая дорож�
 
 // Default names of new objects
 inline juce::String defaultTrackName (int number) { return utf8 ("MIDI ") + juce::String (number); }
+inline juce::String defaultAudioTrackName (int number) { return utf8 ("Аудио ") + juce::String (number); }
 inline juce::String defaultSceneName (int number) { return utf8 ("Сцена ") + juce::String (number); }
 inline const juce::String defaultClipName = utf8 ("Клип");
 inline juce::String defaultMarkerName (int number) { return utf8 ("Маркер ") + juce::String (number); }
@@ -134,6 +135,10 @@ inline juce::String undoAddMidiClip (const juce::String& what) { return utf8 ("�
 inline juce::String errorChainRead (const juce::String& n) { return utf8 ("Не удалось прочитать цепочку «") + n + utf8 ("»"); }
 inline juce::String errorPluginUnknown (const juce::String& n) { return utf8 ("Плагин «") + n + utf8 ("» не найден в списке плагинов"); }
 inline const juce::String errorNoSlot = utf8 ("Некуда положить клип");
+inline juce::String undoAddAudioClip (const juce::String& what) { return utf8 ("Добавить звук · ") + what; }
+inline juce::String undoAddAudioClips (int n) { return utf8 ("Добавить звуки · ") + juce::String (n); }
+inline const juce::String errorAudioRead = utf8 ("Не удалось прочитать звуковой файл");
+inline const juce::String errorAudioOnMidi = utf8 ("Звук кладётся на аудиодорожку или на пустое место");
 
 // Dialogs
 inline const juce::String dialogOk = utf8 ("OK");
@@ -244,6 +249,8 @@ inline const juce::String noPlaces = utf8 ("Папок пока нет");
 inline const juce::String add = utf8 ("Добавить…");
 inline const juce::String remove = utf8 ("Убрать");
 inline const juce::String rescan = utf8 ("Повторно сканировать плагины…");
+inline const juce::String copySamples = utf8 ("Копировать сэмплы в проект");
+inline const juce::String copySamplesHint = utf8 ("Звук, брошенный в проект извне, копируется в папку Samples проекта, чтобы проект не ломался при переносе");
 } // namespace settingsui
 
 // Window
@@ -277,7 +284,9 @@ inline const juce::String paste = utf8 ("Вставить");
 inline const juce::String duplicate = utf8 ("Дублировать");
 inline const juce::String remove = utf8 ("Удалить");
 inline const juce::String rename = utf8 ("Переименовать");
-inline const juce::String newTrack = utf8 ("MIDI-дорожка");
+inline const juce::String newTrack = utf8 ("Новая MIDI-дорожка");
+inline const juce::String newAudioTrack = utf8 ("Новая аудиодорожка");
+inline const juce::String findMissing = utf8 ("Найти потерянные файлы…");
 inline const juce::String newScene = utf8 ("Сцена");
 inline const juce::String captureScene = utf8 ("Сцена с играющими клипами");
 inline const juce::String newClip = utf8 ("Пустой MIDI-клип");
@@ -293,6 +302,7 @@ inline const juce::String playStop = utf8 ("Играть / стоп");
 inline const juce::String computerKeys = utf8 ("Игра на клавиатуре компьютера");
 inline const juce::String find = utf8 ("Поиск в браузере");
 inline const juce::String insertTrackHere = utf8 ("Вставить MIDI-дорожку");
+inline const juce::String insertAudioTrackHere = utf8 ("Вставить аудиодорожку");
 inline const juce::String colour = utf8 ("Цвет");
 inline const juce::String createClipHere = utf8 ("Создать MIDI-клип");
 inline const juce::String stopAll = utf8 ("Остановить все клипы");
@@ -303,6 +313,19 @@ inline const juce::String keyboardStrip = utf8 ("Экранная клавиат
 inline const juce::String projectProperties = utf8 ("Свойства проекта…");
 inline const juce::String openClip = utf8 ("Открыть в редакторе");
 } // namespace menu
+
+// Audio in Session View
+namespace sessionAudio
+{
+inline const juce::String fileNotFound = utf8 ("Файл не найден");
+inline const juce::String undoNewAudioTrack = utf8 ("Новая аудиодорожка");
+inline const juce::String audioTag = utf8 ("Аудио");
+inline const juce::String findMissingTitle = utf8 ("Выберите папку, где искать потерянные файлы");
+inline const juce::String undoRelink = utf8 ("Найти потерянные файлы");
+inline juce::String foundFiles (int n) { return utf8 ("Найдено файлов: ") + juce::String (n); }
+inline const juce::String nothingFound = utf8 ("Ничего не найдено");
+inline const juce::String diskBehind = utf8 ("Диск не успевает: часть звука пропущена");
+} // namespace sessionAudio
 
 // Transport bar
 namespace transport
@@ -728,7 +751,8 @@ inline juce::String browserCategory (const juce::String& name) { return make (na
 
 inline const juce::String trackHeader = make (utf8 ("Заголовок дорожки"), utf8 ("Щелчок выделяет дорожку, двойной щелчок переименовывает, правая кнопка открывает меню. Правый край тянется, меняя ширину столбца."));
 inline const juce::String clipSlot = make (utf8 ("Клип"), utf8 ("Щелчок выбирает клип, треугольник слева запускает. Двойной щелчок по пустому слоту создаёт клип. Клип можно перетащить в другой слот (Alt: копия)."));
-inline const juce::String emptySlot = make (utf8 ("Пустой слот"), utf8 ("Щелчок останавливает дорожку, двойной щелчок создаёт пустой MIDI-клип на такт."));
+inline const juce::String emptyAudioSlot = make (utf8 ("Пустой слот аудиодорожки"), utf8 ("Перетащите сюда звуковой файл из браузера или из Finder. Cmd при отпускании нескольких файлов кладёт каждый на свою дорожку."));
+inline const juce::String emptySlot =make (utf8 ("Пустой слот"), utf8 ("Щелчок останавливает дорожку, двойной щелчок создаёт пустой MIDI-клип на такт."));
 inline const juce::String sceneLaunch = make (utf8 ("Запуск сцены"), utf8 ("Запускает все клипы этой сцены. Двойной щелчок по названию переименовывает."));
 inline const juce::String sceneName = make (utf8 ("Сцена"), utf8 ("Щелчок выделяет сцену, двойной щелчок переименовывает, правая кнопка открывает меню."));
 inline const juce::String stopAllClips = make (utf8 ("Остановить все клипы"), utf8 ("Останавливает клипы всех дорожек на ближайшей границе квантизации."));
@@ -816,6 +840,60 @@ inline const juce::String projectTuning = make (utf8 ("Строй A4"), utf8 ("�
 inline const juce::String projectAuthor = make (utf8 ("Автор"), utf8 ("Имя автора проекта."));
 inline const juce::String projectNotes = make (utf8 ("Заметки"), utf8 ("Свободный текст, сохраняется вместе с проектом."));
 inline const juce::String infoBar = make (utf8 ("Строка подсказок"), utf8 ("Показывает название и действие элемента под мышью."));
+} // namespace help
+
+// The audio clip editor and audio clips on the timeline (docs/spec/05-audio-recording.md, tasks 5.1, 5.2, 5.6).
+namespace audioUi
+{
+inline const juce::String fileMissing = utf8 ("Файл не найден");
+inline const juce::String file = utf8 ("Файл");
+inline const juce::String gain = utf8 ("Громкость");
+inline const juce::String transpose = utf8 ("Транспонирование");
+inline const juce::String detune = utf8 ("Подстройка");
+inline const juce::String reverse = utf8 ("Обратно");
+inline const juce::String loop = utf8 ("Петля");
+inline const juce::String fadeIn = utf8 ("Фейд-ин (шкала)");
+inline const juce::String fadeOut = utf8 ("Фейд-аут (шкала)");
+inline const juce::String warpSoon = utf8 ("Подстройка под темп: этап 7");
+inline const juce::String loopStart = utf8 ("Начало петли");
+inline const juce::String loopEnd = utf8 ("Конец");
+inline const juce::String startPoint = utf8 ("Старт");
+inline const juce::String grid = utf8 ("Сетка");
+inline const juce::String snap = utf8 ("Прилипание");
+inline const juce::String noFile = utf8 ("Файл не найден: звук не играет, пока файл не вернётся на место.");
+inline const juce::String undoGain = utf8 ("Громкость звука");
+inline const juce::String undoTranspose = utf8 ("Транспонирование звука");
+inline const juce::String undoDetune = utf8 ("Подстройка звука");
+inline const juce::String undoReverse = utf8 ("Обратное воспроизведение");
+inline const juce::String undoFadeIn = utf8 ("Фейд-ин клипа");
+inline const juce::String undoFadeOut = utf8 ("Фейд-аут клипа");
+inline const juce::String undoLoopBrace = utf8 ("Петля клипа");
+inline const juce::String undoStartMarker = utf8 ("Точка старта клипа");
+inline juce::String fileInfo (const juce::String& name, double rate, int channels, double seconds)
+{
+    return name + utf8 (" · ") + juce::String (rate / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".").replace (".", ",") + utf8 (" кГц · ")
+           + (channels == 1 ? utf8 ("моно") : channels == 2 ? utf8 ("стерео") : juce::String (channels) + utf8 (" кан.")) + utf8 (" · ")
+           + juce::String (seconds, 2).replace (".", ",") + utf8 (" с");
+}
+inline juce::String rateWarning (double rate)
+{
+    return utf8 ("Частота файла ") + juce::String (rate / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".").replace (".", ",")
+           + utf8 (" кГц: пересчитывается при воспроизведении");
+}
+inline const juce::String dropNewTracks = utf8 ("Новые аудиодорожки");
+} // namespace audioUi
+
+namespace help
+{
+inline const juce::String audioProps = make (utf8 ("Свойства звукового клипа"), utf8 ("Громкость, высота, обратное воспроизведение, петля и фейды клипа."));
+inline const juce::String audioGain = make (utf8 ("Громкость клипа"), utf8 ("От -70 до +24 дБ. Тяните мышью, двойной щелчок вводит число."));
+inline const juce::String audioTranspose = make (utf8 ("Транспонирование"), utf8 ("Полутоны, от -48 до +48. Меняет и высоту, и длительность звука (без подстройки под темп)."));
+inline const juce::String audioDetune = make (utf8 ("Подстройка"), utf8 ("Центы, от -50 до +50."));
+inline const juce::String audioReverse = make (utf8 ("Обратное воспроизведение"), utf8 ("Звук клипа играет с конца."));
+inline const juce::String audioLoop = make (utf8 ("Петля"), utf8 ("Повторять часть клипа от начала петли до конца, пока клип звучит."));
+inline const juce::String audioFadeIn = make (utf8 ("Фейд-ин"), utf8 ("Нарастание громкости в начале клипа на шкале, в долях. Короткий фейд на краях добавляется всегда."));
+inline const juce::String audioFadeOut = make (utf8 ("Фейд-аут"), utf8 ("Затухание в конце клипа на шкале, в долях."));
+inline const juce::String audioWave = make (utf8 ("Звук клипа"), utf8 ("Тяните маркер старта и скобку петли. Shift или Alt отключают прилипание."));
 } // namespace help
 
 // Tooltips of the small tabs that hide and show panels: what a click will do.

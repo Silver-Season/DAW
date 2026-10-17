@@ -29,6 +29,7 @@ public:
 
     // Create menu
     void newTrack (int afterTrackId = -1); // after the given track; -1: after the selected one, or at the end
+    void newAudioTrack (int afterTrackId = -1); // the same for an audio track
     void newScene();                       // after the selected scene, or at the end
     void captureScene();
     void newClip();                        // in the selected empty slot, or the first empty slot of the selected track

@@ -17,6 +17,7 @@ public:
 
     // Tracks
     TrackRef addMidiTrack (int insertIndex = -1); // a MIDI track with a Prisma "Init"
+    TrackRef addAudioTrack (int insertIndex = -1); // an audio track: no instrument, no devices
     void renameTrack (int64_t trackId, const juce::String& name);
     void setTrackColour (int64_t trackId, int paletteIndex);
     TrackRef duplicateTrack (int64_t trackId);

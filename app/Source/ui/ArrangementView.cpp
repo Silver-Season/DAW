@@ -2,6 +2,7 @@
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "../project/AudioImport.h"
 #include "ArrangementHeaders.h"
 #include "ArrangementLanes.h"
 #include "ArrangementMinimap.h"
@@ -1291,23 +1292,54 @@ bool ArrangementView::isInterestedInDragSource (const SourceDetails& d)
 {
     int64_t track = 0;
     int scene = 0;
-    return parseSessionClip (d.description, track, scene);
+    if (parseSessionClip (d.description, track, scene))
+        return true;
+    browser::DragItem item;
+    return dropActions != nullptr && browser::parseDrag (d.description, item) && item.kind == browser::kinds::audioFile;
 }
 
 void ArrangementView::setDropHint (const DropHint& h)
 {
-    if (h.valid == drop.valid && h.row == drop.row && std::abs (h.beat - drop.beat) < kEpsilon)
+    if (h == drop)
         return;
     drop = h;
     lanesPart->repaint();
+}
+
+ArrangementView::DropHint ArrangementView::soundDropHintAt (juce::Point<int> viewPoint) const
+{
+    DropHint hint;
+    const auto p = lanesPart->getLocalPoint (this, viewPoint);
+    if (dropActions == nullptr || ! lanesPart->getLocalBounds().contains (p))
+        return hint;
+    const double beat = xToBeat ((double) p.x);
+    hint.audio = true;
+    hint.beat = v.snap ? snapFloor (beat) : juce::jmax (0.0, beat);
+    const int row = rowAtY (p.y);
+    if (row >= 0)
+    {
+        hint.row = row;
+        hint.valid = model.findTrack (layoutRows[(size_t) row].trackId).isAudio(); // a MIDI lane does not light up
+    }
+    else
+    {
+        hint.newTracks = true;
+        hint.valid = true;
+    }
+    return hint;
 }
 
 void ArrangementView::itemDragMove (const SourceDetails& d)
 {
     int64_t trackId = 0;
     int scene = 0;
+    browser::DragItem item;
     if (! parseSessionClip (d.description, trackId, scene))
+    {
+        if (dropActions != nullptr && browser::parseDrag (d.description, item) && item.kind == browser::kinds::audioFile)
+            setDropHint (soundDropHintAt (d.localPosition));
         return;
+    }
     const auto source = model.findTrack (trackId).clipAt (scene);
     const auto p = lanesPart->getLocalPoint (this, d.localPosition);
     DropHint hint;
@@ -1322,13 +1354,42 @@ void ArrangementView::itemDragMove (const SourceDetails& d)
     setDropHint (hint);
 }
 
+browser::DropResult ArrangementView::dropSoundFiles (const juce::Array<juce::File>& files, juce::Point<int> viewPoint, bool alternate)
+{
+    browser::DropResult result;
+    const auto hint = soundDropHintAt (viewPoint);
+    if (dropActions == nullptr || files.isEmpty() || ! hint.audio)
+        return result;
+    if (! hint.valid) // a MIDI lane
+    {
+        result.message = Strings::errorAudioOnMidi;
+        return result;
+    }
+    result = dropActions->dropAudioOnTimeline (files, hint.newTracks ? -1 : layoutRows[(size_t) hint.row].trackId, hint.beat, alternate);
+    if (result.ok && result.trackId >= 0)
+        selectionState.selectTrack (result.trackId);
+    return result;
+}
+
 void ArrangementView::itemDropped (const SourceDetails& d)
 {
     int64_t trackId = 0;
     int scene = 0;
+    browser::DragItem item;
+    if (! parseSessionClip (d.description, trackId, scene))
+    {
+        setDropHint ({});
+        if (dropActions != nullptr && browser::parseDrag (d.description, item) && item.kind == browser::kinds::audioFile)
+        {
+            const auto result = dropSoundFiles ({ juce::File (item.path) }, d.localPosition, juce::ModifierKeys::currentModifiers.isCommandDown());
+            if (! result.ok && result.message.isNotEmpty())
+                message (result.message);
+        }
+        return;
+    }
     const auto hint = drop;
     setDropHint ({});
-    if (! hint.valid || ! parseSessionClip (d.description, trackId, scene) || hint.row >= (int) layoutRows.size())
+    if (! hint.valid || hint.row >= (int) layoutRows.size())
         return;
     const auto source = model.findTrack (trackId).clipAt (scene);
     const auto track = model.findTrack (layoutRows[(size_t) hint.row].trackId);
@@ -1337,6 +1398,35 @@ void ArrangementView::itemDropped (const SourceDetails& d)
     model.undo.beginNewTransaction (Strings::undoArrNewClip);
     if (const auto clip = arrangement::addSlotClip (model, track, source, hint.beat); clip.isValid())
         selectClip (clip.id(), false);
+}
+
+bool ArrangementView::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    if (dropActions == nullptr)
+        return false;
+    for (const auto& f : files)
+        if (audioimport::isSoundFile (juce::File (f)))
+            return true;
+    return files.isEmpty(); // some systems ask before they know the files
+}
+
+void ArrangementView::fileDragMove (const juce::StringArray&, int x, int y)
+{
+    setDropHint (soundDropHintAt ({ x, y }));
+}
+
+void ArrangementView::filesDropped (const juce::StringArray& files, int x, int y)
+{
+    setDropHint ({});
+    juce::Array<juce::File> sounds;
+    for (const auto& f : files)
+        if (audioimport::isSoundFile (juce::File (f)))
+            sounds.add (juce::File (f));
+    if (sounds.isEmpty())
+        return;
+    const auto result = dropSoundFiles (sounds, { x, y }, juce::ModifierKeys::currentModifiers.isCommandDown());
+    if (! result.ok && result.message.isNotEmpty())
+        message (result.message);
 }
 
 //==============================================================================

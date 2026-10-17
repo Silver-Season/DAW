@@ -121,6 +121,7 @@ struct PlaybackGraph
     struct Track
     {
         TrackRuntime* runtime = nullptr;
+        bool audio = false;                                              // an audio track: clips play audio, the chain is effects only
         std::vector<DeviceInstance*> chain;                              // first: instrument, then effects
         std::vector<std::shared_ptr<const daw::engine::MidiClip>> slots; // by scene, nullptr = empty
         daw::engine::ArrangementClips arrangement; // sorted by start, not overlapping

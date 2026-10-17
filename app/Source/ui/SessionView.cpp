@@ -4,8 +4,10 @@
 #include "../engine/AudioEngine.h"
 #include "../engine/SessionRecorder.h"
 #include "../Settings.h"
+#include "../project/AudioImport.h"
 #include "ArrangementView.h"
 #include "PaletteMenu.h"
+#include "Waveform.h"
 
 namespace ui
 {
@@ -178,7 +180,22 @@ public:
                 strokeCell (g, b.toFloat(), t.text, 2.0f);
             g.setColour (t.clipInk);
             g.setFont (t.uiFont (12.5f, 600));
-            g.drawText (track.name(), b.reduced (9, 0), juce::Justification::centredLeft, true);
+            auto textArea = b.reduced (9, 0);
+            if (track.isAudio())
+            {
+                // A small waveform at the right edge tells an audio track from a MIDI one (MIDI tracks have no mark).
+                const auto glyph = juce::Rectangle<float> (16.0f, 12.0f).withCentre ({ (float) b.getRight() - 17.0f, (float) b.getCentreY() });
+                static constexpr float heights[] { 0.35f, 0.8f, 0.55f, 1.0f, 0.45f };
+                g.setColour (t.clipInk.withAlpha (0.75f));
+                for (int k = 0; k < 5; ++k)
+                {
+                    const float h = glyph.getHeight() * heights[k];
+                    g.fillRoundedRectangle (glyph.getX() + (float) k * 3.4f, glyph.getCentreY() - h * 0.5f, 2.0f, h, 1.0f);
+                }
+                textArea.removeFromRight (24);
+                g.setColour (t.clipInk);
+            }
+            g.drawText (track.name(), textArea, juce::Justification::centredLeft, true);
         }
     }
 
@@ -286,6 +303,8 @@ public:
             return Strings::help::recordingSlot;
         if (track.clipAt (scene).isValid())
             return Strings::help::clipSlot;
+        if (track.isAudio())
+            return Strings::help::emptyAudioSlot;
         const bool overCircle = p.x - (view.columnX[(size_t) column] - view.scrollX) < kLaunchWidth;
         return overCircle && receivesLiveMidi (track, anyArmed()) ? Strings::help::recordSlot : Strings::help::emptySlot;
     }
@@ -325,6 +344,12 @@ public:
         const bool blink2 = (now / 250) % 2 == 0, blink4 = (now / 125) % 2 == 0;
         const bool playing = view.engine.isPlaying();
         const double beats = view.engine.getPositionBeats();
+
+        if (peaksPending) // a sound that was still being decoded when the grid was painted
+        {
+            peaksPending = false;
+            repaint();
+        }
 
         states.resize ((size_t) view.numColumns());
         for (int c = 0; c < view.numColumns(); ++c)
@@ -468,7 +493,23 @@ public:
 
                 const bool isPlaying = playingScene == s, isQueued = queuedScene == s;
                 const auto colour = t.palette (clip.colour());
-                fillCell (g, cell, t.clipColour (clip.colour(), isPlaying));
+                // A sound shows its waveform; one whose file is gone is greyed out and says so.
+                std::shared_ptr<daw::engine::AudioSource> audioSource;
+                const bool audioClip = clip.isAudio();
+                if (audioClip)
+                    audioSource = view.engine.peekAudioSource (clip.fileId());
+                const bool missing = audioClip && audioSource == nullptr;
+                const auto ink = missing ? t.dimText : t.clipInk;
+                fillCell (g, cell, missing ? t.panel2.interpolatedWith (t.dimText, 0.16f) : t.clipColour (clip.colour(), isPlaying));
+                if (audioSource != nullptr)
+                {
+                    const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (4.0f).withTrimmedTop (15.0f).withTrimmedBottom (3.0f); // under the name
+                    juce::Graphics::ScopedSaveState save (g);
+                    g.reduceClipRegion (cell.toNearestInt());
+                    drawAudioWaveform (g, area, *audioSource, clip, 0.0, false, clip.lengthBeats(), view.model.tempo(), t.clipInk.withAlpha (0.7f));
+                    if (audioSource->peaksAvailable.load (std::memory_order_acquire) < audioSource->numPeaks)
+                        peaksPending = true; // still decoding: repaint on the next tick to show more
+                }
                 if (dropTarget || selected)
                     strokeCell (g, cell, dropTarget ? t.accent : t.text, 2.0f);
                 if (recScene == s) // an overdub runs on this clip: red outline, pulsing
@@ -481,12 +522,26 @@ public:
                     iconAlpha = 0.15f;
                 if (isQueued && blink4)
                     iconAlpha = 0.15f;
-                g.setColour (t.clipInk.withAlpha (iconAlpha));
+                g.setColour (ink.withAlpha (iconAlpha));
                 g.fillPath (icons::play (icon));
 
-                g.setColour (t.clipInk);
+                g.setColour (missing ? t.text : ink);
                 g.setFont (t.uiFont (12.0f, 500));
-                g.drawText (clip.name(), b.withTrimmedLeft (26).withTrimmedRight (6), juce::Justification::centredLeft, true);
+                if (missing)
+                {
+                    auto text = b.withTrimmedLeft (26).withTrimmedRight (6);
+                    g.drawText (clip.name(), text.removeFromTop (kSlotHeight / 2 + 1), juce::Justification::bottomLeft, true);
+                    g.setColour (t.warning);
+                    g.setFont (t.uiFont (10.5f, 500));
+                    g.drawText (Strings::sessionAudio::fileNotFound, text, juce::Justification::topLeft, true);
+                }
+                else if (audioSource != nullptr)
+                {
+                    g.setFont (t.uiFont (11.0f, 500));
+                    g.drawText (clip.name(), b.withTrimmedLeft (26).withTrimmedRight (6).withHeight (16), juce::Justification::centredLeft, true);
+                }
+                else
+                    g.drawText (clip.name(), b.withTrimmedLeft (26).withTrimmedRight (6), juce::Justification::centredLeft, true);
 
                 if (isPlaying)
                 {
@@ -643,6 +698,8 @@ public:
                 view.onOpenClip (id, scene);
             return;
         }
+        if (view.model.findTrack (id).isAudio())
+            return; // sounds come by drag and drop (and later by recording), not as empty clips
         if (view.actions.createEmptyClip (id, scene).isValid())
         {
             view.commands.selectSlot (id, scene);
@@ -771,6 +828,7 @@ private:
 
     SessionView& view;
     std::vector<State> states;
+    bool peaksPending = false;
     int pressColumn = -1, pressScene = -1;
     bool dragging = false;
     int dragColumn = -1, dragScene = -1, dropColumn = -1, dropScene = -1;
@@ -1534,28 +1592,74 @@ void SessionView::itemDropped (const SourceDetails& d)
     setDropSpot ({});
     if (dropActions == nullptr || ! browser::parseDrag (d.description, item))
         return;
-    const auto result = dropActions->drop (item, spot.target, spot.trackId, spot.scene);
+    auto result = dropActions->drop (item, spot.target, spot.trackId, spot.scene);
+    if (! result.ok && result.message.isEmpty() && item.kind == browser::kinds::audioFile)
+        result.message = Strings::errorAudioOnMidi; // a sound let go over a MIDI track
     if (result.trackId >= 0)
         commands.selectTrack (result.trackId);
     if (onDropped)
         onDropped (result, item);
 }
 
+namespace
+{
+// What a Finder drag carries that the Session View can use: sound files, and the first MIDI file.
+struct DraggedFiles
+{
+    juce::Array<juce::File> sounds;
+    juce::File midi;
+    bool unknown = false; // some systems ask before they know the files
+};
+
+DraggedFiles classifyFiles (const juce::StringArray& paths)
+{
+    DraggedFiles out;
+    out.unknown = paths.isEmpty();
+    for (const auto& path : paths)
+    {
+        const juce::File f (path);
+        if (audioimport::isSoundFile (f))
+            out.sounds.add (f);
+        else if (out.midi == juce::File() && (path.endsWithIgnoreCase (".mid") || path.endsWithIgnoreCase (".midi")))
+            out.midi = f;
+    }
+    return out;
+}
+
+browser::DragItem fileItem (const juce::File& f, const juce::String& kind)
+{
+    browser::DragItem item;
+    item.kind = kind;
+    item.path = f.getFullPathName();
+    item.name = f.getFileNameWithoutExtension();
+    return item;
+}
+} // namespace
+
 bool SessionView::isInterestedInFileDrag (const juce::StringArray& files)
 {
     if (dropActions == nullptr)
         return false;
-    for (const auto& f : files)
-        if (f.endsWithIgnoreCase (".mid") || f.endsWithIgnoreCase (".midi"))
-            return true;
-    return files.isEmpty(); // some systems ask before they know the files
+    const auto dragged = classifyFiles (files);
+    return dragged.unknown || ! dragged.sounds.isEmpty() || dragged.midi != juce::File();
 }
 
-void SessionView::fileDragMove (const juce::StringArray&, int x, int y)
+void SessionView::fileDragMove (const juce::StringArray& files, int x, int y)
 {
     auto spot = spotAt ({ x, y });
-    if (spot.target == browser::DropTarget::track)
-        spot.valid = false; // a file needs a slot or a new track, not a whole track
+    const auto dragged = classifyFiles (files);
+    bool ok = false;
+    if (dragged.unknown)
+        ok = spot.target != browser::DropTarget::track; // no files to ask about yet: the old rule
+    else if (dropActions != nullptr)
+    {
+        if (! dragged.sounds.isEmpty())
+            ok = dropActions->accepts (fileItem (dragged.sounds[0], browser::kinds::audioFile), spot.target, spot.trackId);
+        // A MIDI file needs a slot or a new track, not a whole track.
+        if (! ok && dragged.midi != juce::File() && spot.target != browser::DropTarget::track)
+            ok = dropActions->accepts (fileItem (dragged.midi, browser::kinds::midiFile), spot.target, spot.trackId);
+    }
+    spot.valid = ok;
     setDropSpot (spot);
 }
 
@@ -1565,23 +1669,44 @@ void SessionView::filesDropped (const juce::StringArray& files, int x, int y)
     setDropSpot ({});
     if (dropActions == nullptr)
         return;
-    for (const auto& path : files)
+    const auto dragged = classifyFiles (files);
+
+    if (! dragged.sounds.isEmpty())
     {
-        if (! (path.endsWithIgnoreCase (".mid") || path.endsWithIgnoreCase (".midi")))
-            continue;
+        const auto item = fileItem (dragged.sounds[0], browser::kinds::audioFile);
+        if (dropActions->accepts (item, spot.target, spot.trackId))
+        {
+            // Cmd: every file on a track of its own; otherwise they go one under another on one track.
+            const bool alternate = juce::ModifierKeys::getCurrentModifiersRealtime().isCommandDown();
+            const auto result = dropActions->dropAudioFiles (dragged.sounds, spot.target, spot.trackId,
+                                                             spot.target == browser::DropTarget::slot ? spot.scene : -1, alternate);
+            if (result.trackId >= 0)
+                commands.selectTrack (result.trackId);
+            if (onDropped)
+                onDropped (result, item);
+            return; // one drop is one undo step: a MIDI file in the same drag is left alone
+        }
+        if (dragged.midi == juce::File())
+        {
+            browser::DropResult refused;
+            refused.message = Strings::errorAudioOnMidi;
+            if (onDropped)
+                onDropped (refused, item);
+            return;
+        }
+    }
+
+    if (dragged.midi != juce::File())
+    {
         const auto target = spot.target == browser::DropTarget::slot ? browser::DropTarget::slot : browser::DropTarget::newTrack;
-        const auto result = dropActions->dropMidiFile (juce::File (path), target, spot.trackId, spot.scene);
+        const auto item = fileItem (dragged.midi, browser::kinds::midiFile);
+        if (! dropActions->accepts (item, target, spot.trackId))
+            return;
+        const auto result = dropActions->dropMidiFile (dragged.midi, target, spot.trackId, spot.scene);
         if (result.trackId >= 0)
             commands.selectTrack (result.trackId);
         if (onDropped)
-        {
-            browser::DragItem item;
-            item.kind = browser::kinds::midiFile;
-            item.path = path;
-            item.name = juce::File (path).getFileNameWithoutExtension();
             onDropped (result, item);
-        }
-        break; // one file per drop: each is one undo step and one new track
     }
 }
 
@@ -1730,8 +1855,10 @@ void SessionView::showTrackMenu (juce::Point<int> screenPosition, int64_t trackI
     menu.addItem (item (4, M::remove, juce::KeyPress (juce::KeyPress::deleteKey).getTextDescriptionWithIcons()));
     menu.addSeparator();
     menu.addItem (item (5, M::insertTrackHere, shortcutText ('t')));
+    menu.addItem (item (7, M::insertAudioTrackHere, shortcutText ('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier)));
     menu.addSeparator();
-    menu.addItem (item (6, Strings::browser::saveChain));
+    if (! track.isAudio()) // a chain begins with an instrument
+        menu.addItem (item (6, Strings::browser::saveChain));
 
     juce::Component::SafePointer<SessionView> safe (this);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ screenPosition.x, screenPosition.y, 1, 1 }),
@@ -1745,6 +1872,7 @@ void SessionView::showTrackMenu (juce::Point<int> screenPosition, int64_t trackI
                                 case 3: safe->commands.duplicateSelection(); break;
                                 case 4: safe->commands.deleteSelection(); break;
                                 case 5: safe->commands.newTrack ((int) trackId); break;
+                                case 7: safe->commands.newAudioTrack ((int) trackId); break;
                                 case 6:
                                     if (safe->onSaveChain)
                                         safe->onSaveChain (trackId);
@@ -1784,7 +1912,7 @@ void SessionView::showClipMenu (juce::Point<int> screenPosition, int64_t trackId
     }
     else
     {
-        menu.addItem (item (11, M::createClipHere, true));
+        menu.addItem (item (11, M::createClipHere, ! track.isAudio())); // an empty MIDI clip makes no sense on an audio track
         menu.addItem (item (8, M::paste, actions.hasClipboard(), shortcutText ('v')));
     }
 

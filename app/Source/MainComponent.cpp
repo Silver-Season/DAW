@@ -2,6 +2,7 @@
 
 #include "DemoProject.h"
 #include "Strings.h"
+#include "project/AudioImport.h"
 #include "ui/Dialogs.h"
 #include "ui/ThemeLookAndFeel.h"
 
@@ -96,6 +97,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     sources.refreshAll();
     engine.getKnownPlugins().addChangeListener (this);
     session = std::make_unique<ui::SessionView> (engine, model, actions, selection, editCommands);
+    browserActions.ensureProjectFolder = [this] { return doc.ensureFolder(); };
     session->setBrowserActions (&browserActions);
     session->setRecorder (&recorder);
     session->onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
@@ -112,6 +114,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detail->chain().onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
     arrangement = std::make_unique<ui::ArrangementView> (engine, model, actions, selection);
     arrangement->setRecorder (&recorder);
+    arrangement->setBrowserActions (&browserActions);
     arrangement->onOpenClip = [this] (int64_t trackId, int64_t aclipId) { openArrangementClip (trackId, aclipId); };
     arrangement->onMessage = [this] (const juce::String& text) { infoBar->showMessage (text, 3000); };
     arrangement->lettersReserved = [this] { return computerKeys.isOn(); };
@@ -423,7 +426,7 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
     using namespace ui::commands;
     commands.addArray ({ splitClips, joinClips, loopSelection, removeTime, addMarker, toggleFollow, newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
-                         deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        captureMidi,        recordArrangement, toggleBrowser, toggleDetail,
+                         deleteItem,  renameItem,         newTrack,       newAudioTrack,  findMissingFiles, newScene,      captureScene,        newClip,        captureMidi,        recordArrangement, toggleBrowser, toggleDetail,
                          toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
 }
 
@@ -456,6 +459,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case exportAudio: set (M::exportAudio, fileCategory, false, key ('r', cmd | shift)); break;
         case showInFinder: set (M::showInFinder, fileCategory, doc.folder() != juce::File() && doc.folder().exists()); break;
         case scanPlugins: set (M::scanPlugins, fileCategory, true); break;
+        case findMissingFiles: set (M::findMissing, fileCategory, hasMissingFiles()); break;
         case quitApp: set (M::quit, fileCategory, true, key ('q', cmd)); break;
 
         case undo:
@@ -481,6 +485,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case renameItem: set (M::rename, editCategory, editCommands.canRename(), key ('r', cmd)); break;
 
         case newTrack: set (M::newTrack, createCategory, true, key ('t', cmd)); break;
+        case newAudioTrack: set (M::newAudioTrack, createCategory, true, key ('t', cmd | shift)); break;
         case newScene: set (arrangementShown ? Strings::arrangement::insertTime : M::newScene, createCategory, true, key ('i', cmd)); break;
         case captureScene: set (M::captureScene, createCategory, true, key ('i', cmd | shift)); break;
         case newClip: set (M::newClip, createCategory, model.numTracks() > 0, key ('m', cmd | shift)); break;
@@ -566,6 +571,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         case showInFinder: doc.folder().revealToUser(); return true;
         case openSettings: showSettings (ui::SettingsWindow::sound); return true;
         case scanPlugins: showPluginScanner(); return true;
+        case findMissingFiles: findMissingFilesClicked(); return true;
         case quitApp: juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
 
         case undo: model.undo.undo(); return true;
@@ -611,6 +617,7 @@ bool MainComponent::perform (const InvocationInfo& info)
             return true;
 
         case newTrack: editCommands.newTrack(); return true;
+        case newAudioTrack: editCommands.newAudioTrack(); return true;
         case newScene:
             if (arrangementShown) // Cmd+I inserts time in the Arrangement and a scene in Session View
                 return arrangement->insertTimeAtSelection();
@@ -933,6 +940,29 @@ void MainComponent::doOpenDialog()
                           [safe = juce::Component::SafePointer<MainComponent> (this)] (const juce::FileChooser& fc) {
                               if (safe != nullptr && fc.getResult() != juce::File())
                                   safe->doOpen (fc.getResult());
+                          });
+}
+
+bool MainComponent::hasMissingFiles() const
+{
+    for (const auto& f : model.audioFilesNode())
+        if (! engine.resolveAudioFile (AudioFileRef (f)).existsAsFile())
+            return true;
+    return false;
+}
+
+void MainComponent::findMissingFilesClicked()
+{
+    const auto start = doc.folder() != juce::File() ? doc.folder() : juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+    chooser = std::make_unique<juce::FileChooser> (Strings::sessionAudio::findMissingTitle, start, "", useNativeFileDialogs);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                          [safe = juce::Component::SafePointer<MainComponent> (this)] (const juce::FileChooser& fc) {
+                              if (safe == nullptr || fc.getResult() == juce::File())
+                                  return;
+                              safe->model.undo.beginNewTransaction (Strings::sessionAudio::undoRelink);
+                              const int found = audioimport::relinkMissing (safe->model, safe->engine, fc.getResult());
+                              safe->infoBar->showMessage (found > 0 ? Strings::sessionAudio::foundFiles (found) : Strings::sessionAudio::nothingFound, 3500);
+                              safe->commandManager.commandStatusChanged();
                           });
 }
 

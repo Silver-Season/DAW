@@ -19,6 +19,7 @@ enum : juce::CommandID
     exportAudio,
     showInFinder,
     scanPlugins,
+    findMissingFiles,
     quitApp,
 
     undo,
@@ -37,6 +38,7 @@ enum : juce::CommandID
     removeTime,
 
     newTrack,
+    newAudioTrack,
     newScene,
     captureScene,
     newClip,

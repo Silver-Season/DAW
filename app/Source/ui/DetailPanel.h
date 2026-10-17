@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioClipEditor.h"
 #include "Controls.h"
 #include "PianoRoll.h"
 #include "Selection.h"
@@ -37,6 +38,9 @@ public:
     bool editorMode() const { return editorOn; }
     bool isEditorShown() const { return editorShown; }
     PianoRoll& pianoRoll() { return *editor; }
+    // An audio clip is edited by this instead of the piano roll.
+    AudioClipEditor& audioEditor() { return *audioClipEditor; }
+    bool isAudioEditorShown() const { return editorShown && audioShown; }
     // Fired when the editor appears or goes away, so the window can switch between the two panel heights.
     std::function<void()> onEditorShownChanged;
 
@@ -52,8 +56,9 @@ private:
     std::unique_ptr<DeviceChainView> chainView;
     std::unique_ptr<RecordSourceSwitch> recordSwitch;
     std::unique_ptr<PianoRoll> editor;
+    std::unique_ptr<AudioClipEditor> audioClipEditor;
     NumberField transposeField;
-    bool editorOn = false, editorShown = false;
+    bool editorOn = false, editorShown = false, audioShown = false;
     int64_t shownTrack = -1;
     juce::String shownSummary;
 };

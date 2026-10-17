@@ -4,6 +4,7 @@
 
 #include "daw/engine/Clip.h"
 
+#include <cmath>
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -76,6 +77,30 @@ public:
         set (ids::scaleRoot, root, um);
         set (ids::scaleMode, mode, um);
     }
+
+    // Audio clips (docs/spec/05-audio-recording.md, task 5.1). The spec's AUDIOCLIP is a CLIP with a `file` property (the id
+    // of a FILE in PROJECT/AUDIOFILES), so moving, copying, splitting and takes work the same for both kinds. The beats
+    // above place the audio: content beat 0 is the file frame `sampleStart`, and content beats turn into frames at the
+    // project tempo (no warp in this stage). An audio clip has no notes.
+    bool isAudio() const { return state.hasProperty (ids::file); }
+    int64_t fileId() const { return (int64_t) (juce::int64) state.getProperty (ids::file, -1); }
+    double sampleStart() const { return get<double> (ids::sampleStart, 0.0); }
+    double gainDb() const { return get<double> (ids::gainDb, 0.0); }
+    int transpose() const { return juce::jlimit (-48, 48, get<int> (ids::transpose, 0)); } // semitones, by resampling
+    int detune() const { return juce::jlimit (-50, 50, get<int> (ids::detune, 0)); }       // cents
+    bool reverse() const { return get<bool> (ids::reverse, false); }
+    double fadeIn() const { return juce::jmax (0.0, get<double> (ids::fadeIn, 0.0)); }   // beats, arrangement only
+    double fadeOut() const { return juce::jmax (0.0, get<double> (ids::fadeOut, 0.0)); } // beats, arrangement only
+    double pitchRatio() const { return std::pow (2.0, transpose() / 12.0 + detune() / 1200.0); }
+
+    void setFileId (int64_t v, juce::UndoManager* um) const { set (ids::file, (juce::int64) v, um); }
+    void setSampleStart (double v, juce::UndoManager* um) const { set (ids::sampleStart, v, um); }
+    void setGainDb (double v, juce::UndoManager* um) const { set (ids::gainDb, juce::jlimit (-70.0, 24.0, v), um); }
+    void setTranspose (int v, juce::UndoManager* um) const { set (ids::transpose, juce::jlimit (-48, 48, v), um); }
+    void setDetune (int v, juce::UndoManager* um) const { set (ids::detune, juce::jlimit (-50, 50, v), um); }
+    void setReverse (bool v, juce::UndoManager* um) const { set (ids::reverse, v, um); }
+    void setFadeIn (double v, juce::UndoManager* um) const { set (ids::fadeIn, juce::jmax (0.0, v), um); }
+    void setFadeOut (double v, juce::UndoManager* um) const { set (ids::fadeOut, juce::jmax (0.0, v), um); }
 
     // Notes are kept sorted by start, then pitch. Callers never sort. They are the NOTE children, which come first;
     // the optional CONTROLLERS node is always the last child (so `state.getChild (i)` is a note for i < numNotes()).
@@ -150,6 +175,26 @@ public:
     void setColour (int v, juce::UndoManager* um) const { set (ids::colour, v, um); }
 };
 
+// A sound file of the project's pool (PROJECT/AUDIOFILES/FILE, task 5.1). `path` is relative to the project folder when
+// the file lies inside it (recordings, imported copies), `absPath` is where it was last found.
+class AudioFileRef final : public NodeRef
+{
+public:
+    using NodeRef::NodeRef;
+
+    juce::String path() const { return get<juce::String> (ids::path, {}); }
+    juce::String absPath() const { return get<juce::String> (ids::absPath, {}); }
+    double sampleRate() const { return get<double> (ids::sampleRate, 44100.0); }
+    int channels() const { return get<int> (ids::channels, 2); }
+    juce::int64 lengthSamples() const { return (juce::int64) state.getProperty (ids::lengthSamples, 0); }
+    juce::String hash() const { return get<juce::String> (ids::hash, {}); }
+    double tempo() const { return get<double> (ids::tempo, 0.0); } // known tempo of a loop, 0 = unknown
+    juce::String name() const { return get<juce::String> (ids::name, {}); }
+
+    void setPath (const juce::String& v, juce::UndoManager* um) const { set (ids::path, v, um); }
+    void setAbsPath (const juce::String& v, juce::UndoManager* um) const { set (ids::absPath, v, um); }
+};
+
 //==============================================================================
 class DeviceRef final : public NodeRef
 {
@@ -203,6 +248,7 @@ public:
     using NodeRef::NodeRef;
 
     juce::String type() const { return get<juce::String> (ids::type, "midi"); }
+    bool isAudio() const { return type() == "audio"; }
     juce::String name() const { return get<juce::String> (ids::name, {}); }
     int colour() const { return get<int> (ids::colour, 0); }
     float volumeDb() const { return get<float> (ids::volumeDb, 0.0f); }
