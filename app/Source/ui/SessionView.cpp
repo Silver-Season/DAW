@@ -2,6 +2,7 @@
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "../engine/SessionRecorder.h"
 #include "../Settings.h"
 #include "PaletteMenu.h"
 
@@ -280,7 +281,28 @@ public:
         if (scene == stopRow)
             return Strings::help::stopAllClips;
         const auto track = view.model.findTrack (view.columnTrack[(size_t) column]);
-        return track.clipAt (scene).isValid() ? Strings::help::clipSlot : Strings::help::emptySlot;
+        if (view.recorder != nullptr && view.recorder->isRecording (track.id(), scene))
+            return Strings::help::recordingSlot;
+        if (track.clipAt (scene).isValid())
+            return Strings::help::clipSlot;
+        const bool overCircle = p.x - (view.columnX[(size_t) column] - view.scrollX) < kLaunchWidth;
+        return overCircle && receivesLiveMidi (track, anyArmed()) ? Strings::help::recordSlot : Strings::help::emptySlot;
+    }
+
+    bool anyArmed() const
+    {
+        for (const auto& t : view.model.tracks())
+            if (t.arm())
+                return true;
+        return false;
+    }
+
+    // The rule of AudioEngine::acceptsLiveMidi: armed tracks, or the selected one while none is armed.
+    bool receivesLiveMidi (const TrackRef& track, bool anyTrackArmed) const
+    {
+        if (! track.isValid() || track.type() != "midi" || track.recordSource() != "midi" || track.input() == "none")
+            return false;
+        return track.arm() || (! anyTrackArmed && track.id() == view.model.selectedTrack());
     }
 
     void beginRename (int column, int scene)
@@ -321,6 +343,16 @@ public:
             }
             next.blink2 = next.playing >= 0 ? blink2 : false;
             next.blink4 = next.queued >= 0 ? blink4 : false;
+            if (view.recorder != nullptr)
+                if (const int recScene = view.recorder->recordingScene (id); recScene >= 0)
+                {
+                    next.recording = recScene;
+                    next.blink4 = true; // keeps the pulse and the growing bar coming; the cell is repainted below
+                    if (recScene < view.model.numScenes())
+                        repaint (cellBounds (c, recScene));
+                }
+            if (st.recording >= 0 && st.recording != next.recording && st.recording < view.model.numScenes())
+                repaint (cellBounds (c, st.recording).expanded (20));
 
             const bool changed = next.playing != st.playing || next.queued != st.queued || next.progress != st.progress
                                  || next.blink2 != st.blink2 || next.blink4 != st.blink4;
@@ -344,6 +376,7 @@ public:
         const bool blink2 = (now / 250) % 2 == 0, blink4 = (now / 125) % 2 == 0;
         const auto clipBounds = g.getClipBounds();
         const auto& sel = view.selection.get();
+        const bool anyTrackArmed = anyArmed();
 
         struct Visible
         {
@@ -397,6 +430,10 @@ public:
             const int playingScene = rt != nullptr ? rt->playingSlot.load() : -1;
             const int queuedScene = rt != nullptr ? rt->queuedSlot.load() : -1;
             const bool armed = v.track.arm();
+            const bool live = receivesLiveMidi (v.track, anyTrackArmed);
+            const int recScene = view.recorder != nullptr ? view.recorder->recordingScene (v.track.id()) : -1;
+            SessionRecorder::Progress progress;
+            const bool hasProgress = recScene >= 0 && view.recorder->getProgress (v.track.id(), progress);
             // empty slots carry a trace of the track colour, so neighbouring columns differ
             const auto emptyFill = t.panel.interpolatedWith (t.palette (v.track.colour()), 0.08f);
 
@@ -412,11 +449,16 @@ public:
 
                 if (! clip.isValid())
                 {
+                    if (recScene == s)
+                    {
+                        paintRecording (g, cell, progress, hasProgress, v.track, animate, blink4, now, selected);
+                        continue;
+                    }
                     fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
                     strokeCell (g, cell, dropTarget || selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
                     const auto mark = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
-                    g.setColour (armed ? t.record : t.line);
-                    if (armed)
+                    g.setColour (live ? (armed ? t.record : t.record.withAlpha (0.6f)) : t.line);
+                    if (live)
                         g.drawEllipse (mark, 1.0f);
                     else
                         g.drawRoundedRectangle (mark, 2.0f, 1.0f);
@@ -428,6 +470,8 @@ public:
                 fillCell (g, cell, t.clipColour (clip.colour(), isPlaying));
                 if (dropTarget || selected)
                     strokeCell (g, cell, dropTarget ? t.accent : t.text, 2.0f);
+                if (recScene == s) // an overdub runs on this clip: red outline, pulsing
+                    strokeCell (g, cell, t.record.withAlpha (animate ? pulse (now) : 1.0f), 2.0f);
 
                 // play marker
                 const auto icon = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
@@ -548,11 +592,16 @@ public:
         if (! hit (e.getPosition(), column, scene) || column != pressColumn || scene != pressScene)
             return;
         const auto id = view.columnTrack[(size_t) column];
+        const bool atMarker = e.x - (view.columnX[(size_t) column] - view.scrollX) < kLaunchWidth;
         // A click selects; only the play marker at the left edge of the clip launches it.
-        if (scene == stopRow)
+        if (scene != stopRow && view.recorder != nullptr && view.recorder->isRecording (id, scene))
+            view.recorder->stopRecording (id); // a click anywhere on the slot that records ends the recording
+        else if (scene == stopRow)
             view.engine.stopTrack (id);
-        else if (e.x - (view.columnX[(size_t) column] - view.scrollX) < kLaunchWidth && view.model.findTrack (id).clipAt (scene).isValid())
+        else if (atMarker && view.model.findTrack (id).clipAt (scene).isValid())
             view.engine.launchClip (id, scene);
+        else if (atMarker && view.recorder != nullptr && receivesLiveMidi (view.model.findTrack (id), anyArmed()))
+            view.recorder->toggleRecording (id, scene); // the record circle of an empty slot
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
@@ -588,7 +637,7 @@ private:
 
     struct State
     {
-        int playing = -1, queued = -1, progress = -1;
+        int playing = -1, queued = -1, progress = -1, recording = -1;
         bool blink2 = false, blink4 = false;
     };
 
@@ -620,6 +669,60 @@ private:
             return false;
         }
         return false;
+    }
+
+    static float pulse (juce::uint32 now) { return 0.6f + 0.4f * (0.5f + 0.5f * std::sin ((float) (now % 1200) / 1200.0f * juce::MathConstants<float>::twoPi)); }
+
+    // A slot that is being recorded: red, with a pulsing circle, a bar that grows with the length and the notes so far.
+    void paintRecording (juce::Graphics& g, juce::Rectangle<float> cell, const SessionRecorder::Progress& p, bool started, const TrackRef& track,
+                         bool animate, bool blink, juce::uint32 now, bool selected) const
+    {
+        const auto& t = theme();
+        const bool waiting = ! started || p.waiting;
+        fillCell (g, cell, waiting ? t.panel.interpolatedWith (t.record, 0.18f) : t.panel.interpolatedWith (t.record, 0.78f));
+        strokeCell (g, cell, selected ? t.text : t.record, selected ? 2.0f : 1.0f);
+
+        const auto mark = juce::Rectangle<float> (11.0f, 11.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
+        if (waiting)
+        {
+            g.setColour (t.record.withAlpha (blink || ! animate ? 1.0f : 0.2f));
+            g.fillEllipse (mark);
+            return;
+        }
+        g.setColour (t.clipInk.withAlpha (animate ? pulse (now) : 1.0f));
+        g.fillEllipse (mark);
+
+        // The bar grows through a number of bars that doubles when it fills up (or through the fixed length).
+        const double bpb = view.model.beatsPerBar();
+        const int fixedBars = view.model.recordFixedBars();
+        int totalBars = fixedBars > 0 ? fixedBars : 1;
+        while (fixedBars == 0 && (double) totalBars * bpb < p.lengthBeats + 1.0e-6)
+            totalBars *= 2;
+        const double total = (double) totalBars * bpb;
+        const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (6.0f);
+        g.setColour (t.clipInk.withAlpha (0.7f));
+        g.fillRect (cell.getX(), cell.getBottom() - 3.0f, cell.getWidth() * (float) juce::jlimit (0.0, 1.0, p.lengthBeats / total), 3.0f);
+
+        if (! p.notes.empty() && area.getWidth() > 8.0f)
+        {
+            int lo = 127, hi = 0;
+            for (const auto& n : p.notes)
+            {
+                lo = juce::jmin (lo, n.pitch);
+                hi = juce::jmax (hi, n.pitch);
+            }
+            const float top = cell.getY() + 5.0f, height = cell.getHeight() - 12.0f;
+            const float span = (float) juce::jmax (7, hi - lo);
+            g.setColour (t.clipInk.withAlpha (0.85f));
+            for (const auto& n : p.notes)
+            {
+                const float x = area.getX() + (float) (n.start / total) * area.getWidth();
+                const float w = juce::jmax (1.5f, (float) (n.length / total) * area.getWidth());
+                const float y = top + height - (float) (n.pitch - lo) / span * height;
+                g.fillRect (x, y - 1.0f, juce::jmin (w, area.getRight() - x), 2.0f);
+            }
+        }
+        juce::ignoreUnused (track);
     }
 
     // The rainbow glint that runs across a playing clip (the "sheen" of the concept).
