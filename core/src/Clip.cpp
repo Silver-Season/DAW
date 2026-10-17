@@ -14,40 +14,65 @@ namespace
         return std::clamp (off, 0, std::max (0, numSamples - 1));
     }
 
+    // Emits the notes of one pass over the clip-content range [from, to). The pass begins `passStart` beats
+    // after the launch; the render window is [la, lb) in beats after the launch.
+    void renderPass (const MidiClip& clip, double from, double to, double passStart, double la, double lb, double clipStart,
+                     double originBeat, double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out)
+    {
+        const double passEnd = passStart + (to - from);
+        if (passEnd <= la || passStart >= lb)
+            return;
+        for (const auto& n : clip.notes)
+        {
+            if (n.start < from || n.start >= to)
+                continue;
+            const double on = passStart + (n.start - from);
+            const double off = passStart + (std::min (n.start + std::max (n.length, 1.0e-3), to) - from);
+            if (on >= la && on < lb)
+                out.push_back (MidiEvent::noteOn (toOffset (clipStart + on, originBeat, samplesPerBeat, numSamples), n.pitch,
+                                                  std::clamp (n.velocity, 1, 127)));
+            if (off >= la && off < lb)
+                out.push_back (MidiEvent::noteOff (toOffset (clipStart + off, originBeat, samplesPerBeat, numSamples), n.pitch));
+        }
+    }
+
     // Window [a, b) in absolute beats, offsets measured from originBeat.
     void renderWindow (const MidiClip& clip, double clipStart, double a, double b, double originBeat,
                        double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out)
     {
-        const double len = clip.lengthBeats;
-        if (len <= 0.0 || b <= a)
+        if (b <= a)
             return;
 
-        const double la = std::max (0.0, a - clipStart), lb = b - clipStart; // clip-local window
+        const double la = std::max (0.0, a - clipStart), lb = b - clipStart; // beats after the launch
         if (lb <= 0.0)
             return;
 
-        const long firstLoop = std::max (0L, (long) std::floor (la / len) - 1);
-        const long lastLoop = (long) std::floor (lb / len);
+        const double end = clip.endBeat(), first = clip.firstPassBeats();
+        // pass 0: from the start point to the end of the clip
+        renderPass (clip, clip.playStart(), end, 0.0, la, lb, clipStart, originBeat, samplesPerBeat, numSamples, out);
+        if (! clip.loop || lb <= first)
+            return;
 
-        for (long k = firstLoop; k <= lastLoop; ++k)
-        {
-            const double loopStart = (double) k * len;
-            for (const auto& n : clip.notes)
-            {
-                if (n.start < 0.0 || n.start >= len)
-                    continue;
-                const double on = loopStart + n.start;
-                const double off = loopStart + std::min (n.start + std::max (n.length, 1.0e-3), len);
-
-                if (on >= la && on < lb)
-                    out.push_back (MidiEvent::noteOn (toOffset (clipStart + on, originBeat, samplesPerBeat, numSamples),
-                                                      n.pitch, std::clamp (n.velocity, 1, 127)));
-                if (off >= la && off < lb)
-                    out.push_back (MidiEvent::noteOff (toOffset (clipStart + off, originBeat, samplesPerBeat, numSamples), n.pitch));
-            }
-        }
+        // later passes: the loop brace over and over
+        const double brace = clip.braceBeats(), from = clip.braceStart();
+        const long firstK = std::max (0L, (long) std::floor ((la - first) / brace) - 1);
+        const long lastK = (long) std::floor ((lb - first) / brace);
+        for (long k = firstK; k <= lastK; ++k)
+            renderPass (clip, from, end, first + (double) k * brace, la, lb, clipStart, originBeat, samplesPerBeat, numSamples, out);
     }
 } // namespace
+
+double MidiClip::positionAfter (double elapsed) const noexcept
+{
+    const double first = firstPassBeats();
+    if (elapsed < 0.0)
+        return playStart();
+    if (elapsed < first)
+        return playStart() + elapsed;
+    if (! loop)
+        return endBeat();
+    return braceStart() + std::fmod (elapsed - first, braceBeats());
+}
 
 void renderClip (const MidiClip& clip, double clipStartBeat, double blockStartBeat, double blockEndBeat,
                  double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out)
@@ -192,6 +217,18 @@ void ClipPlayer::process (double a, double b, double spb, int numSamples, std::v
     if (playingClip != nullptr)
         renderWindow (*playingClip, startBeat, cursor, b, a, spb, numSamples, out);
     track (out, mark);
+
+    // A clip with the loop off ends after its first pass, like a one-shot in Live.
+    if (playingClip != nullptr && ! playingClip->loop)
+    {
+        const double endAt = startBeat + playingClip->firstPassBeats();
+        if (endAt <= b)
+        {
+            releaseHeld (toOffset (endAt, a, spb, numSamples), out);
+            playing = kNoClip;
+            playingClip = nullptr;
+        }
+    }
 }
 
 } // namespace daw::engine

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
 
 // Every user-visible text lives here, so that an English translation can be added later.
@@ -256,6 +257,12 @@ inline const juce::String insertTrackHere = utf8 ("Вставить MIDI-дор�
 inline const juce::String colour = utf8 ("Цвет");
 inline const juce::String createClipHere = utf8 ("Создать MIDI-клип");
 inline const juce::String stopAll = utf8 ("Остановить все клипы");
+inline const juce::String quantise = utf8 ("Квантовать");
+inline const juce::String quantiseOptions = utf8 ("Квантовать…");
+inline const juce::String toggleClipEditor = utf8 ("Редактор клипа / цепочка устройств");
+inline const juce::String keyboardStrip = utf8 ("Экранная клавиатура");
+inline const juce::String projectProperties = utf8 ("Свойства проекта…");
+inline const juce::String openClip = utf8 ("Открыть в редакторе");
 } // namespace menu
 
 // Transport bar
@@ -280,6 +287,7 @@ inline juce::String versionText (int number, juce::int64 sinceMs)
 inline const juce::String cpu = utf8 ("CPU");
 inline const juce::String keysOn = utf8 ("КЛАВ");
 inline const juce::String midi = utf8 ("MIDI");
+inline const juce::String scaleOff = utf8 ("Лад: выкл");
 } // namespace transport
 
 // Browser panel (frame only; the sources come with task 1.5)
@@ -306,6 +314,7 @@ inline const juce::String devicesShort = utf8 ("устр.");
 inline juce::String userGroup (const juce::String& device) { return utf8 ("Мои пресеты · ") + device; }
 inline juce::String projectPlace (const juce::String& folderName) { return utf8 ("Проект · ") + folderName; }
 inline const juce::String addFolder = utf8 ("Добавить папку…");
+inline const juce::String dropFolder = utf8 ("Отпустите, чтобы добавить папку в Места");
 inline const juce::String addFolderTitle = utf8 ("Выберите папку для «Мест»");
 inline const juce::String removeFolder = utf8 ("Убрать из «Мест»");
 inline const juce::String noPlaces = utf8 ("Добавьте папку со звуками и MIDI-файлами");
@@ -338,6 +347,7 @@ inline const juce::String useOnTrack = utf8 ("Поставить на выбра
 // Detail panel and device chain
 namespace detail
 {
+inline const juce::String transpose = utf8 ("Транспонирование");
 inline const juce::String loading = utf8 ("Загрузка…");
 inline const juce::String track = utf8 ("Дорожка");
 inline const juce::String input = utf8 ("Вход");
@@ -356,6 +366,134 @@ inline const juce::String monitorIn = utf8 ("Вкл");
 inline const juce::String monitorOff = utf8 ("Выкл");
 inline const juce::String showOtherParam = utf8 ("Показать другой параметр…");
 } // namespace detail
+
+// Scales (task 2.7). The names of the scales are in core (daw/music/Scales.h).
+inline const juce::String rootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+inline const juce::String scaleNone = utf8 ("Выкл");
+inline const juce::String scaleTonic = utf8 ("Тоника");
+inline const juce::String scaleMode = utf8 ("Лад");
+
+// Undo transaction names of the clip editor and of the stage 2 project settings
+inline const juce::String undoNewNote = utf8 ("Нарисовать ноту");
+inline const juce::String undoDeleteNotes = utf8 ("Удалить ноты");
+inline const juce::String undoMoveNotes = utf8 ("Переместить ноты");
+inline const juce::String undoResizeNotes = utf8 ("Изменить длину нот");
+inline const juce::String undoCopyNotes = utf8 ("Копировать ноты");
+inline const juce::String undoPasteNotes = utf8 ("Вставить ноты");
+inline const juce::String undoCutNotes = utf8 ("Вырезать ноты");
+inline const juce::String undoDuplicateNotes = utf8 ("Дублировать ноты");
+inline const juce::String undoVelocity = utf8 ("Сила нажатия");
+inline const juce::String undoQuantise = utf8 ("Квантизация");
+inline const juce::String undoQuantiseSettings = utf8 ("Настройки квантизации");
+inline const juce::String undoTransposeNotes = utf8 ("Транспонировать ноты");
+inline const juce::String undoSplitNotes = utf8 ("Разрезать ноты");
+inline const juce::String undoJoinNotes = utf8 ("Склеить ноты");
+inline const juce::String undoLoopRange = utf8 ("Петля клипа");
+inline const juce::String undoLoopSwitch = utf8 ("Петля вкл / выкл");
+inline const juce::String undoStartPoint = utf8 ("Точка старта клипа");
+inline const juce::String undoClipScale = utf8 ("Лад клипа");
+inline const juce::String undoProjectScale = utf8 ("Лад проекта");
+inline const juce::String undoTuning = utf8 ("Строй");
+inline const juce::String undoTrackTranspose = utf8 ("Транспонирование дорожки");
+inline const juce::String undoSignature = utf8 ("Размер такта");
+inline const juce::String undoAuthor = utf8 ("Автор проекта");
+inline const juce::String undoProjectNotes = utf8 ("Заметки проекта");
+
+// The clip editor (task 2.4)
+namespace editor
+{
+inline const juce::String noClip = utf8 ("Клип не выбран");
+inline const juce::String noClipHint = utf8 ("Выберите клип в Session View: двойной щелчок открывает его здесь. Shift+Tab возвращает цепочку устройств.");
+inline const juce::String loop = utf8 ("Петля");
+inline const juce::String loopStart = utf8 ("Начало петли");
+inline const juce::String loopEnd = utf8 ("Конец");
+inline const juce::String startPoint = utf8 ("Старт");
+inline const juce::String grid = utf8 ("Сетка");
+inline const juce::String gridAdaptive = utf8 ("Адаптивная");
+inline const juce::String snap = utf8 ("Прилипание");
+inline const juce::String ownScale = utf8 ("Свой лад");
+inline const juce::String scaleOnly = utf8 ("Только лад");
+inline const juce::String fold = utf8 ("Fold");
+inline const juce::String quantise = utf8 ("Квантовать…");
+inline const juce::String transpose = utf8 ("Транспон.");
+inline const juce::String pencil = utf8 ("Карандаш");
+inline const juce::String preview = utf8 ("Слушать");
+inline const juce::String velocity = utf8 ("Velocity");
+inline const juce::String controllers = utf8 ("Контроллеры");
+inline const juce::String modwheel = utf8 ("Modwheel");
+inline const juce::String pitchBend = utf8 ("Pitch Bend");
+inline const juce::String sustain = utf8 ("Сустейн");
+inline const juce::String controllersSoon = utf8 ("Движения колеса, питч-бенда и сустейна записываются вместе с MIDI (этап 2.2); здесь они появятся.");
+inline const juce::String menuSelectAll = utf8 ("Выделить все");
+inline const juce::String menuInvert = utf8 ("Инвертировать выделение");
+inline const juce::String menuSelectPitch = utf8 ("Выделить ноты этой высоты");
+inline const juce::String menuDelete = utf8 ("Удалить");
+inline const juce::String menuDuplicate = utf8 ("Дублировать");
+inline const juce::String menuCopy = utf8 ("Копировать");
+inline const juce::String menuPaste = utf8 ("Вставить");
+inline const juce::String menuSplit = utf8 ("Разрезать здесь");
+inline const juce::String menuJoin = utf8 ("Склеить");
+inline const juce::String menuQuantise = utf8 ("Квантовать");
+inline const juce::String menuQuantiseOptions = utf8 ("Квантовать…");
+inline const juce::String menuLoopSelection = utf8 ("Петля вокруг выделения");
+inline juce::String selectedCount (int n, int total) { return juce::String (n) + utf8 (" из ") + juce::String (total); }
+inline const juce::String gridDivisionNames[] = { utf8 ("1/4"), utf8 ("1/8"), utf8 ("1/16"), utf8 ("1/32"), utf8 ("1/64") };
+inline juce::String gridName (int denominator, bool triplet) { return "1/" + juce::String (denominator) + (triplet ? "T" : ""); }
+inline juce::String loopExtended (double beats) { return utf8 ("Петля клипа удлинена до ") + juce::String (beats, 2).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + utf8 (" долей"); }
+} // namespace editor
+
+namespace quantiseUi
+{
+inline const juce::String title = utf8 ("Квантизация");
+inline const juce::String grid = utf8 ("Сетка");
+inline const juce::String strength = utf8 ("Сила");
+inline const juce::String swing = utf8 ("Свинг");
+inline const juce::String ends = utf8 ("Квантовать концы нот");
+inline const juce::String apply = utf8 ("Применить");
+inline const juce::String close = utf8 ("Закрыть");
+inline const juce::String gridNames[] = { utf8 ("1/4"), utf8 ("1/8"), utf8 ("1/8T"), utf8 ("1/16"), utf8 ("1/16T"), utf8 ("1/32"), utf8 ("1/32T") };
+inline const double gridBeats[] = { 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125, 1.0 / 12.0 };
+inline constexpr int numGrids = 7;
+} // namespace quantiseUi
+
+namespace projectProps
+{
+inline const juce::String title = utf8 ("Свойства проекта");
+inline const juce::String tempo = utf8 ("Темп");
+inline const juce::String signature = utf8 ("Размер");
+inline const juce::String scale = utf8 ("Лад");
+inline const juce::String tuning = utf8 ("Строй A4");
+inline const juce::String tuningSuffix = utf8 (" Гц");
+inline const juce::String tuningHint = utf8 ("Встроенные синты. У сторонних плагинов строй настраивается в самом плагине");
+inline const juce::String author = utf8 ("Автор");
+inline const juce::String notes = utf8 ("Заметки");
+inline const juce::String reset = utf8 ("440");
+} // namespace projectProps
+
+namespace keyboardUi
+{
+inline const juce::String inScale = utf8 ("В ладу");
+inline const juce::String chords = utf8 ("Аккорды");
+// "C3" for the note the A key plays; the octave runs from there over the 17 keys (A to ;).
+inline juce::String octaveName (int baseNote) { return juce::MidiMessage::getMidiNoteName (baseNote, true, true, 3); }
+inline juce::String octaveMessage (int baseNote)
+{
+    return utf8 ("Октава: ") + octaveName (baseNote) + utf8 ("–") + octaveName (baseNote + 16);
+}
+inline juce::String velocityMessage (int velocity) { return utf8 ("Сила: ") + juce::String (velocity); }
+inline const juce::String keysOffHint = utf8 ("Клавиатура Mac выключена, нажмите M");
+inline juce::String stripCaption (int baseNote, int velocity)
+{
+    return utf8 ("Октава ") + octaveName (baseNote) + "\n" + utf8 ("сила ") + juce::String (velocity);
+}
+inline const juce::String noScaleHint = utf8 ("Лад проекта выключен: клавиши играют все ноты подряд");
+} // namespace keyboardUi
+
+namespace arrangement
+{
+inline const juce::String placeholder = utf8 ("Arrangement появится в следующем этапе");
+inline const juce::String hint = utf8 ("Здесь будет линейная шкала времени. Tab возвращает в Session.");
+} // namespace arrangement
 
 // Mixer
 inline const juce::String labelPan = utf8 ("Пан");
@@ -386,7 +524,7 @@ inline const juce::String soon6 = utf8 ("Появится на этапе 6");
 
 inline const juce::String logo = make (utf8 ("Призма"), utf8 ("Главное окно DAW. Цвета дорожек идут по спектру слева направо."));
 inline const juce::String tempo = make (utf8 ("Темп"), utf8 ("Ударов в минуту. Тяните мышью, колесо меняет, двойной щелчок вводит число. Shift: точнее."));
-inline const juce::String signature = make (utf8 ("Размер"), utf8 ("Размер такта проекта. Менять его можно будет в настройках проекта."));
+inline const juce::String signature = make (utf8 ("Размер"), utf8 ("Размер такта проекта. Меняется в окне «Свойства проекта» (Cmd+Alt+P)."));
 inline const juce::String metronome = make (utf8 ("Метроном"), soon2);
 inline const juce::String play = make (utf8 ("Играть"), utf8 ("Запускает и останавливает воспроизведение. Пробел делает то же самое."));
 inline const juce::String stop = make (utf8 ("Стоп"), utf8 ("Останавливает воспроизведение и все клипы. Повторное нажатие возвращает в начало."));
@@ -395,12 +533,12 @@ inline const juce::String position = make (utf8 ("Позиция"), utf8 ("Та�
 inline const juce::String loop = make (utf8 ("Петля"), soon3);
 inline const juce::String ribbon = make (utf8 ("Лента «10 мин»"), utf8 ("Последние 10 минут игры всегда в памяти. ") + soon2);
 inline const juce::String morph = make (utf8 ("Морф A ↔ B"), utf8 ("Плавный переход между снимками ручек. ") + soon6);
-inline const juce::String tabSession = make (utf8 ("Session"), utf8 ("Сетка клипов для живой игры."));
-inline const juce::String tabArrangement = make (utf8 ("Arrangement"), soon3);
+inline const juce::String tabSession = make (utf8 ("Session"), utf8 ("Сетка клипов для живой игры. Tab переключает Session и Arrangement."));
+inline const juce::String tabArrangement = make (utf8 ("Arrangement"), utf8 ("Пока пустой вид: Arrangement появится на этапе 3. Tab переключает Session и Arrangement."));
 inline const juce::String version = make (utf8 ("История версий"), utf8 ("Номер версии и время с последнего сохранения. Щелчок открывает список: метки, возврат к версии."));
 inline const juce::String cpu = make (utf8 ("Нагрузка процессора"), utf8 ("Щелчок открывает настройки звука."));
 inline const juce::String midiIn = make (utf8 ("MIDI-вход"), utf8 ("Мигает, когда приходят события с MIDI-устройств."));
-inline const juce::String keysIndicator = make (utf8 ("Клавиатура компьютера"), utf8 ("Когда горит, буквенные клавиши играют ноты. Включается клавишей M."));
+inline const juce::String keysIndicator = make (utf8 ("Клавиатура компьютера"), utf8 ("Когда горит, буквенные клавиши играют ноты; рядом октава клавиши A. Включается клавишей M. Z и X сдвигают октаву, C и V меняют силу."));
 
 inline const juce::String browserPanel = make (utf8 ("Браузер"), utf8 ("Инструменты, пресеты, эффекты, цепочки и звуки. Тяните элементы в проект."));
 inline const juce::String browserPreview = make (utf8 ("Предпрослушивание"), utf8 ("Когда включено, выбранный пресет Prisma играет фразу в темпе проекта. Для сторонних плагинов предпрослушивания нет."));
@@ -444,6 +582,39 @@ inline const juce::String wavetable = make (utf8 ("Wavetable"), utf8 ("Форм�
 inline const juce::String missingDevice = make (utf8 ("Плагин не найден"), utf8 ("Состояние сохранено и вернётся, когда плагин появится. Звук идёт насквозь."));
 inline const juce::String dropZone = make (utf8 ("Конец цепочки"), utf8 ("Сюда можно будет перетащить эффект или плагин из браузера."));
 inline const juce::String detailInfo = make (utf8 ("Выбранная дорожка"), utf8 ("Вход, мониторинг и число устройств дорожки."));
+// Clip editor, scale, tuning and the stage 2 windows
+inline const juce::String scaleButton = make (utf8 ("Лад проекта"), utf8 ("Тоника и лад проекта. Новые клипы берут его, клавиатура компьютера и редактор клипа подсвечивают его ноты."));
+inline const juce::String editorProps = make (utf8 ("Свойства клипа"), utf8 ("Петля, сетка, лад и транспонирование выбранного клипа."));
+inline const juce::String editorName = make (utf8 ("Название клипа"), utf8 ("Двойной щелчок переименовывает. Квадрат справа меняет цвет."));
+inline const juce::String editorLoop = make (utf8 ("Петля"), utf8 ("Включена: клип играет по кругу. Выключена: один раз от старта до конца. Cmd+L ставит петлю вокруг выделенных нот."));
+inline const juce::String editorLoopStart = make (utf8 ("Начало петли"), utf8 ("В долях от начала клипа. Скобка на линейке тянется мышью."));
+inline const juce::String editorLoopEnd = make (utf8 ("Конец клипа"), utf8 ("В долях. Нота, перетянутая за этот край, удлиняет клип на целые такты."));
+inline const juce::String editorStart = make (utf8 ("Точка старта"), utf8 ("Откуда клип начинает играть при запуске. Треугольник на линейке тянется мышью."));
+inline const juce::String editorGrid = make (utf8 ("Сетка"), utf8 ("Шаг сетки и длина новой ноты. Cmd+1 мельче, Cmd+2 крупнее, Cmd+3 триоли."));
+inline const juce::String editorSnap = make (utf8 ("Прилипание"), utf8 ("Ноты прилипают к сетке при перетаскивании. Cmd во время перетаскивания отключает. Cmd+4."));
+inline const juce::String editorScale = make (utf8 ("Лад клипа"), utf8 ("Выбор тоники и лада. Строки вне лада затемнены, тоника подсвечена."));
+inline const juce::String editorOwnScale = make (utf8 ("Свой лад"), utf8 ("Выключено: клип показывает лад проекта и меняется вместе с ним."));
+inline const juce::String editorScaleOnly = make (utf8 ("Только лад"), utf8 ("Новые ноты и перетаскивание по высоте попадают только на ноты лада."));
+inline const juce::String editorFold = make (utf8 ("Fold"), utf8 ("Показывает только строки, где есть ноты (или строки лада, если нот нет)."));
+inline const juce::String editorQuantise = make (utf8 ("Квантизация"), utf8 ("Cmd+U квантует выделенные ноты по текущим настройкам, Cmd+Shift+U открывает окно настроек."));
+inline const juce::String editorTranspose = make (utf8 ("Транспонирование"), utf8 ("Сдвигает выделенные ноты или все. С ладом ±1 идёт по ступеням лада, ±12 всегда на октаву. Cmd+Shift+стрелки."));
+inline const juce::String editorPencil = make (utf8 ("Карандаш"), utf8 ("Щелчок рисует ноту, щелчок по ноте удаляет. Клавиша B."));
+inline const juce::String editorPreview = make (utf8 ("Прослушивание"), utf8 ("Новая, выделенная и перетаскиваемая нота звучит коротко."));
+inline const juce::String editorRuler = make (utf8 ("Линейка"), utf8 ("Скобка петли: тяните края и середину. Треугольник: точка старта. Щелчок ставит курсор вставки."));
+inline const juce::String editorKeys = make (utf8 ("Клавиши"), utf8 ("Щелчок играет ноту на дорожке и выделяет все ноты этой высоты."));
+inline const juce::String editorGridArea = make (utf8 ("Сетка нот"), utf8 ("Двойной щелчок рисует или удаляет ноту, рамка выделяет, правый край ноты меняет длину, Alt копирует, Cmd отключает прилипание. Cmd+колесо: масштаб, Alt+колесо: высота строк."));
+inline const juce::String editorVelocity = make (utf8 ("Сила нажатия"), utf8 ("Тяните столбик. Alt+тянуть по нескольким столбикам рисует рампу."));
+inline const juce::String editorControllers = make (utf8 ("Контроллеры"), utf8 ("Колесо модуляции, питч-бенд и сустейн. Полоса сворачивается."));
+inline const juce::String arrangementView = make (utf8 ("Arrangement"), utf8 ("Появится на этапе 3. Tab возвращает в Session."));
+inline const juce::String keyboardStripHelp = make (utf8 ("Экранная клавиатура"), utf8 ("Играет на выбранной дорожке. Cmd+Alt+K прячет полосу."));
+inline const juce::String keyboardInScale = make (utf8 ("В ладу"), utf8 ("Клавиши A S D F G H J K L ; играют подряд ступени лада проекта. Внешней MIDI-клавиатуры это не касается."));
+inline const juce::String keyboardChords = make (utf8 ("Аккорды"), utf8 ("Одна клавиша играет трезвучие лада проекта (нужен включённый лад и режим «В ладу»)."));
+inline const juce::String trackTranspose = make (utf8 ("Транспонирование дорожки"), utf8 ("Сдвигает всё, что идёт в инструмент дорожки, включая живую игру, на −48…+48 полутонов. Ноты клипов не меняются."));
+inline const juce::String projectTempoField = make (utf8 ("Темп"), utf8 ("Темп проекта в ударах в минуту."));
+inline const juce::String projectSignatureField = make (utf8 ("Размер"), utf8 ("Размер такта проекта."));
+inline const juce::String projectTuning = make (utf8 ("Строй A4"), utf8 ("Частота ноты ля первой октавы, 415…466 Гц. Встроенные синты. У сторонних плагинов строй настраивается в самом плагине. Двойной щелчок возвращает 440."));
+inline const juce::String projectAuthor = make (utf8 ("Автор"), utf8 ("Имя автора проекта."));
+inline const juce::String projectNotes = make (utf8 ("Заметки"), utf8 ("Свободный текст, сохраняется вместе с проектом."));
 inline const juce::String infoBar = make (utf8 ("Строка подсказок"), utf8 ("Показывает название и действие элемента под мышью."));
 } // namespace help
 } // namespace Strings

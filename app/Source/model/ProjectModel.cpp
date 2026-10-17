@@ -280,6 +280,11 @@ ClipRef ProjectModel::createClip (const TrackRef& track, int scene, double lengt
     c.setProperty (ids::loopStart, 0.0, nullptr);
     c.setProperty (ids::loopEnd, lengthBeats, nullptr);
     c.setProperty (ids::startOffset, 0.0, nullptr);
+    c.setProperty (ids::loop, true, nullptr);
+    // A new clip starts out with the project's scale; it follows the project until "own scale" is switched on.
+    c.setProperty (ids::ownScale, false, nullptr);
+    c.setProperty (ids::scaleRoot, scaleRoot(), nullptr);
+    c.setProperty (ids::scaleMode, scaleMode(), nullptr);
 
     auto slot = track.slotsNode().getChild (scene);
     jassert (slot.isValid());

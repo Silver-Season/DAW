@@ -74,7 +74,7 @@ private:
             setContentOwned (content, true);
             content->attachKeyListeners (*this);
             setResizable (true, true);
-            setResizeLimits (1100, 700, 8000, 6000);
+            setResizeLimits (1210, 700, 8000, 6000);
             if (const auto state = settings.windowState(); state.isNotEmpty())
                 restoreWindowStateFromString (state);
             else

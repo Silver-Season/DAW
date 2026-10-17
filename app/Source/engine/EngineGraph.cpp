@@ -31,6 +31,9 @@ uint64_t hashClip (const ClipRef& clip)
 {
     Hasher h;
     h.add (clip.lengthBeats());
+    h.add (clip.loopStart());
+    h.add (clip.startOffset());
+    h.add (clip.loopEnabled());
     h.add (clip.colour());
     const auto name = clip.name();
     h.add (name.toRawUTF8(), name.getNumBytesAsUTF8());
@@ -161,6 +164,7 @@ void AudioEngine::applyTrackProperties (TrackRuntime& rt, const TrackRef& t)
     rt.solo = t.solo();
     rt.arm = t.arm();
     rt.inputMode = (int) inputModeFor (t.input());
+    rt.transpose = juce::jlimit (-48, 48, t.transpose());
 }
 
 void AudioEngine::applyProjectProperties()
@@ -168,6 +172,11 @@ void AudioEngine::applyProjectProperties()
     tempo = model->tempo();
     quantise = model->launchQuantise();
     selectedTrackId = model->selectedTrack();
+    tuneA4 = (float) model->tuningA4();
+    preview.setTuneA4 (tuneA4.load());
+    for (auto& [id, d] : devices)
+        if (auto* prisma = dynamic_cast<PrismaProcessor*> (d->processor.get()))
+            prisma->setTuneA4 (tuneA4.load());
     const float db = model->masterVolumeDb();
     masterGain = db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db);
 }
@@ -179,7 +188,7 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     if (type == ids::TRACK)
     {
         if (property == ids::volumeDb || property == ids::pan || property == ids::mute || property == ids::solo
-            || property == ids::arm || property == ids::input)
+            || property == ids::arm || property == ids::input || property == ids::transpose)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             const auto it = runtimes.find ((int64_t) (juce::int64) tree.getProperty (ids::id, -1));
@@ -201,7 +210,8 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     }
     else if (type == ids::MASTER || type == ids::PROJECT)
     {
-        if (property == ids::volumeDb || property == ids::tempo || property == ids::launchQuantise || property == ids::selectedTrack)
+        if (property == ids::volumeDb || property == ids::tempo || property == ids::launchQuantise || property == ids::selectedTrack
+            || property == ids::tuningA4)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             applyProjectProperties();
@@ -364,6 +374,8 @@ DeviceInstance* AudioEngine::acquireDevice (const DeviceRef& d, std::set<int64_t
     instance->processor = std::move (processor);
     instance->enabled = d.enabled();
     instance->sourceKey = sourceKey;
+    if (auto* prisma = dynamic_cast<PrismaProcessor*> (instance->processor.get()))
+        prisma->setTuneA4 (tuneA4.load());
     prepareDevice (*instance); // before the graph that contains it is published
     auto* raw = instance.get();
     devices[id] = std::move (instance);
@@ -384,6 +396,9 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
         c->name = clip.name().toStdString();
         c->colour = 0;
         c->lengthBeats = clip.lengthBeats();
+        c->loopStart = clip.loopStart();
+        c->startOffset = clip.startOffset();
+        c->loop = clip.loopEnabled();
         c->notes = clip.notes();
         entry.clip = std::move (c);
         entry.hash = hash;

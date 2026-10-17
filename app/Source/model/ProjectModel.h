@@ -51,6 +51,59 @@ public:
     juce::String name() const { return root.getProperty (ids::name).toString(); }
     void setName (const juce::String& n) { root.setProperty (ids::name, n, &undo); }
 
+    // Time signature and the length of a bar in beats (a beat is a quarter note): 4/4 = 4, 6/8 = 3, 3/4 = 3.
+    int sigNum() const { return juce::jlimit (1, 32, (int) root.getProperty (ids::sigNum, 4)); }
+    int sigDen() const { return juce::jlimit (1, 32, (int) root.getProperty (ids::sigDen, 4)); }
+    void setSignature (int num, int den)
+    {
+        root.setProperty (ids::sigNum, num, &undo);
+        root.setProperty (ids::sigDen, den, &undo);
+    }
+    double beatsPerBar() const { return (double) sigNum() * 4.0 / (double) sigDen(); }
+
+    // The scale of the project (docs/spec/02, task 2.7): root 0..11 (C = 0) and a key of daw::music::allScales(),
+    // "" = off. New clips copy it; clips without their own scale follow it.
+    int scaleRoot() const { return juce::jlimit (0, 11, (int) root.getProperty (ids::scaleRoot, 0)); }
+    juce::String scaleMode() const { return root.getProperty (ids::scaleMode).toString(); }
+    void setScale (int rootNote, const juce::String& mode)
+    {
+        root.setProperty (ids::scaleRoot, rootNote, &undo);
+        root.setProperty (ids::scaleMode, mode, &undo);
+    }
+
+    // Frequency of A4 in Hz for the built-in synths, 415..466.
+    static constexpr double kMinTuning = 415.0, kMaxTuning = 466.0, kDefaultTuning = 440.0;
+    double tuningA4() const { return juce::jlimit (kMinTuning, kMaxTuning, (double) root.getProperty (ids::tuningA4, kDefaultTuning)); }
+    void setTuningA4 (double hz) { root.setProperty (ids::tuningA4, juce::jlimit (kMinTuning, kMaxTuning, hz), &undo); }
+
+    juce::String author() const { return root.getProperty (ids::author).toString(); }
+    void setAuthor (const juce::String& v) { root.setProperty (ids::author, v, &undo); }
+    juce::String projectNotes() const { return root.getProperty (ids::notes).toString(); }
+    void setProjectNotes (const juce::String& v) { root.setProperty (ids::notes, v, &undo); }
+
+    // The settings of "Quantise..." in the clip editor, remembered in the project. Grid in beats (0.25 = 1/16).
+    struct QuantiseSettings
+    {
+        double grid = 0.25, strength = 1.0, swing = 0.0; // strength 0..1, swing 0..0.75
+        bool ends = false;
+    };
+    QuantiseSettings quantiseSettings() const
+    {
+        QuantiseSettings q;
+        q.grid = juce::jlimit (1.0 / 16.0, 4.0, (double) root.getProperty (ids::quantGrid, q.grid));
+        q.strength = juce::jlimit (0.0, 1.0, (double) root.getProperty (ids::quantStrength, q.strength));
+        q.swing = juce::jlimit (0.0, 0.75, (double) root.getProperty (ids::quantSwing, q.swing));
+        q.ends = (bool) root.getProperty (ids::quantEnds, q.ends);
+        return q;
+    }
+    void setQuantiseSettings (const QuantiseSettings& q)
+    {
+        root.setProperty (ids::quantGrid, q.grid, &undo);
+        root.setProperty (ids::quantStrength, q.strength, &undo);
+        root.setProperty (ids::quantSwing, q.swing, &undo);
+        root.setProperty (ids::quantEnds, q.ends, &undo);
+    }
+
     //==========================================================================
     // Tracks
     TrackRef addTrack (const juce::String& type, int insertIndex = -1);

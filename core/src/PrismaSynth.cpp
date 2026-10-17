@@ -12,6 +12,8 @@ namespace
 
     inline float noteToHz (float note) noexcept { return 440.0f * std::exp2 ((note - 69.0f) / 12.0f); }
     inline float hzToNote (float hz) noexcept { return 69.0f + 12.0f * std::log2 (hz / 440.0f); }
+    // Pitch of a note with A4 tuned to `a4` Hz. Filter cutoffs keep the 440 Hz mapping above: they are not notes.
+    inline float tunedHz (float note, float a4) noexcept { return a4 * std::exp2 ((note - 69.0f) / 12.0f); }
 
     inline int asInt (float v) noexcept { return (int) std::lround (v); }
 }
@@ -157,7 +159,7 @@ void PrismaVoice::render (float* outL, float* outR, int numSamples, const VoiceC
             const auto posDest = o == 0 ? ModDest::OscAPos : ModDest::OscBPos;
             const auto levelDest = o == 0 ? ModDest::OscALevel : ModDest::OscBLevel;
             const float n = pitch + 12.0f * op.octave + op.semi + op.fine * 0.01f + 24.0f * dst[(size_t) pitchDest];
-            freq[o] = noteToHz (n);
+            freq[o] = tunedHz (n, ctx.tuneA4);
             const float targetPos = std::clamp (op.wtPos + dst[(size_t) posDest], 0.0f, 1.0f);
             smoothedPos[o] = smoothedPos[o] < 0.0f ? targetPos : smoothedPos[o] + (targetPos - smoothedPos[o]) * 0.35f;
             wtPos[o] = smoothedPos[o];
@@ -166,7 +168,7 @@ void PrismaVoice::render (float* outL, float* outR, int numSamples, const VoiceC
 
         const float subLevel = std::clamp (p.subLevel + dst[(size_t) ModDest::SubLevel], 0.0f, 1.0f);
         const float noiseLevel = std::clamp (p.noiseLevel + dst[(size_t) ModDest::NoiseLevel], 0.0f, 1.0f);
-        const double subInc = noteToHz (pitch - 12.0f * (float) (1 + asInt (p.subOctave))) / sampleRate;
+        const double subInc = tunedHz (pitch - 12.0f * (float) (1 + asInt (p.subOctave)), ctx.tuneA4) / sampleRate;
 
         if (filterOn)
         {

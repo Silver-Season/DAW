@@ -10,6 +10,15 @@ target_sources(DAW PRIVATE
     Source/DemoProject.cpp
     Source/MainComponent.cpp
     Source/ui/AppMenu.cpp
+    Source/ui/ArrangementView.cpp
+    Source/ui/KeyboardStrip.cpp
+    Source/ui/PianoRoll.cpp
+    Source/ui/PianoRollGrid.cpp
+    Source/ui/PianoRollLanes.cpp
+    Source/ui/PianoRollProps.cpp
+    Source/ui/ProjectPropertiesWindow.cpp
+    Source/ui/QuantiseWindow.cpp
+    Source/ui/ScalePicker.cpp
     Source/ui/BrowserPanel.cpp
     Source/ui/DetailPanel.cpp
     Source/ui/Dialogs.cpp

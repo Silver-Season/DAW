@@ -5,6 +5,8 @@
 #include "daw/dsp/Wavetable.h"
 #include "daw/dsp/WavetableOscillator.h"
 #include "daw/engine/Clip.h"
+#include "daw/engine/Quantize.h"
+#include "daw/music/Scales.h"
 #include "daw/project/VersionHistory.h"
 #include "daw/synth/PrismaSynth.h"
 
@@ -378,6 +380,222 @@ int main()
         // pruning again changes nothing, and a short list is untouched
         check (versionsToPrune (kept).empty(), "pruning is idempotent");
         check (versionsToPrune ({}).empty(), "empty list");
+    });
+
+    //==========================================================================
+    // docs/spec/02-midi-recording.md, task 2.4 / 2.7
+    test ("quantise: strength, swing, triplets, ends (spec test 6)", [] {
+        using engine::Note;
+        const double sixteenth = 0.25, eighth = 0.5;
+
+        // strength 100 % puts the start on the grid, the length stays
+        {
+            const Note n { 1.13, 0.4, 60, 100 };
+            const auto q = engine::quantizeNote (n, sixteenth, 1.0, 0.0, false);
+            check (std::abs (q.start - 1.25) < 1e-9 && std::abs (q.length - 0.4) < 1e-9, "100 % lands on the 1/16 line and keeps the length");
+        }
+        // 50 % goes half way
+        {
+            const Note n { 1.13, 0.4, 60, 100 };
+            const auto q = engine::quantizeNote (n, sixteenth, 0.5, 0.0, false);
+            check (std::abs (q.start - (1.13 + 0.5 * (1.25 - 1.13))) < 1e-9, "50 % goes half way to the line");
+            check (std::abs (engine::quantizeNote (n, sixteenth, 0.0, 0.0, false).start - 1.13) < 1e-12, "0 % changes nothing");
+        }
+        // a note before the line goes back to it
+        check (std::abs (engine::quantizeNote ({ 2.6, 1, 60, 100 }, eighth, 1.0, 0.0, false).start - 2.5) < 1e-9, "snaps backwards too");
+
+        // swing 50 % moves the second eighths by a thirty-second (0.125 beat); the first ones stay
+        {
+            std::vector<Note> notes { { 0.0, 0.25, 60, 100 }, { 0.5, 0.25, 60, 100 }, { 1.0, 0.25, 60, 100 }, { 1.5, 0.25, 60, 100 } };
+            const auto q = engine::quantizeNotes (notes, eighth, 1.0, 0.5, false);
+            check (std::abs (q[0].start - 0.0) < 1e-9 && std::abs (q[2].start - 1.0) < 1e-9, "first eighths stay on the beat");
+            check (std::abs (q[1].start - 0.625) < 1e-9 && std::abs (q[3].start - 1.625) < 1e-9, "second eighths move by 1/32 at 50 % swing");
+            // a note played on the swung position stays there
+            check (std::abs (engine::quantizeNote ({ 0.62, 0.2, 60, 100 }, eighth, 1.0, 0.5, false).start - 0.625) < 1e-9, "the swung line is the target");
+        }
+        // triplets are counted from the bar: 1/8 triplet = 1/3 beat
+        {
+            const double t = 1.0 / 3.0;
+            check (std::abs (engine::quantizeNote ({ 1.30, 0.2, 60, 100 }, t, 1.0, 0.0, false).start - 4.0 / 3.0) < 1e-9, "1/8T line 4 is at 4/3 beat");
+            check (std::abs (engine::quantizeNote ({ 3.4, 0.2, 60, 100 }, t, 1.0, 0.0, false).start - 10.0 / 3.0) < 1e-9, "1/8T line 10 is at 10/3 beat");
+            check (std::abs (engine::quantizeNote ({ 3.99, 0.2, 60, 100 }, t, 1.0, 0.0, false).start - 4.0) < 1e-9, "the bar line is a triplet line too");
+        }
+        // ends
+        {
+            const auto q = engine::quantizeNote ({ 1.13, 0.4, 60, 100 }, sixteenth, 1.0, 0.0, true);
+            check (std::abs (q.start - 1.25) < 1e-9 && std::abs (q.start + q.length - 1.5) < 1e-9, "the end goes to its own line");
+            const auto tiny = engine::quantizeNote ({ 1.02, 0.03, 60, 100 }, sixteenth, 1.0, 0.0, true);
+            check (tiny.length > 0.0, "a note never collapses to nothing");
+            check (engine::quantizeNote ({ 1.1, 0.4, 61, 77 }, sixteenth, 1.0, 0.0, true).pitch == 61, "pitch and velocity are untouched");
+        }
+        check (engine::quantizeNotes ({}, eighth, 1.0, 0.0, false).empty(), "empty list");
+    });
+
+    test ("scales: inScale, snapToScale, degreeToNote (spec test 13)", [] {
+        using namespace music;
+        const Scale* major = findScale ("major");
+        const Scale* minor = findScale ("minor");
+        const Scale* penta = findScale ("minorPentatonic");
+        check (major != nullptr && minor != nullptr && penta != nullptr, "scales are found by key");
+        check (findScale ("") == nullptr && findScale ("nonsense") == nullptr, "no scale for \"\" and unknown keys");
+        check (allScales().size() == 13, "twelve scales and the chromatic one");
+
+        // inScale: C major has only white keys
+        for (int n = 48; n < 72; ++n)
+        {
+            const int pc = n % 12;
+            const bool white = pc == 0 || pc == 2 || pc == 4 || pc == 5 || pc == 7 || pc == 9 || pc == 11;
+            check (inScale (n, 0, *major) == white, "C major membership of " + std::to_string (n));
+        }
+        check (inScale (66, 6, *major) && inScale (70, 6, *major) && ! inScale (67, 6, *major), "F# major: F# A# in, G out");
+        check (inScale (57, 9, *minor) && inScale (60, 9, *minor) && ! inScale (61, 9, *minor), "A minor");
+        check (inScale (-12, 0, *major) && ! inScale (-11, 0, *major), "negative notes work");
+
+        // snapToScale
+        check (snapToScale (60, 0, *major, 1) == 60 && snapToScale (60, 0, *major, -1) == 60 && snapToScale (60, 0, *major, 0) == 60, "an in-scale note stays");
+        check (snapToScale (61, 0, *major, 1) == 62 && snapToScale (61, 0, *major, -1) == 60, "C# goes up to D or down to C");
+        check (snapToScale (61, 0, *major, 0) == 60, "a tie goes down");
+        check (snapToScale (66, 0, *major, 0) == 65 && snapToScale (68, 0, *major, 0) == 67, "nearest note, F# -> F, G# -> G");
+        check (snapToScale (70, 0, *major, 0) == 69, "A# -> A in C major");
+        check (snapToScale (71, 0, *penta, 1) == 72 && snapToScale (71, 0, *penta, -1) == 70, "C minor pentatonic around B");
+        check (snapToScale (11, 0, *major, 1) == 11 && snapToScale (13, 0, *major, 1) == 14, "low notes");
+        check (snapToScale (-1, 0, *major, -1) == -1 && snapToScale (-2, 0, *major, 1) == -1, "below zero");
+
+        // +1 in C major moves E to F and F to G (spec test 15, the musical half)
+        check (snapToScale (64 + 1, 0, *major, 1) == 65, "E + 1 step = F");
+        check (snapToScale (65 + 1, 0, *major, 1) == 67, "F + 1 step = G");
+        check (snapToScale (65 - 1, 0, *major, -1) == 64, "F - 1 step = E");
+        check (snapToScale (60 - 1, 0, *major, -1) == 59, "C - 1 step = B");
+
+        // degreeToNote
+        const int cMajor[] { 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84 };
+        for (int d = 0; d < 15; ++d)
+            check (degreeToNote (d, 0, *major, 60) == cMajor[d], "C major degree " + std::to_string (d));
+        check (degreeToNote (-1, 0, *major, 60) == 59 && degreeToNote (-7, 0, *major, 60) == 48 && degreeToNote (-8, 0, *major, 60) == 47, "negative degrees");
+        const int aMinor[] { 57, 59, 60, 62, 64, 65, 67, 69 };
+        for (int d = 0; d < 8; ++d)
+            check (degreeToNote (d, 9, *minor, 60) == aMinor[d], "A minor degree " + std::to_string (d) + " (tonic at or below the base note)");
+        const int cPenta[] { 60, 63, 65, 67, 70, 72, 75, 77, 79, 82, 84 };
+        for (int d = 0; d < 11; ++d)
+            check (degreeToNote (d, 0, *penta, 60) == cPenta[d], "C minor pentatonic degree " + std::to_string (d));
+        check (degreeToNote (5, 2, *major, 62) == 71 && degreeToNote (2, 2, *major, 64) == 66, "D major, base octave from the base note");
+        check (degreeToNote (0, 0, *major, 71) == 60, "the base note picks the octave of the tonic below it");
+        check (notesPerOctave (*major) == 7 && notesPerOctave (*penta) == 5, "notes per octave");
+    });
+
+    test ("Prisma follows tuneA4 (spec test 14)", [] {
+        // A pure sine (first frame of the Basic Shapes table), one voice, no detune, no filter: the spectrum
+        // must have its peak at the tuned frequency.
+        const double sr = 48000.0;
+        const auto measure = [&] (float a4) {
+            synth::PrismaSynth s;
+            s.prepare (sr, 512);
+            auto p = synth::PrismaParams();
+            p.osc[0].on = 1;
+            p.osc[0].table = 0;
+            p.osc[0].wtPos = 0.0f;
+            p.osc[0].octave = 0;
+            p.osc[0].semi = 0;
+            p.osc[0].fine = 0;
+            p.osc[0].level = 1.0f;
+            p.osc[0].unison = 1;
+            p.osc[0].detune = 0;
+            p.osc[1].on = 0;
+            p.subOn = 0;
+            p.noiseLevel = 0;
+            p.filterOn = 0;
+            p.env[0] = { 0.001f, 0.1f, 1.0f, 0.1f };
+            for (auto& m : p.mod)
+                m.amount = 0;
+            s.setParams (p);
+            s.setTuneA4 (a4);
+            const int n = 1 << 16;
+            std::vector<float> l ((size_t) n), r ((size_t) n);
+            const auto on = MidiEvent::noteOn (0, 69, 100);
+            for (int i = 0; i < n; i += 512)
+                s.process (l.data() + i, r.data() + i, 512, i == 0 ? &on : nullptr, i == 0 ? 1 : 0);
+            std::vector<std::complex<double>> bins ((size_t) n);
+            for (int i = 0; i < n; ++i)
+            {
+                const double w = 0.5 - 0.5 * std::cos (2.0 * std::numbers::pi * i / n); // Hann window
+                bins[(size_t) i] = w * l[(size_t) i];
+            }
+            dsp::fft (bins, false);
+            size_t best = 1;
+            for (size_t k = 1; k < (size_t) n / 2; ++k)
+                if (std::abs (bins[k]) > std::abs (bins[best]))
+                    best = k;
+            // parabolic interpolation of the peak
+            const double a = std::log (std::abs (bins[best - 1])), b = std::log (std::abs (bins[best])), c = std::log (std::abs (bins[best + 1]));
+            const double offset = 0.5 * (a - c) / (a - 2.0 * b + c);
+            return ((double) best + offset) * sr / n;
+        };
+        const double f432 = measure (432.0f), f440 = measure (440.0f), f415 = measure (415.0f);
+        std::printf("    A4=432 -> %.3f Hz, 440 -> %.3f Hz, 415 -> %.3f Hz\n", f432, f440, f415);
+        check (std::abs (f432 - 432.0) < 0.5, "tuneA4 = 432 gives 432 +- 0.5 Hz");
+        check (std::abs (f440 - 440.0) < 0.5, "the default stays at 440 Hz");
+        check (std::abs (f415 - 415.0) < 0.5, "415 Hz (baroque pitch)");
+    });
+
+    test ("clips: start point, loop brace and one-shots", [] {
+        const auto onsOf = [] (const engine::MidiClip& clip, double fromBeat, double toBeat) {
+            // renders in blocks of 0.25 beat at 100 samples per beat; returns (beat, pitch) of each note-on
+            std::vector<std::pair<double, int>> out;
+            std::vector<MidiEvent> ev;
+            for (double a = fromBeat; a < toBeat - 1e-9; a += 0.25)
+            {
+                ev.clear();
+                engine::renderClip (clip, 0.0, a, a + 0.25, 100.0, 25, ev);
+                for (const auto& e : ev)
+                    if ((e.status & 0xF0) == 0x90)
+                        out.emplace_back (a + e.sampleOffset / 100.0, e.data1);
+            }
+            return out;
+        };
+
+        engine::MidiClip clip;
+        clip.lengthBeats = 4;
+        for (int i = 0; i < 4; ++i)
+            clip.notes.push_back ({ (double) i, 0.5, 60 + i, 100 });
+
+        // default: loops the whole clip
+        auto a = onsOf (clip, 0, 8);
+        check (a.size() == 8 && a[4].second == 60 && std::abs (a[4].first - 4.0) < 0.011, "defaults loop 0..4");
+
+        // start point inside the clip: the first pass starts there, later passes start at the brace
+        clip.startOffset = 2.0;
+        a = onsOf (clip, 0, 6);
+        check (a.size() == 6 && a[0].second == 62 && std::abs (a[0].first - 0.0) < 0.011, "plays from the start point");
+        check (a[2].second == 60 && std::abs (a[2].first - 2.0) < 0.011, "then the whole brace repeats from its own start");
+
+        // loop brace 1..3 repeats only the notes inside
+        clip.startOffset = 0.0;
+        clip.loopStart = 1.0;
+        clip.lengthBeats = 3.0;
+        a = onsOf (clip, 0, 7);
+        // pass 0 = notes 0,1,2 at beats 0,1,2; then the brace [1,3) every 2 beats: 1 at 3, 2 at 4, 1 at 5, 2 at 6
+        check (a.size() == 7, "brace plays " + std::to_string (a.size()) + " notes");
+        check (a.size() == 7 && a[3].second == 61 && std::abs (a[3].first - 3.0) < 0.011 && a[4].second == 62 && a[5].second == 61, "the brace repeats");
+        check (std::abs (clip.positionAfter (0.5) - 0.5) < 1e-9 && std::abs (clip.positionAfter (3.5) - 1.5) < 1e-9, "position inside the content");
+
+        // loop off: one pass, then the player lets go of the clip
+        clip.loop = false;
+        clip.loopStart = 0.0;
+        clip.lengthBeats = 2.0;
+        engine::ClipPlayer player;
+        std::vector<MidiEvent> out;
+        player.launch (0, &clip, 0.0, 0.0);
+        int ons = 0, offs = 0;
+        double beat = 0.0;
+        for (int i = 0; i < 40; ++i, beat += 0.25)
+        {
+            out.clear();
+            player.process (beat, beat + 0.25, 100.0, 25, out);
+            for (const auto& e : out)
+                ((e.status & 0xF0) == 0x90 ? ons : offs)++;
+        }
+        check (ons == 2 && offs == 2, "a one-shot clip plays its notes once");
+        check (player.playingSlot() == engine::ClipPlayer::kNoClip, "and ends after the first pass");
     });
 
     std::printf ("\n%d checks, %d failures\n", checks, failures);

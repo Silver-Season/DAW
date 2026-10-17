@@ -251,6 +251,18 @@ juce::Array<juce::File> BrowserSources::places() const
     return list;
 }
 
+bool BrowserSources::addPlaceFolder (const juce::File& folder)
+{
+    if (! folder.isDirectory())
+        return false;
+    auto folders = settings.placeFolders();
+    if (folders.contains (folder.getFullPathName()))
+        return false;
+    folders.add (folder.getFullPathName());
+    settings.setPlaceFolders (folders);
+    return true;
+}
+
 void BrowserSources::scanPlaces (bool onlyIfStale)
 {
     const auto now = juce::Time::getMillisecondCounter();

@@ -110,6 +110,31 @@ void testSearch()
     root.deleteRecursively();
 }
 
+void testDropFolder()
+{
+    std::printf ("[test] places: a dropped folder is linked once, a dropped file is ignored\n");
+    const auto root = makeTempFolder ("dropfolder");
+    const auto folder = root.getChildFile ("Samples");
+    folder.createDirectory();
+    const auto file = root.getChildFile ("loop.wav");
+    file.replaceWithText ("x");
+    juce::TemporaryFile settingsFile (".settings");
+    Settings settings (settingsFile.getFile());
+    juce::KnownPluginList plugins;
+    library::UserLibrary lib (root.getChildFile ("lib"));
+    BrowserSources sources (settings, plugins, lib);
+
+    check (settings.placeFolders().isEmpty(), "no places to begin with");
+    check (sources.addPlaceFolder (folder) && settings.placeFolders().size() == 1 && settings.placeFolders()[0] == folder.getFullPathName(),
+           "a folder goes into the settings by path");
+    check (folder.isDirectory() && folder.getChildFile ("loop.wav").exists() == false, "it is linked, nothing is copied into it");
+    check (! sources.addPlaceFolder (folder) && settings.placeFolders().size() == 1, "the same folder twice is not added again");
+    check (! sources.addPlaceFolder (file) && settings.placeFolders().size() == 1, "a file is ignored");
+    check (! sources.addPlaceFolder (root.getChildFile ("missing")) && settings.placeFolders().size() == 1, "a missing path is ignored");
+    check (sources.places().contains (folder), "the folder is among the places");
+    root.deleteRecursively();
+}
+
 void testPlaceScan()
 {
     std::printf ("[test] places: sounds and MIDI files are found, hidden and bookkeeping folders are not\n");
@@ -461,6 +486,7 @@ void tests::runBrowserTests()
 {
     testSearch();
     testPlaceScan();
+    testDropFolder();
     testFavouritesAndRecents();
     testDrops();
     testToneAndPreview();

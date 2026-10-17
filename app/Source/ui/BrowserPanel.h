@@ -13,7 +13,7 @@ namespace ui
 // The left panel (docs/spec/01-layout-project.md, task 1.5): search, the list of places to look in (recent
 // items, colour labels, the eight categories) and the items of the chosen one. Items drag out into the
 // Session View and the device chain; a double click or Enter puts the selected one on the selected track.
-class BrowserPanel final : public juce::Component, public HelpProvider, private juce::TextEditor::Listener, private juce::KeyListener,
+class BrowserPanel final : public juce::Component, public HelpProvider, public juce::FileDragAndDropTarget, private juce::TextEditor::Listener, private juce::KeyListener,
                            private juce::ScrollBar::Listener
 {
 public:
@@ -54,8 +54,18 @@ public:
     bool keyPressed (const juce::KeyPress&) override;
     void visibilityChanged() override;
     juce::String helpAt (juce::Point<int>) const override;
+    void paintOverChildren (juce::Graphics&) override;
+
+    // A folder dragged in from the file manager is added to Places (a file is ignored).
+    bool isInterestedInFileDrag (const juce::StringArray&) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override { setDropHighlight (true); }
+    void fileDragExit (const juce::StringArray&) override { setDropHighlight (false); }
+    void filesDropped (const juce::StringArray&, int, int) override;
+    bool isDropHighlighted() const { return dropHighlight; }
 
 private:
+    void setDropHighlight (bool);
+    bool dropHighlight = false;
     struct Nav
     {
         enum Kind { recent, label, category } kind = category;

@@ -9,6 +9,22 @@ namespace ui
 {
 namespace
 {
+// Where the playing clip is, 0..1 of its length, as the loop and the start point play it.
+double clipProgress (const ClipRef& clip, double elapsedBeats)
+{
+    if (! clip.isValid())
+        return std::fmod (elapsedBeats, 4.0) / 4.0;
+    daw::engine::MidiClip shape;
+    shape.lengthBeats = clip.lengthBeats();
+    shape.loopStart = clip.loopStart();
+    shape.startOffset = clip.startOffset();
+    shape.loop = clip.loopEnabled();
+    return juce::jlimit (0.0, 1.0, shape.positionAfter (elapsedBeats) / shape.endBeat());
+}
+} // namespace
+
+namespace
+{
 constexpr int kStep = SessionView::kSlotHeight + SessionView::kGap;
 
 // Soft glow around a playing clip, rendered once per size and colour (not every frame).
@@ -300,9 +316,7 @@ public:
                 if (next.playing >= 0 && playing)
                 {
                     const auto clip = view.model.findTrack (id).clipAt (next.playing);
-                    const double length = clip.isValid() ? juce::jmax (0.25, clip.lengthBeats()) : 4.0;
-                    const double pos = std::fmod (juce::jmax (0.0, beats - rt->playingStartBeat.load()), length) / length;
-                    next.progress = (int) (pos * 64.0);
+                    next.progress = (int) (clipProgress (clip, juce::jmax (0.0, beats - rt->playingStartBeat.load())) * 64.0);
                 }
             }
             next.blink2 = next.playing >= 0 ? blink2 : false;
@@ -416,9 +430,8 @@ public:
 
                 if (isPlaying)
                 {
-                    const double length = juce::jmax (0.25, clip.lengthBeats());
                     const double pos = view.engine.isPlaying()
-                                           ? std::fmod (juce::jmax (0.0, view.engine.getPositionBeats() - rt->playingStartBeat.load()), length) / length
+                                           ? clipProgress (clip, juce::jmax (0.0, view.engine.getPositionBeats() - rt->playingStartBeat.load()))
                                            : 0.0;
                     g.setColour (t.clipInk.withAlpha (0.6f));
                     g.fillRect (cell.getX(), cell.getBottom() - 3.0f, (float) cell.getWidth() * (float) pos, 3.0f);
@@ -534,9 +547,19 @@ public:
             return;
         const auto id = view.columnTrack[(size_t) column];
         if (view.model.findTrack (id).clipAt (scene).isValid())
-            return;
-        if (view.actions.createEmptyClip (id, scene).isValid())
+        {
+            // double-click on a clip: edit it
             view.commands.selectSlot (id, scene);
+            if (view.onOpenClip)
+                view.onOpenClip (id, scene);
+            return;
+        }
+        if (view.actions.createEmptyClip (id, scene).isValid())
+        {
+            view.commands.selectSlot (id, scene);
+            if (view.onOpenClip)
+                view.onOpenClip (id, scene);
+        }
     }
 
     void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override

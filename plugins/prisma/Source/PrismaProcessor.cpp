@@ -85,6 +85,7 @@ void PrismaProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     keyboardState.processNextMidiBuffer (midi, 0, numSamples, true);
     pullParameters();
+    synth.setTuneA4 (tuneA4.load (std::memory_order_relaxed));
 
     if (auto* head = getPlayHead())
         if (auto pos = head->getPosition())

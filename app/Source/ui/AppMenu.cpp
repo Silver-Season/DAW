@@ -45,6 +45,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::saveProject);
             add (commands::saveProjectAs);
             add (commands::saveTemplate);
+            add (commands::projectProperties);
             add (commands::versionHistory);
             menu.addSeparator();
             add (commands::exportAudio);
@@ -68,6 +69,9 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::duplicate);
             add (commands::deleteItem);
             add (commands::renameItem);
+            menu.addSeparator();
+            add (commands::quantiseNotes);
+            add (commands::quantiseOptions);
             break;
         case 2:
             add (commands::newTrack);
@@ -81,6 +85,8 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::toggleDetail);
             add (commands::toggleMixer);
             add (commands::switchView);
+            add (commands::toggleClipEditor);
+            add (commands::toggleKeyboardStrip);
             menu.addSeparator();
             add (commands::zoomIn);
             add (commands::zoomOut);

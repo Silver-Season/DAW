@@ -13,7 +13,10 @@ const int kRoots[4] = { 33, 29, 36, 31 };
 
 MidiClip padClip()
 {
-    MidiClip c { "Pad", 0, 16, {} };
+    MidiClip c;
+    c.name = "Pad";
+    c.colour = 0;
+    c.lengthBeats = 16;
     for (int bar = 0; bar < 4; ++bar)
         for (int n : kChords[bar])
             c.notes.push_back ({ bar * 4.0, 3.9, n, 80 });
@@ -22,7 +25,10 @@ MidiClip padClip()
 
 MidiClip arpClip()
 {
-    MidiClip c { "Arp", 0, 16, {} };
+    MidiClip c;
+    c.name = "Arp";
+    c.colour = 0;
+    c.lengthBeats = 16;
     for (int bar = 0; bar < 4; ++bar)
         for (int step = 0; step < 16; ++step)
         {
@@ -35,7 +41,10 @@ MidiClip arpClip()
 
 MidiClip bassClip (bool sustained)
 {
-    MidiClip c { "Bass", 0, 16, {} };
+    MidiClip c;
+    c.name = "Bass";
+    c.colour = 0;
+    c.lengthBeats = 16;
     for (int bar = 0; bar < 4; ++bar)
     {
         if (sustained)
@@ -49,7 +58,10 @@ MidiClip bassClip (bool sustained)
 
 MidiClip leadClip()
 {
-    MidiClip c { "Lead", 0, 16, {} };
+    MidiClip c;
+    c.name = "Lead";
+    c.colour = 0;
+    c.lengthBeats = 16;
     const struct
     {
         double start, len;

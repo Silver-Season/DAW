@@ -46,6 +46,7 @@ struct VoiceContext
     double sampleRate = 48000.0;
     double bpm = 120.0;
     float modWheel = 0.0f, aftertouch = 0.0f, pitchBendSemis = 0.0f;
+    float tuneA4 = 440.0f; // Hz of note 69; a project setting, not part of any preset
 };
 
 class PrismaVoice
@@ -96,6 +97,7 @@ public:
     void setParams (const PrismaParams& p) { params = p; }
     const PrismaParams& getParams() const noexcept { return params; }
     void setTempo (double bpm) noexcept { ctx.bpm = bpm; }
+    void setTuneA4 (float hz) noexcept { ctx.tuneA4 = hz < 400.0f ? 400.0f : (hz > 480.0f ? 480.0f : hz); }
 
     // Overwrites outL/outR with numSamples of audio. Events must be sorted by sampleOffset.
     void process (float* outL, float* outR, int numSamples, const MidiEvent* events, int numEvents);

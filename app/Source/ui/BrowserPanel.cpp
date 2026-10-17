@@ -793,10 +793,49 @@ void BrowserPanel::addPlaceFolder()
         const auto result = fc.getResult();
         if (result == juce::File())
             return;
-        auto folders = settings.placeFolders();
-        folders.addIfNotAlreadyThere (result.getFullPathName());
-        settings.setPlaceFolders (folders);
-        sources.scanPlaces (false);
+        if (sources.addPlaceFolder (result))
+            sources.scanPlaces (false);
     });
+}
+
+bool BrowserPanel::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& f : files)
+        if (juce::File (f).isDirectory())
+            return true;
+    return false;
+}
+
+void BrowserPanel::filesDropped (const juce::StringArray& files, int, int)
+{
+    setDropHighlight (false);
+    bool any = false;
+    for (const auto& f : files)
+        any = sources.addPlaceFolder (juce::File (f)) || any;
+    if (any)
+        sources.scanPlaces (false);
+}
+
+void BrowserPanel::setDropHighlight (bool on)
+{
+    if (on != dropHighlight)
+    {
+        dropHighlight = on;
+        repaint();
+    }
+}
+
+void BrowserPanel::paintOverChildren (juce::Graphics& g)
+{
+    if (! dropHighlight)
+        return;
+    const auto& t = theme();
+    const auto r = getLocalBounds().toFloat();
+    g.setColour (t.accent.withAlpha (0.14f));
+    g.fillRect (r);
+    strokeCell (g, r.reduced (3.0f), t.accent, 2.0f, 1.0f);
+    g.setColour (t.text);
+    g.setFont (t.uiFont (13.0f, 600));
+    g.drawText (Strings::browser::dropFolder, getLocalBounds().reduced (18), juce::Justification::centred, true);
 }
 } // namespace ui

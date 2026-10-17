@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Controls.h"
+#include "PianoRoll.h"
 #include "Selection.h"
 
 #include "../browser/BrowserActions.h"
@@ -13,7 +14,7 @@ namespace ui
 class DeviceChainView;
 
 // The bottom panel (232 px): a summary of the selected track on the left and its device chain on the right.
-// Stage 2 adds the clip editor next to the chain.
+// In clip-editor mode (double-click on a clip, Shift+Tab) a selected clip shows the piano roll in their place.
 class DetailPanel final : public juce::Component
 {
 public:
@@ -30,13 +31,26 @@ public:
     void setOpenDeviceHandler (std::function<void (int64_t deviceId)> handler);
     DeviceChainView& chain() { return *chainView; }
 
+    // Clip editor mode: the piano roll replaces the track summary and the chain while a clip is selected.
+    void setEditorMode (bool on);
+    bool editorMode() const { return editorOn; }
+    bool isEditorShown() const { return editorShown; }
+    PianoRoll& pianoRoll() { return *editor; }
+    // Fired when the editor appears or goes away, so the window can switch between the two panel heights.
+    std::function<void()> onEditorShownChanged;
+
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    AudioEngine& engine;
+    void updateEditor();
+
     ProjectModel& model;
+    SelectionState& selection;
     std::unique_ptr<DeviceChainView> chainView;
+    std::unique_ptr<PianoRoll> editor;
+    NumberField transposeField;
+    bool editorOn = false, editorShown = false;
     int64_t shownTrack = -1;
     juce::String shownSummary;
 };

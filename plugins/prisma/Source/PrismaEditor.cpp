@@ -251,7 +251,9 @@ KeyboardPanel::~KeyboardPanel()
 
 void KeyboardPanel::updateLabel()
 {
-    info.setText (juce::MidiMessage::getMidiNoteName (baseNote, true, true, 3) + "\nvel " + juce::String (velocity), juce::dontSendNotification);
+    info.setText (captionFormatter ? captionFormatter (baseNote, velocity)
+                                   : juce::MidiMessage::getMidiNoteName (baseNote, true, true, 3) + "\nvel " + juce::String (velocity),
+                  juce::dontSendNotification);
     // Shade the keys the computer keyboard reaches.
     keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, colours::panelEdge);
     keyboard.setKeyPressBaseOctave (baseNote / 12);
@@ -261,10 +263,13 @@ void KeyboardPanel::updateLabel()
 void KeyboardPanel::shiftOctave (int delta)
 {
     const int next = juce::jlimit (12, 108, baseNote + 12 * delta);
-    if (next == baseNote)
-        return;
-    baseNote = next;
-    updateLabel();
+    if (next != baseNote)
+    {
+        baseNote = next;
+        updateLabel();
+    }
+    if (onChanged)
+        onChanged (false);
 }
 
 void KeyboardPanel::releaseAll()
@@ -287,6 +292,12 @@ void KeyboardPanel::releaseKeysNotDown()
         }
 }
 
+int KeyboardPanel::whiteKeyDegree (int i)
+{
+    static constexpr int degrees[17] = { 0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6, 7, -1, 8, -1, 9 };
+    return i >= 0 && i < 17 ? degrees[i] : -1;
+}
+
 bool KeyboardPanel::handleKeyPressed (const juce::KeyPress& key)
 {
     if (key.getModifiers().isCommandDown() || key.getModifiers().isCtrlDown())
@@ -296,8 +307,8 @@ bool KeyboardPanel::handleKeyPressed (const juce::KeyPress& key)
     {
         case 'z': shiftOctave (-1); return true;
         case 'x': shiftOctave (1); return true;
-        case 'c': velocity = juce::jmax (1, velocity - 20); updateLabel(); return true;
-        case 'v': velocity = juce::jmin (127, velocity + 20); updateLabel(); return true;
+        case 'c': velocity = juce::jmax (1, velocity - 20); updateLabel(); if (onChanged) onChanged (true); return true;
+        case 'v': velocity = juce::jmin (127, velocity + 20); updateLabel(); if (onChanged) onChanged (true); return true;
         default: break;
     }
     return juce::String (kKeys).containsChar (c); // swallow note keys so they don't beep
@@ -313,8 +324,11 @@ bool KeyboardPanel::handleKeyStateChanged()
         auto& held = heldNote[(size_t) i];
         if (down && held < 0 && ! modifierDown)
         {
-            const int note = baseNote + i;
-            if (note <= 127)
+            int note = baseNote + i;
+            if (noteForKey)
+                if (const int mapped = noteForKey (i, baseNote); mapped != kDefaultNote)
+                    note = mapped;
+            if (note >= 0 && note <= 127)
             {
                 state.noteOn (1, note, (float) velocity / 127.0f);
                 held = note;

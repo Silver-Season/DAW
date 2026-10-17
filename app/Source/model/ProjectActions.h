@@ -49,6 +49,19 @@ public:
     void duplicateScene (int scene);
     bool deleteScene (int scene); // refuses to delete the last scene
 
+    // Project settings of stage 2 (the window "Project properties", the scale button of the transport)
+    void setProjectScale (int root, const juce::String& mode);
+    void setProjectTuning (double hz);
+    void setProjectSignature (int num, int den);
+    void setProjectAuthor (const juce::String&);
+    void setProjectNotes (const juce::String&);
+    void setQuantiseSettings (const ProjectModel::QuantiseSettings&);
+
+    // Clip settings of the clip editor
+    void setClipLoopEnabled (int64_t clipId, bool on);
+    void setClipScale (int64_t clipId, bool own, int root, const juce::String& mode);
+    void setTrackTranspose (int64_t trackId, int semitones);
+
     // Devices of the selected track's chain
     void removeDevice (int64_t deviceId);
     void moveDevice (int64_t deviceId, int newIndex);

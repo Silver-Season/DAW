@@ -41,6 +41,11 @@ public:
     const daw::dsp::Wavetable* getTable (int index) const { return synth.getTable (index); }
     int getNumActiveVoices() const { return activeVoices.load(); }
 
+    // Frequency of A4 in Hz. A project setting the DAW gives every Prisma it hosts: it is not a plugin parameter,
+    // so it is neither automated nor saved in presets or in the plugin state.
+    void setTuneA4 (float hz) noexcept { tuneA4.store (hz, std::memory_order_relaxed); }
+    float getTuneA4() const noexcept { return tuneA4.load (std::memory_order_relaxed); }
+
     juce::AudioProcessorValueTreeState apvts;
     juce::MidiKeyboardState keyboardState; // on-screen keyboard in the editor
 
@@ -53,6 +58,7 @@ private:
     std::vector<daw::MidiEvent> events;
     int currentProgram = 0;
     std::atomic<int> activeVoices { 0 };
+    std::atomic<float> tuneA4 { 440.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PrismaProcessor)
 };

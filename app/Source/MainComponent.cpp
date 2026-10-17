@@ -71,8 +71,8 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
       library (settings.libraryPath().isNotEmpty() ? juce::File (settings.libraryPath()) : library::UserLibrary::defaultRoot()),
       sources (settings, e.getKnownPlugins(), library), browserActions (m, e, library),
       doc (e, m, settings, library, juce::File::getSpecialLocation (juce::File::userMusicDirectory)), editCommands (e, m, actions, selection),
-      menuModel (commandManager), keyboard (e.getKeyboardState()),
-      browserWidth (settings.browserWidth()), detailHeight (settings.detailHeight()),
+      menuModel (commandManager), computerKeys (e.getKeyboardState()),
+      browserWidth (settings.browserWidth()), detailHeight (settings.detailHeight()), editorHeight (settings.editorHeight()),
       browserVisible (settings.browserVisible()), detailVisible (settings.detailVisible())
 {
     setHelpText (Strings::help::logo);
@@ -101,9 +101,27 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detail->chain().onPresetMenu = [this] (int64_t deviceId, juce::Point<int> screenPosition) { showDeviceMenu (deviceId, screenPosition); };
     detail->chain().setBrowserActions (&browserActions);
     detail->chain().onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
+    arrangement = std::make_unique<ui::ArrangementView> (model);
+    session->onOpenClip = [this] (int64_t trackId, int scene) { openClipEditor (trackId, scene); };
+    detail->onEditorShownChanged = [this] {
+        resized();
+        commandManager.commandStatusChanged();
+    };
+    detail->pianoRoll().onClipExtended = [this] (double beats) { infoBar->showMessage (Strings::editor::loopExtended (beats), 3500); };
+    topBar->onViewSwitched = [this] (bool toArrangement) { setArrangementShown (toArrangement); };
+    keyboardStrip = std::make_unique<ui::KeyboardStrip> (computerKeys);
+    computerKeys.projectScale = [this] { return ui::ComputerKeys::ScaleInfo { model.scaleRoot(), model.scaleMode() }; };
     infoBar = std::make_unique<ui::InfoBar> (*this);
+    computerKeys.onMessage = [this] (const juce::String& text) { infoBar->showMessage (text, 2500); };
+    computerKeys.onStateChanged = [this] {
+        topBar->setComputerKeysOn (computerKeys.isOn());
+        topBar->setKeysOctave (computerKeys.octaveText());
+    };
+    topBar->setKeysOctave (computerKeys.octaveText());
 
-    for (auto* c : std::initializer_list<juce::Component*> { topBar.get(), browser.get(), session.get(), detail.get(), infoBar.get(),
+    arrangement->setVisible (false);
+    keyboardStrip->setVisible (false);
+    for (auto* c : std::initializer_list<juce::Component*> { topBar.get(), browser.get(), session.get(), arrangement.get(), keyboardStrip.get(), detail.get(), infoBar.get(),
                                                               &browserSplitter, &detailSplitter, &browserTab, &detailTab, &scanlines })
         addAndMakeVisible (c);
 
@@ -117,10 +135,33 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
         settings.setBrowserWidth (browserWidth);
         resized();
     };
-    detailSplitter.onDragStart = [this] { dragStartSize = detailHeight; };
+    detailSplitter.onDragStart = [this] { dragStartSize = currentDetailHeight(); };
     detailSplitter.onDrag = [this] (int delta) {
-        detailHeight = juce::jlimit (ui::DetailPanel::kMinHeight, ui::DetailPanel::kMaxHeight, dragStartSize - delta);
-        settings.setDetailHeight (detailHeight);
+        if (detail->isEditorShown())
+        {
+            editorHeight = juce::jlimit (ui::DetailPanel::kMinHeight, juce::jmax (ui::DetailPanel::kMinHeight, getHeight() - 260), dragStartSize - delta);
+            settings.setEditorHeight (editorHeight);
+        }
+        else
+        {
+            detailHeight = juce::jlimit (ui::DetailPanel::kMinHeight, ui::DetailPanel::kMaxHeight, dragStartSize - delta);
+            settings.setDetailHeight (detailHeight);
+        }
+        resized();
+    };
+    // Double-click: back and forth between the usual height and a tall editor
+    detailSplitter.onDoubleClick = [this] {
+        const int tall = juce::jmax (ui::DetailPanel::kMinHeight, juce::roundToInt ((float) getHeight() * 0.6f));
+        if (detail->isEditorShown())
+        {
+            editorHeight = std::abs (editorHeight - tall) < 8 ? 360 : tall;
+            settings.setEditorHeight (editorHeight);
+        }
+        else
+        {
+            detailHeight = std::abs (detailHeight - tall) < 8 ? ui::DetailPanel::kDefaultHeight : juce::jmin (tall, ui::DetailPanel::kMaxHeight);
+            settings.setDetailHeight (detailHeight);
+        }
         resized();
     };
     browserTab.onClick = [this] { setBrowserVisible (! browserVisible); };
@@ -209,7 +250,9 @@ MainComponent::~MainComponent()
     scannerWindow.reset();
     versionWindow.reset();
     settingsWindow.reset();
-    keyboard.releaseAll();
+    propertiesWindow.reset();
+    keyboardStrip.reset();
+    computerKeys.releaseAll();
 }
 
 //==============================================================================
@@ -284,6 +327,50 @@ void MainComponent::setDetailVisible (bool visible)
     commandManager.commandStatusChanged();
 }
 
+void MainComponent::setArrangementShown (bool shown)
+{
+    arrangementShown = shown;
+    topBar->setArrangementShown (shown);
+    resized();
+    commandManager.commandStatusChanged();
+}
+
+void MainComponent::setKeyboardStripVisible (bool visible)
+{
+    stripWanted = visible;
+    if (visible)
+        keyboardStrip->setVisible (true);
+    commandManager.commandStatusChanged();
+}
+
+void MainComponent::openClipEditor (int64_t trackId, int scene)
+{
+    if (arrangementShown)
+        setArrangementShown (false);
+    selection.selectSlot (trackId, scene);
+    if (! detailVisible)
+        setDetailVisible (true);
+    detail->setEditorMode (true);
+    commandManager.commandStatusChanged();
+}
+
+int MainComponent::currentDetailHeight() const
+{
+    return detail->isEditorShown() ? editorHeight : detailHeight;
+}
+
+void MainComponent::showProjectProperties()
+{
+    if (propertiesWindow == nullptr)
+        propertiesWindow = std::make_unique<ui::ProjectPropertiesWindow> (model, actions, [this] {
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
+                if (safe != nullptr)
+                    safe->propertiesWindow.reset();
+            });
+        });
+    propertiesWindow->toFront (true);
+}
+
 void MainComponent::setUiScale (double scale)
 {
     scale = juce::jlimit (0.8, 1.5, std::round (scale * 10.0) / 10.0);
@@ -298,7 +385,7 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
     commands.addArray ({ newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
                          deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        toggleBrowser, toggleDetail,
-                         toggleMixer, switchView,     zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
+                         toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
 }
 
 void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommandInfo& info)
@@ -371,7 +458,21 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
             set (M::mixer, viewCategory, true, key ('m', cmd | alt));
             info.setTicked (session->isMixerVisible());
             break;
-        case switchView: set (M::switchView, viewCategory, false, juce::KeyPress (juce::KeyPress::tabKey)); break;
+        case switchView:
+            set (M::switchView, viewCategory, true, juce::KeyPress (juce::KeyPress::tabKey));
+            info.setTicked (arrangementShown);
+            break;
+        case toggleClipEditor:
+            set (M::toggleClipEditor, viewCategory, true, juce::KeyPress (juce::KeyPress::tabKey, juce::ModifierKeys (shift), 0));
+            info.setTicked (detail->editorMode());
+            break;
+        case toggleKeyboardStrip:
+            set (M::keyboardStrip, viewCategory, true, key ('k', cmd | alt));
+            info.setTicked (stripWanted);
+            break;
+        case projectProperties: set (M::projectProperties, fileCategory, true, key ('p', cmd | alt)); break;
+        case quantiseNotes: set (M::quantise, editCategory, detail->isEditorShown(), key ('u', cmd)); break;
+        case quantiseOptions: set (M::quantiseOptions, editCategory, detail->isEditorShown(), key ('u', cmd | shift)); break;
         case zoomIn:
             set (M::zoomIn, viewCategory, settings.uiScale() < 1.49, key ('=', cmd));
             info.addDefaultKeypress ('+', juce::ModifierKeys (cmd | shift));
@@ -382,7 +483,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case playStop: set (M::playStop, M::view, true, juce::KeyPress (juce::KeyPress::spaceKey)); break;
         case toggleComputerKeys:
             set (M::computerKeys, M::view, true, key ('m', 0));
-            info.setTicked (computerKeysOn);
+            info.setTicked (computerKeys.isOn());
             break;
         case focusSearch: set (M::find, M::view, true, key ('f', cmd)); break;
         default: break;
@@ -436,11 +537,21 @@ bool MainComponent::perform (const InvocationInfo& info)
             else
                 engine.play();
             return true;
-        case toggleComputerKeys:
-            computerKeysOn = ! computerKeysOn;
-            if (! computerKeysOn)
-                keyboard.releaseAll();
-            topBar->setComputerKeysOn (computerKeysOn);
+        case toggleComputerKeys: computerKeys.toggle(); return true;
+        case switchView: setArrangementShown (! arrangementShown); return true;
+        case toggleClipEditor:
+            detail->setEditorMode (! detail->editorMode());
+            if (detail->editorMode() && ! detailVisible)
+                setDetailVisible (true);
+            commandManager.commandStatusChanged();
+            return true;
+        case toggleKeyboardStrip: setKeyboardStripVisible (! stripWanted); return true;
+        case projectProperties: showProjectProperties(); return true;
+        case quantiseNotes: return detail->isEditorShown() && detail->pianoRoll().quantizeSelected();
+        case quantiseOptions:
+            if (! detail->isEditorShown())
+                return false;
+            detail->pianoRoll().showQuantizeWindow();
             return true;
         case focusSearch:
             if (! browserVisible)
@@ -456,14 +567,12 @@ bool MainComponent::perform (const InvocationInfo& info)
 //==============================================================================
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
-    if (computerKeysOn && ! ui::textFieldHasFocus())
-        return keyboard.handleKeyPressed (key);
-    return false;
+    return computerKeys.keyPressed (key);
 }
 
 bool MainComponent::keyStateChanged (bool)
 {
-    return computerKeysOn && ! ui::textFieldHasFocus() && keyboard.handleKeyStateChanged();
+    return computerKeys.keyStateChanged();
 }
 
 void MainComponent::focusLost (FocusChangeType)
@@ -476,15 +585,24 @@ void MainComponent::focusLost (FocusChangeType)
 void MainComponent::timerCallback()
 {
     if (! juce::Process::isForegroundProcess())
-        keyboard.releaseAll();
+        computerKeys.releaseAll();
     else
-        keyboard.releaseKeysNotDown();
+        computerKeys.releaseKeysNotDown();
 
     topBar->tick();
     topBar->setVersionText (doc.versionButtonText());
     session->tick();
     if (detailVisible)
         detail->tick();
+    const double target = stripWanted ? 1.0 : 0.0;
+    if (std::abs (stripFraction - target) > 1.0e-3)
+    {
+        stripFraction += (target - stripFraction) * 0.35;
+        if (std::abs (stripFraction - target) < 0.02)
+            stripFraction = target;
+        keyboardStrip->setVisible (stripFraction > 0.0);
+        resized();
+    }
     updateTitle();
 }
 
@@ -503,9 +621,11 @@ void MainComponent::resized()
     scanlines.setBounds (getLocalBounds());
     scanlines.toFront (false);
 
+    const int stripHeight = juce::roundToInt (stripFraction * ui::KeyboardStrip::kHeight);
+    keyboardStrip->setBounds (r.removeFromBottom (stripHeight));
     if (detailVisible)
     {
-        const int h = juce::jmin (detailHeight, juce::jmax (ui::DetailPanel::kMinHeight, r.getHeight() - 200));
+        const int h = juce::jmin (currentDetailHeight(), juce::jmax (ui::DetailPanel::kMinHeight, r.getHeight() - 200));
         detail->setBounds (r.removeFromBottom (h));
     }
     detail->setVisible (detailVisible);
@@ -516,6 +636,9 @@ void MainComponent::resized()
     browser->setVisible (browserVisible);
     const int browserRight = r.getX();
     session->setBounds (r);
+    session->setVisible (! arrangementShown);
+    arrangement->setBounds (r);
+    arrangement->setVisible (arrangementShown);
 
     // Splitters sit on the borders without taking room; the tabs sit in the padding of the Session View.
     browserSplitter.setVisible (browserVisible);
