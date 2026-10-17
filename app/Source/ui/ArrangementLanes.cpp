@@ -3,6 +3,7 @@
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "PaletteMenu.h"
+#include "Waveform.h"
 
 #include "daw/engine/Arrangement.h"
 
@@ -149,12 +150,61 @@ void ArrangementLanes::paintNotes (juce::Graphics& g, const ArrangementClipRef& 
     }
 }
 
+bool ArrangementLanes::paintAudio (juce::Graphics& g, const ArrangementClipRef& c, juce::Rectangle<float> r, double clipLength, double clipOffset,
+                                   juce::Colour ink) const
+{
+    const auto clip = c.clip();
+    const auto source = view.engine.peekAudioSource (clip.fileId());
+    if (source == nullptr)
+        return false;
+    if (r.getWidth() < 3.0f)
+        return true;
+    const double px = view.v.pxPerBeat;
+    const bool nameRow = r.getHeight() >= 34.0f;
+    const float top = r.getY() + (nameRow ? 15.0f : 2.0f), bottom = r.getBottom() - 2.0f;
+    const juce::Rectangle<float> area (r.getX(), top, (float) (clipLength * px), bottom - top);
+    const double entry = daw::engine::normaliseOffset (clip.toMidiClip(), clipOffset, c.loop());
+    drawAudioWaveform (g, area, *source, clip, entry, c.loop(), clipLength, view.model.tempo(), ink.withAlpha (nameRow ? 0.75f : 0.6f));
+
+    // The fades of the clip: the part of the waveform they take away is darkened and the ramp is drawn as a line.
+    const auto& t = theme();
+    const float maxFade = r.getWidth() * 0.5f;
+    const float fadeIn = juce::jmin (maxFade, (float) (clip.fadeIn() * px)), fadeOut = juce::jmin (maxFade, (float) (clip.fadeOut() * px));
+    const float x0 = r.getX(), x1 = r.getRight();
+    if (fadeIn >= 1.0f)
+    {
+        juce::Path ramp;
+        ramp.addTriangle (x0, r.getY(), x0 + fadeIn, r.getY(), x0, r.getBottom());
+        g.setColour (t.background.withAlpha (0.4f));
+        g.fillPath (ramp);
+        g.setColour (ink.withAlpha (0.8f));
+        g.drawLine (x0, r.getBottom(), x0 + fadeIn, r.getY(), 1.0f);
+    }
+    if (fadeOut >= 1.0f)
+    {
+        juce::Path ramp;
+        ramp.addTriangle (x1, r.getY(), x1 - fadeOut, r.getY(), x1, r.getBottom());
+        g.setColour (t.background.withAlpha (0.4f));
+        g.fillPath (ramp);
+        g.setColour (ink.withAlpha (0.8f));
+        g.drawLine (x1 - fadeOut, r.getY(), x1, r.getBottom(), 1.0f);
+    }
+    return true;
+}
+
 void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c, juce::Rectangle<float> r, double clipStart, double clipLength,
                                   double clipOffset, float alpha, bool selected, bool inSession, bool muted) const
 {
     const auto& t = theme();
     const float radius = juce::jmin (t.radius, 4.0f);
     auto base = t.palette (c.clip().isValid() ? c.clip().colour() : 0);
+    const bool audio = c.clip().isValid() && c.clip().isAudio();
+    bool missing = false;
+    if (audio && view.engine.peekAudioSource (c.clip().fileId()) == nullptr)
+    {
+        missing = true;
+        base = base.withMultipliedSaturation (0.1f).withMultipliedBrightness (0.7f);
+    }
     if (inSession)
         base = base.withMultipliedSaturation (0.15f).withMultipliedBrightness (0.8f);
     const float a = alpha * (muted && ! inSession ? 0.55f : 1.0f);
@@ -164,7 +214,10 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
     {
         juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (r.toNearestInt());
-        paintNotes (g, c, r, clipStart, clipLength, clipOffset, t.clipInk);
+        if (audio)
+            paintAudio (g, c, r, clipLength, clipOffset, t.clipInk);
+        else
+            paintNotes (g, c, r, clipStart, clipLength, clipOffset, t.clipInk);
 
         if (r.getWidth() > 26.0f)
         {
@@ -181,6 +234,13 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
                 label += "  " + Strings::arrRec::takeBadge (number, (int) takes.size());
             }
             g.drawText (label, text, juce::Justification::centredLeft, true);
+            if (missing)
+            {
+                g.setFont (t.uiFont (11.0f));
+                g.setColour (t.clipInk.withAlpha (0.8f * a));
+                g.drawText (Strings::audioUi::fileMissing, r.toNearestInt().withTrimmedLeft (6).withTrimmedTop (15).withTrimmedRight (4),
+                            juce::Justification::centredLeft, true);
+            }
             if (looping)
             {
                 g.setColour (t.clipInk.withAlpha (0.8f * a));
@@ -298,7 +358,31 @@ void ArrangementLanes::paint (juce::Graphics& g)
     }
 
     // a session clip on its way in
-    if (view.drop.valid && view.drop.row >= 0 && view.drop.row < (int) view.layoutRows.size())
+    if (view.drop.valid && view.drop.audio)
+    {
+        // sound files: the lane they will land on, or the empty space that makes new audio tracks
+        if (view.drop.newTracks)
+        {
+            const int top = view.layoutRows.empty() ? 0 : view.layoutRows.back().y + view.layoutRows.back().height - view.v.scrollY;
+            const juce::Rectangle<float> area (2.0f, (float) top + 2.0f, (float) getWidth() - 4.0f, juce::jmax (24.0f, (float) (getHeight() - top) - 4.0f));
+            g.setColour (t.accent.withAlpha (0.10f));
+            g.fillRoundedRectangle (area, t.radius);
+            strokeCell (g, area, t.accent, 1.5f, 0.6f);
+            g.setColour (t.accent);
+            g.setFont (t.uiFont (12.0f, 500));
+            g.drawText (Strings::audioUi::dropNewTracks, area.toNearestInt(), juce::Justification::centred, true);
+        }
+        else if (view.drop.row >= 0 && view.drop.row < (int) view.layoutRows.size())
+        {
+            const auto& lane = view.layoutRows[(size_t) view.drop.row];
+            const juce::Rectangle<float> area (0.0f, (float) (lane.y - view.v.scrollY), (float) getWidth(), (float) lane.height - 1.0f);
+            g.setColour (t.accent.withAlpha (0.12f));
+            g.fillRect (area);
+            g.setColour (t.accent);
+            g.fillRect ((float) view.beatToX (view.drop.beat), area.getY(), 2.0f, area.getHeight());
+        }
+    }
+    else if (view.drop.valid && view.drop.row >= 0 && view.drop.row < (int) view.layoutRows.size())
     {
         const auto r = rectFor (view.drop.row, view.drop.beat, juce::jmax (0.25, view.drop.length));
         g.setColour (t.accent.withAlpha (0.25f));

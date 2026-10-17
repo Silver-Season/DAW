@@ -58,6 +58,9 @@ private:
                     float alpha, bool selected, bool inSession, bool muted) const;
     void paintNotes (juce::Graphics&, const ArrangementClipRef&, juce::Rectangle<float> r, double clipStart, double clipLength,
                      double clipOffset, juce::Colour ink) const;
+    // Audio clips: the waveform of the source with the fades over it; false if the file is missing (nothing is drawn).
+    bool paintAudio (juce::Graphics&, const ArrangementClipRef&, juce::Rectangle<float> r, double clipLength, double clipOffset,
+                     juce::Colour ink) const;
     juce::Rectangle<float> rectFor (int row, double start, double length) const;
     void showClipMenu (juce::Point<int> screenPosition);
     void showEmptyMenu (juce::Point<int> screenPosition, double beat);

@@ -9,7 +9,10 @@
 #include "daw/engine/DemoContent.h"
 #include "daw/synth/PrismaParams.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
+
 #include <cstdio>
+#include <vector>
 
 namespace tests
 {
@@ -126,6 +129,27 @@ struct Fixture
     AudioEngine engine;
 };
 
+// Writes a 32-bit float WAV, so the samples come back exactly (interleaved when there are several channels).
+inline bool writeWav (const juce::File& file, const std::vector<float>& samples, double rate = 48000.0, int channels = 1)
+{
+    file.deleteFile();
+    file.getParentDirectory().createDirectory();
+    std::unique_ptr<juce::OutputStream> out (file.createOutputStream().release());
+    if (out == nullptr)
+        return false;
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (out.get(), rate, (unsigned int) channels, 32, {}, 0));
+    if (writer == nullptr)
+        return false;
+    out.release(); // the writer owns the stream now
+    const int frames = (int) samples.size() / channels;
+    juce::AudioBuffer<float> buffer (channels, frames);
+    for (int i = 0; i < frames; ++i)
+        for (int c = 0; c < channels; ++c)
+            buffer.setSample (c, i, samples[(size_t) (i * channels + c)]);
+    return writer->writeFromAudioSampleBuffer (buffer, 0, frames);
+}
+
 void runModelTests();
 void runGraphTests();
 void runHostingTests();
@@ -138,4 +162,5 @@ void runArrangementTests();
 void runArrangementUiTests();
 void runArrangementRecordingTests();
 void runAudioTests();
+void runAudioUiTests();
 } // namespace tests

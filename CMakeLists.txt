@@ -79,6 +79,13 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementView.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementLanes.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Waveform.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/AudioClipEditor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRoll.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollGrid.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollLanes.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollProps.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/QuantiseWindow.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/DetailPanel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementRuler.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementHeaders.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementMinimap.cpp
@@ -117,6 +124,7 @@ if(DAW_BUILD_JUCE)
             tests/ArrangementUiTests.cpp
             tests/ArrangementRecordingTests.cpp
             tests/AudioTests.cpp
+            tests/AudioUiTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1

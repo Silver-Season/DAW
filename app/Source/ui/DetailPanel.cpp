@@ -879,6 +879,8 @@ DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, Se
     addAndMakeVisible (*chainView);
     editor = std::make_unique<PianoRoll> (e, m, a, s);
     addChildComponent (*editor);
+    audioClipEditor = std::make_unique<AudioClipEditor> (e, m, a);
+    addChildComponent (*audioClipEditor);
     setHelpText (Strings::help::detailInfo);
 
     transposeField.setRange (-48.0, 48.0, 1.0);
@@ -913,10 +915,13 @@ void DetailPanel::updateEditor()
                 clipId = a.clip().id();
     // With the editor on but no clip selected the chain stays: the editor has nothing to show.
     const bool shown = clipId != 0;
-    if (shown != editorShown)
+    const bool audio = shown && model.findClip (clipId).isAudio();
+    if (shown != editorShown || audio != audioShown)
     {
         editorShown = shown;
-        editor->setVisible (shown);
+        audioShown = audio;
+        editor->setVisible (shown && ! audio);
+        audioClipEditor->setVisible (shown && audio);
         chainView->setVisible (! shown);
         transposeField.setVisible (! shown);
         recordSwitch->setVisible (! shown);
@@ -925,7 +930,9 @@ void DetailPanel::updateEditor()
         if (onEditorShownChanged)
             onEditorShownChanged();
     }
-    if (shown && editor->clipId() != clipId)
+    if (shown && audio)
+        audioClipEditor->setClip (clipId);
+    else if (shown && editor->clipId() != clipId)
         editor->setClip (clipId);
 }
 
@@ -951,7 +958,7 @@ void DetailPanel::tick()
     if (! transposeField.isEditing())
         transposeField.setValue (track.isValid() ? track.transpose() : 0);
     // without a track the summary card is empty, so its two controls go too
-    const bool cardShown = track.isValid() && ! editor->isVisible();
+    const bool cardShown = track.isValid() && ! editorShown;
     transposeField.setVisible (cardShown);
     recordSwitch->setVisible (cardShown);
     recordSwitch->setSource (track.isValid() ? track.recordSource() : juce::String ("midi"));
@@ -1022,6 +1029,7 @@ void DetailPanel::resized()
 {
     chainView->setBounds (getLocalBounds().withTrimmedLeft (kInfoWidth).withTrimmedTop (1));
     editor->setBounds (getLocalBounds().withTrimmedTop (1));
+    audioClipEditor->setBounds (getLocalBounds().withTrimmedTop (1));
     // below the three lines of the summary card: 14 + 16 + 22 + 6 + 3 * 22 + 13
     transposeField.setBounds (14 + 112, 13 + 16 + 22 + 6 + 3 * 22, 76, 20);
     recordSwitch->setBounds (14 + 112, 13 + 16 + 22 + 6 + 4 * 22, 76, 20);

@@ -112,6 +112,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detail->chain().onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
     arrangement = std::make_unique<ui::ArrangementView> (engine, model, actions, selection);
     arrangement->setRecorder (&recorder);
+    arrangement->setBrowserActions (&browserActions);
     arrangement->onOpenClip = [this] (int64_t trackId, int64_t aclipId) { openArrangementClip (trackId, aclipId); };
     arrangement->onMessage = [this] (const juce::String& text) { infoBar->showMessage (text, 3000); };
     arrangement->lettersReserved = [this] { return computerKeys.isOn(); };

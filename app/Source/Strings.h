@@ -822,6 +822,60 @@ inline const juce::String projectNotes = make (utf8 ("Заметки"), utf8 ("�
 inline const juce::String infoBar = make (utf8 ("Строка подсказок"), utf8 ("Показывает название и действие элемента под мышью."));
 } // namespace help
 
+// The audio clip editor and audio clips on the timeline (docs/spec/05-audio-recording.md, tasks 5.1, 5.2, 5.6).
+namespace audioUi
+{
+inline const juce::String fileMissing = utf8 ("Файл не найден");
+inline const juce::String file = utf8 ("Файл");
+inline const juce::String gain = utf8 ("Громкость");
+inline const juce::String transpose = utf8 ("Транспонирование");
+inline const juce::String detune = utf8 ("Подстройка");
+inline const juce::String reverse = utf8 ("Обратно");
+inline const juce::String loop = utf8 ("Петля");
+inline const juce::String fadeIn = utf8 ("Фейд-ин (шкала)");
+inline const juce::String fadeOut = utf8 ("Фейд-аут (шкала)");
+inline const juce::String warpSoon = utf8 ("Подстройка под темп: этап 7");
+inline const juce::String loopStart = utf8 ("Начало петли");
+inline const juce::String loopEnd = utf8 ("Конец");
+inline const juce::String startPoint = utf8 ("Старт");
+inline const juce::String grid = utf8 ("Сетка");
+inline const juce::String snap = utf8 ("Прилипание");
+inline const juce::String noFile = utf8 ("Файл не найден: звук не играет, пока файл не вернётся на место.");
+inline const juce::String undoGain = utf8 ("Громкость звука");
+inline const juce::String undoTranspose = utf8 ("Транспонирование звука");
+inline const juce::String undoDetune = utf8 ("Подстройка звука");
+inline const juce::String undoReverse = utf8 ("Обратное воспроизведение");
+inline const juce::String undoFadeIn = utf8 ("Фейд-ин клипа");
+inline const juce::String undoFadeOut = utf8 ("Фейд-аут клипа");
+inline const juce::String undoLoopBrace = utf8 ("Петля клипа");
+inline const juce::String undoStartMarker = utf8 ("Точка старта клипа");
+inline juce::String fileInfo (const juce::String& name, double rate, int channels, double seconds)
+{
+    return name + utf8 (" · ") + juce::String (rate / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".").replace (".", ",") + utf8 (" кГц · ")
+           + (channels == 1 ? utf8 ("моно") : channels == 2 ? utf8 ("стерео") : juce::String (channels) + utf8 (" кан.")) + utf8 (" · ")
+           + juce::String (seconds, 2).replace (".", ",") + utf8 (" с");
+}
+inline juce::String rateWarning (double rate)
+{
+    return utf8 ("Частота файла ") + juce::String (rate / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".").replace (".", ",")
+           + utf8 (" кГц: пересчитывается при воспроизведении");
+}
+inline const juce::String dropNewTracks = utf8 ("Новые аудиодорожки");
+} // namespace audioUi
+
+namespace help
+{
+inline const juce::String audioProps = make (utf8 ("Свойства звукового клипа"), utf8 ("Громкость, высота, обратное воспроизведение, петля и фейды клипа."));
+inline const juce::String audioGain = make (utf8 ("Громкость клипа"), utf8 ("От -70 до +24 дБ. Тяните мышью, двойной щелчок вводит число."));
+inline const juce::String audioTranspose = make (utf8 ("Транспонирование"), utf8 ("Полутоны, от -48 до +48. Меняет и высоту, и длительность звука (без подстройки под темп)."));
+inline const juce::String audioDetune = make (utf8 ("Подстройка"), utf8 ("Центы, от -50 до +50."));
+inline const juce::String audioReverse = make (utf8 ("Обратное воспроизведение"), utf8 ("Звук клипа играет с конца."));
+inline const juce::String audioLoop = make (utf8 ("Петля"), utf8 ("Повторять часть клипа от начала петли до конца, пока клип звучит."));
+inline const juce::String audioFadeIn = make (utf8 ("Фейд-ин"), utf8 ("Нарастание громкости в начале клипа на шкале, в долях. Короткий фейд на краях добавляется всегда."));
+inline const juce::String audioFadeOut = make (utf8 ("Фейд-аут"), utf8 ("Затухание в конце клипа на шкале, в долях."));
+inline const juce::String audioWave = make (utf8 ("Звук клипа"), utf8 ("Тяните маркер старта и скобку петли. Shift или Alt отключают прилипание."));
+} // namespace help
+
 // Tooltips of the small tabs that hide and show panels: what a click will do.
 namespace tips
 {

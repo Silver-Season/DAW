@@ -17,27 +17,6 @@ namespace
 constexpr double kRate = 48000.0;
 constexpr double kSpb = 24000.0; // 120 BPM
 
-// Writes a 32-bit float WAV, so the samples come back exactly.
-bool writeWav (const juce::File& file, const std::vector<float>& samples, double rate = kRate, int channels = 1)
-{
-    file.deleteFile();
-    file.getParentDirectory().createDirectory();
-    std::unique_ptr<juce::OutputStream> out (file.createOutputStream().release());
-    if (out == nullptr)
-        return false;
-    juce::WavAudioFormat wav;
-    std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (out.get(), rate, (unsigned int) channels, 32, {}, 0));
-    if (writer == nullptr)
-        return false;
-    out.release(); // the writer owns the stream now
-    const int frames = (int) samples.size() / channels;
-    juce::AudioBuffer<float> buffer (channels, frames);
-    for (int i = 0; i < frames; ++i)
-        for (int c = 0; c < channels; ++c)
-            buffer.setSample (c, i, samples[(size_t) (i * channels + c)]);
-    return writer->writeFromAudioSampleBuffer (buffer, 0, frames);
-}
-
 std::vector<float> sine (int frames, double hz, float amp = 0.5f, double rate = kRate)
 {
     std::vector<float> s ((size_t) frames);
