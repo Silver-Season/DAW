@@ -1,6 +1,7 @@
 #include "VersionWindow.h"
 
 #include "../Strings.h"
+#include "../model/TrackTransfer.h"
 #include "Dialogs.h"
 #include "Theme.h"
 
@@ -17,11 +18,13 @@ public:
         list.setColour (juce::ListBox::outlineColourId, theme().line);
         list.setOutlineThickness (1);
         addAndMakeVisible (list);
-        for (auto* b : { &labelButton, &restoreButton, &closeButton })
+        for (auto* b : { &labelButton, &restoreButton, &takeButton, &closeButton })
             addAndMakeVisible (*b);
         labelButton.setButtonText (Strings::versions::labelButton);
         restoreButton.setButtonText (Strings::versions::restoreButton);
         closeButton.setButtonText (Strings::versions::closeButton);
+        takeButton.setButtonText (Strings::versions::takeTrackButton);
+        takeButton.onClick = [this] { takeTrack(); };
         labelButton.onClick = [this] { editLabel(); };
         restoreButton.onClick = [this] { restore(); };
         closeButton.onClick = [this] {
@@ -29,7 +32,7 @@ public:
                 w->closeButtonPressed();
         };
         refresh();
-        setSize (560, 420);
+        setSize (680, 420);
     }
 
     void refresh()
@@ -53,6 +56,8 @@ public:
         closeButton.setBounds (buttons.removeFromRight (100));
         buttons.removeFromRight (8);
         restoreButton.setBounds (buttons.removeFromRight (130));
+        buttons.removeFromRight (8);
+        takeButton.setBounds (buttons.removeFromRight (160));
         buttons.removeFromRight (8);
         labelButton.setBounds (buttons.removeFromRight (110));
     }
@@ -118,6 +123,48 @@ private:
         const bool any = list.getSelectedRow() >= 0 && list.getSelectedRow() < (int) rows.size();
         labelButton.setEnabled (any);
         restoreButton.setEnabled (any);
+        takeButton.setEnabled (any);
+    }
+
+    // Loads the chosen version into memory only (not into the engine), lists its tracks and takes the chosen one.
+    void takeTrack()
+    {
+        const int row = list.getSelectedRow();
+        if (row < 0 || row >= (int) rows.size())
+            return;
+        const int number = rows[(size_t) row].number;
+        juce::String error;
+        const auto older = session.loadVersionModel (number, error);
+        if (older == nullptr)
+        {
+            showMessage (Strings::versions::title, error);
+            return;
+        }
+        const auto tracks = transfer::listTracks (*older);
+        if (tracks.empty())
+        {
+            showMessage (Strings::versions::title, Strings::versions::noTracks);
+            return;
+        }
+        juce::PopupMenu menu;
+        menu.addSectionHeader (Strings::versions::pickTrack (number));
+        std::vector<std::pair<int64_t, juce::String>> choices;
+        for (const auto& t : tracks)
+        {
+            choices.emplace_back (t.id, t.name);
+            menu.addItem ((int) choices.size(), Strings::versions::trackLabel (t.name, t.numDevices, t.numSessionClips, t.numArrangementClips));
+        }
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&takeButton),
+                            [safe = juce::Component::SafePointer<Content> (this), number, choices] (int result) {
+                                if (result <= 0 || safe == nullptr)
+                                    return;
+                                const auto& [id, name] = choices[(size_t) result - 1];
+                                const auto taken = safe->session.takeTrackFromVersion (number, id);
+                                if (! taken.wasOk())
+                                    showMessage (Strings::versions::title, taken.getErrorMessage());
+                                else if (safe->report)
+                                    safe->report (Strings::versions::trackTaken (name, number));
+                            });
     }
 
     void editLabel()
@@ -159,7 +206,7 @@ private:
     std::function<void (const juce::String&)> report;
     std::vector<project::VersionRecord> rows;
     juce::ListBox list;
-    juce::TextButton labelButton, restoreButton, closeButton;
+    juce::TextButton labelButton, restoreButton, takeButton, closeButton;
 };
 
 VersionWindow::VersionWindow (project::ProjectSession& s, std::function<void()> onClosed, std::function<void (const juce::String&)> onMessage)

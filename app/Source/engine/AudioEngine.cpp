@@ -248,6 +248,24 @@ bool AudioEngine::launchAligned (int64_t trackId, int scene, double beat)
     return pushCommand ({ EngineCommand::Type::launchAligned, trackId, scene, beat });
 }
 
+bool AudioEngine::startArrangementRecord()
+{
+    return pushCommand ({ EngineCommand::Type::startArrangementRecord, -1, -1, 0.0 });
+}
+
+bool AudioEngine::stopArrangementRecord()
+{
+    return pushCommand ({ EngineCommand::Type::stopArrangementRecord, -1, -1, 0.0 });
+}
+
+size_t AudioEngine::popEngineEvents (std::vector<EngineEvent>& out)
+{
+    const auto scope = engineEventFifo.read (engineEventFifo.getNumReady());
+    out.insert (out.end(), engineEvents.begin() + scope.startIndex1, engineEvents.begin() + scope.startIndex1 + scope.blockSize1);
+    out.insert (out.end(), engineEvents.begin() + scope.startIndex2, engineEvents.begin() + scope.startIndex2 + scope.blockSize2);
+    return (size_t) (scope.blockSize1 + scope.blockSize2);
+}
+
 size_t AudioEngine::popInputEvents (std::vector<daw::engine::InputEvent>& out)
 {
     const auto scope = inputFifo.read (inputFifo.getNumReady());
@@ -571,6 +589,15 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 if (! launchAt (c) && numDeferred < (int) deferred.size())
                     deferred[(size_t) numDeferred++] = { c, 0 };
                 break;
+            case EngineCommand::Type::startArrangementRecord:
+                startArrangementRecording (graph);
+                break;
+            case EngineCommand::Type::stopArrangementRecord:
+                if (const int state = arrRecState.load(); state == arrangementWaiting)
+                    arrRecState = arrangementIdle; // never began: nothing to keep
+                else if (state == arrangementRunning)
+                    arrRecEnd = std::min (arrRecEnd.load(), now);
+                break;
         }
     };
     for (int i = 0; i < scope.blockSize1; ++i)
@@ -579,12 +606,106 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
         handle (commands[(size_t) (scope.startIndex2 + i)]);
 }
 
+// Arms the recording onto the timeline. A stopped transport starts with the count-in and the recording begins at beat 0;
+// a playing one begins at the next launch-quantisation boundary. Session clips that play at this moment are logged as
+// launches, so that the recording also holds what was already running.
+void AudioEngine::startArrangementRecording (const PlaybackGraph& graph)
+{
+    if (arrRecState.load() != arrangementIdle)
+        return;
+    const double now = std::max (0.0, transport.getPositionBeats());
+    const double bpb = beatsPerBar.load();
+    const bool running = playing.load() || transport.isPlaying();
+    double start = now;
+    if (! running)
+    {
+        const int bars = countInBars.load();
+        transport.startAt (bars > 0 ? -(double) bars * bpb : 0.0);
+        playing = true;
+        start = 0.0;
+    }
+    else
+        start = daw::engine::nextQuantisedBeat (now, quantise.load());
+
+    arrRecStart = start;
+    arrRecEnd = TrackRuntime::kNoEnd;
+    arrRecState = arrangementWaiting;
+    expectedSongBeat = std::numeric_limits<double>::quiet_NaN(); // the first window of the log is an anchor
+
+    for (const auto& t : graph.tracks)
+        if (t.runtime->player.playingSlot() >= 0)
+        {
+            EngineEvent e;
+            e.type = EngineEvent::Type::launch;
+            e.trackId = t.runtime->trackId;
+            e.slot = t.runtime->player.playingSlot();
+            e.monoBeat = now;
+            e.beat = transport.getSongPositionBeats();
+            e.clipStartMono = t.runtime->player.playingStartBeat();
+            pushEngineEvent (e);
+        }
+}
+
+void AudioEngine::pushEngineEvent (const EngineEvent& e)
+{
+    const auto scope = engineEventFifo.write (1);
+    if (scope.blockSize1 + scope.blockSize2 < 1)
+    {
+        engineEventDrops.fetch_add (1, std::memory_order_relaxed);
+        return;
+    }
+    engineEvents[(size_t) (scope.blockSize1 > 0 ? scope.startIndex1 : scope.startIndex2)] = e;
+}
+
+// Every discontinuity of the song position inside the block goes to the log, so that the message thread can turn a
+// monotonic beat (the clock of the live events) into a song beat exactly, also across a loop jump.
+void AudioEngine::logSongWindows (const daw::engine::Transport::Block& block, double spb)
+{
+    for (int i = 0; i < block.numWindows; ++i)
+    {
+        const auto& w = block.windows[i];
+        if (std::isnan (expectedSongBeat) || std::abs (w.startBeat - expectedSongBeat) > 1.0e-6)
+        {
+            EngineEvent e;
+            e.type = w.afterLoop ? EngineEvent::Type::loopJump : EngineEvent::Type::anchor;
+            e.monoBeat = block.startBeat + (double) w.sampleOffset / spb;
+            e.beat = w.startBeat;
+            pushEngineEvent (e);
+        }
+        expectedSongBeat = w.endBeat;
+    }
+    if (block.numWindows == 0)
+        expectedSongBeat = std::numeric_limits<double>::quiet_NaN();
+}
+
+// The state machine of the arrangement recording follows the transport past its start and end beats. The start is
+// noticed before the tracks are rendered (the arrangement must already give way in the block where the recording
+// begins); the end at the end of the block, so that everything the block logged is in the queue before the state says
+// "finished".
+void AudioEngine::updateArrangementRecord (double blockEndBeat)
+{
+    if (arrRecState.load() == arrangementRunning && arrRecEnd.load() <= blockEndBeat)
+        arrRecState = arrangementFinished;
+}
+
+bool AudioEngine::isRecordTarget (const TrackRuntime& rt, bool anyArmed) const
+{
+    return acceptsLiveMidi (rt, true, anyArmed) || acceptsLiveMidi (rt, false, anyArmed);
+}
+
 // The transport was stopped: recordings that are running end where the stop caught them (a new recording rounded up
 // to whole bars, at least one); recordings that had not begun are dropped.
 void AudioEngine::finishRecordingsAtStop (const PlaybackGraph& graph)
 {
     const double now = std::max (0.0, transport.getPositionBeats());
     const double bpb = beatsPerBar.load();
+    if (const int state = arrRecState.load(); state == arrangementWaiting)
+        arrRecState = arrangementIdle;
+    else if (state == arrangementRunning)
+    {
+        arrRecEnd = std::min (arrRecEnd.load(), now);
+        arrRecState = arrangementFinished;
+    }
     for (const auto& t : graph.tracks)
     {
         auto& rt = *t.runtime;
@@ -691,6 +812,21 @@ void AudioEngine::routeInputEvents (const PlaybackGraph& graph, const daw::engin
 
 namespace
 {
+// The song beat at the monotonic beat `mono`, which lies in the block (or just before it: a launch that reached the
+// graph late), read off the windows of the block.
+double songBeatAtMono (const daw::engine::Transport::Block& block, double spb, double mono)
+{
+    if (block.numWindows == 0)
+        return block.songStartBeat;
+    const double sample = (mono - block.startBeat) * spb;
+    int pick = 0;
+    for (int i = 0; i < block.numWindows; ++i)
+        if (block.windows[i].sampleOffset <= sample + 1.0e-6)
+            pick = i;
+    const auto& w = block.windows[pick];
+    return w.startBeat + (sample - w.sampleOffset) / spb;
+}
+
 // Runs a device chain in place on `view`. The first device is the instrument and gets the MIDI; the others
 // are effects and get an empty MIDI buffer. A disabled effect lets the sound through; a disabled
 // instrument is silent.
@@ -782,7 +918,35 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     auto& rt = *t.runtime;
 
     rt.events.clear();
+    const int slotBefore = rt.player.playingSlot();
+    const double startBefore = rt.player.playingStartBeat();
     rt.player.process (block.startBeat, block.endBeat, spb, numSamples, rt.events);
+
+    // Arrangement recording logs when a session clip starts or stops (the song beat comes from the windows of the block).
+    if (logEvents)
+    {
+        const int slotNow = rt.player.playingSlot();
+        const double startNow = rt.player.playingStartBeat();
+        if (slotNow != slotBefore || (slotNow >= 0 && ! juce::exactlyEqual (startNow, startBefore)))
+        {
+            EngineEvent e;
+            e.trackId = rt.trackId;
+            if (slotNow >= 0)
+            {
+                e.type = EngineEvent::Type::launch;
+                e.slot = slotNow;
+                e.monoBeat = e.clipStartMono = startNow;
+            }
+            else
+            {
+                e.type = EngineEvent::Type::stop;
+                e.slot = slotBefore;
+                e.monoBeat = rt.player.lastEndBeat();
+            }
+            e.beat = songBeatAtMono (block, spb, e.monoBeat);
+            pushEngineEvent (e);
+        }
+    }
 
     // A session clip that plays takes the track away from the arrangement, until "Back to arrangement". The arrangement
     // goes quiet for the whole block in which the clip starts (at most one block early).
@@ -804,6 +968,13 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     if (block.startBeat < 0.0)
         arrangementFrom = std::max (arrangementFrom, (int) std::min ((double) numSamples, std::ceil (-block.startBeat * spb)));
 
+    // While a recording runs, the arrangement of the tracks that record is silent where the recording replaces it
+    // (the whole song, or only the loop brace with punch-in / punch-out). Overdub keeps playing what is there.
+    const bool replacedByRecording = arrRecState.load (std::memory_order_relaxed) == arrangementRunning && ! overdubOn.load()
+                                     && isRecordTarget (rt, anyArmed);
+    const double punchLow = punchInOn.load() ? arrLoopStart.load() : -1.0e18;
+    const double punchHigh = punchOutOn.load() ? arrLoopEnd.load() : 1.0e18;
+
     if (killNotes)
         rt.arrangement.releaseAll (0, rt.events);
     if (rt.inSession.load (std::memory_order_relaxed))
@@ -818,6 +989,14 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
             auto w = block.windows[i];
             if (w.sampleOffset + w.numSamples <= arrangementFrom)
                 continue;
+            if (replacedByRecording && w.startBeat >= punchLow - 1.0e-9 && w.endBeat <= punchHigh + 1.0e-9)
+            {
+                // The recording takes this stretch over: what the track played here gives way.
+                if (rt.arrangement.hasHeldNotes())
+                    rt.arrangement.releaseAll (w.sampleOffset, rt.events);
+                rt.arrangement.invalidate();
+                continue;
+            }
             if (w.sampleOffset < arrangementFrom) // the window begins before the boundary: only its later part plays
             {
                 const int cut = arrangementFrom - w.sampleOffset;
@@ -979,6 +1158,12 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         anyArmed = anyArmed || t.runtime->arm.load();
     }
 
+    logEvents = arrRecState.load() == arrangementWaiting || arrRecState.load() == arrangementRunning;
+    if (logEvents)
+        logSongWindows (block, spb);
+    if (arrRecState.load() == arrangementWaiting && arrRecStart.load() < block.endBeat)
+        arrRecState = arrangementRunning;
+
     routeInputEvents (*graph, block, spb, blockEngineStart, anyArmed);
     updateRecordStates (*graph, block.endBeat);
     for (const auto& t : graph->tracks)
@@ -1049,6 +1234,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
                 toneSamplesTotal = 0;
         }
     }
+
+    updateArrangementRecord (block.endBeat);
 
     positionBeats = transport.getPositionBeats();
     songPositionBeats = transport.getSongPositionBeats();

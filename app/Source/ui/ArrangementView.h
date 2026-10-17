@@ -9,6 +9,7 @@
 #include <optional>
 
 class AudioEngine;
+class SessionRecorder;
 
 namespace ui
 {
@@ -167,6 +168,8 @@ public:
     bool renameSelection();
     bool nudgeSelection (int direction, bool extend);
     void sendSelectionToSession();
+    // Shows another take of a clip that was recorded in a loop (one undo transaction).
+    bool switchTake (int64_t aclipId, int number);
 
     // The edits of the gestures
     struct Dragged
@@ -200,6 +203,10 @@ public:
     ArrangementMinimap& minimap() { return *minimapPart; }
     ArrangementPlayhead& playhead() { return *playheadPart; }
     juce::Rectangle<int> lanesBounds() const;
+
+    // Recording onto the timeline (task 3.4): the playhead layer draws the clips that grow while it runs.
+    void setRecorder (SessionRecorder* r) { recorder = r; }
+    SessionRecorder* getRecorder() const { return recorder; }
 
     AudioEngine& getEngine() { return engine; }
     ProjectModel& getModel() { return model; }
@@ -264,6 +271,7 @@ private:
 
     AudioEngine& engine;
     ProjectModel& model;
+    SessionRecorder* recorder = nullptr;
     ProjectActions& actions;
     SelectionState& selectionState;
 

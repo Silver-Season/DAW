@@ -1098,6 +1098,38 @@ int main()
         check (! t.isLoopOn(), "a loop shorter than a quarter beat is ignored");
     });
 
+    test ("transport: only a loop jump marks its window afterLoop; seeks and the start do not", [] {
+        engine::Transport t;
+        t.prepare (48000.0);
+        t.setTempo (120.0);
+        t.setLoop (4.0, 8.0, true);
+        t.setSongStart (4.0);
+        t.play();
+        int loops = 0, windows = 0;
+        bool afterLoopAtFirst = false;
+        for (int i = 0; i < 400; ++i)
+        {
+            const auto blk = t.advance (500);
+            for (int w = 0; w < blk.numWindows; ++w)
+            {
+                if (windows++ == 0)
+                    afterLoopAtFirst = blk.windows[0].afterLoop;
+                if (blk.windows[w].afterLoop)
+                {
+                    ++loops;
+                    check (blk.windows[w].startBeat == 4.0, "a window after a loop jump starts at the loop start");
+                }
+            }
+        }
+        // 400 * 500 samples = 200000 = 8.33 beats: the song starts at 4 and reaches 8 after 4 beats = 96000 samples; the
+        // second pass starts at 96000 and runs to 192000; the third begins at 192000 (a block boundary or inside it)
+        check (loops == 2, "two loop jumps in 200000 samples, got " + std::to_string (loops));
+        check (! afterLoopAtFirst, "the first window of a start is not after a loop");
+        t.seekSong (5.0);
+        const auto blk = t.advance (500);
+        check (blk.numWindows >= 1 && ! blk.windows[0].afterLoop, "a seek is not a loop jump");
+    });
+
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

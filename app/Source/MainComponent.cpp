@@ -80,6 +80,11 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar = std::make_unique<ui::TopBar> (engine, model);
     topBar->setRecorder (&recorder);
     topBar->onRecordClicked = [this] { recordClicked(); };
+    topBar->onRecordToArrangement = [this] { recordArrangementClicked(); };
+    topBar->onRecordToSlot = [this] { recordToSlotClicked(); };
+    recorder.arrangement().onFinished = [this] (const ArrangementRecorder::Summary& s) {
+        infoBar->showMessage (Strings::arrRec::recorded (s.numClips, s.numTakes), 4000);
+    };
     topBar->onCaptureClicked = [this] { captureClicked(); };
     topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
@@ -106,6 +111,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detail->chain().setBrowserActions (&browserActions);
     detail->chain().onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
     arrangement = std::make_unique<ui::ArrangementView> (engine, model, actions, selection);
+    arrangement->setRecorder (&recorder);
     arrangement->onOpenClip = [this] (int64_t trackId, int64_t aclipId) { openArrangementClip (trackId, aclipId); };
     arrangement->onMessage = [this] (const juce::String& text) { infoBar->showMessage (text, 3000); };
     arrangement->lettersReserved = [this] { return computerKeys.isOn(); };
@@ -249,6 +255,8 @@ MainComponent::~MainComponent()
     stopTimer();
     topBar->setRecorder (nullptr);
     session->setRecorder (nullptr);
+    arrangement->setRecorder (nullptr);
+    recorder.arrangement().onFinished = nullptr;
 #if JUCE_MAC
     juce::MenuBarModel::setMacMainMenu (nullptr);
 #endif
@@ -415,7 +423,7 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
     using namespace ui::commands;
     commands.addArray ({ splitClips, joinClips, loopSelection, removeTime, addMarker, toggleFollow, newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
-                         deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        captureMidi,        toggleBrowser, toggleDetail,
+                         deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        captureMidi,        recordArrangement, toggleBrowser, toggleDetail,
                          toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
 }
 
@@ -477,6 +485,10 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case captureScene: set (M::captureScene, createCategory, true, key ('i', cmd | shift)); break;
         case newClip: set (M::newClip, createCategory, model.numTracks() > 0, key ('m', cmd | shift)); break;
         case captureMidi: set (M::captureMidi, createCategory, model.numTracks() > 0, key ('c', cmd | shift)); break;
+        case recordArrangement:
+            set (Strings::arrRec::commandRecord, createCategory, model.numTracks() > 0, juce::KeyPress (juce::KeyPress::F9Key));
+            info.setTicked (recorder.arrangement().isActive());
+            break;
 
         case splitClips: set (Strings::arrangement::splitClip, editCategory, arrangementShown, key ('e', cmd)); break;
         case joinClips: set (Strings::arrangement::joinClips, editCategory, arrangementShown, key ('j', cmd)); break;
@@ -607,6 +619,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         case captureScene: editCommands.captureScene(); return true;
         case newClip: editCommands.newClip(); return true;
         case captureMidi: captureClicked(); return true;
+        case recordArrangement: recordArrangementClicked(); return true;
 
         case toggleBrowser: setBrowserVisible (! browserVisible); return true;
         case toggleDetail: setDetailVisible (! detailVisible); return true;
@@ -666,10 +679,36 @@ int MainComponent::selectedSceneForRecording() const
     return 0;
 }
 
+// What the record button means: see recordButtonAction (ArrangementRecorder.h).
 void MainComponent::recordClicked()
+{
+    switch (recordButtonAction (recorder.arrangement().isActive(), recorder.isAnythingRecording(), arrangementShown, engine.isPlaying()))
+    {
+        case RecordButtonAction::stopTimeline: recorder.arrangement().stop(); break;
+        case RecordButtonAction::stopSlots: recorder.sessionRecord (selectedSceneForRecording()); break; // stops them
+        case RecordButtonAction::recordTimeline: recordArrangementClicked(); break;
+        case RecordButtonAction::recordSlot: recordToSlotClicked(); break;
+    }
+}
+
+void MainComponent::recordToSlotClicked()
 {
     if (! recorder.sessionRecord (selectedSceneForRecording()) && ! recorder.isAnythingRecording())
         infoBar->showMessage (Strings::recording::recordNoTrack, 3500);
+}
+
+void MainComponent::recordArrangementClicked()
+{
+    auto& arr = recorder.arrangement();
+    if (arr.isActive())
+    {
+        arr.stop();
+        return;
+    }
+    if (recorder.isAnythingRecording())
+        recorder.sessionRecord (selectedSceneForRecording());
+    if (! arr.start())
+        infoBar->showMessage (Strings::arrRec::noTrack, 3500);
 }
 
 void MainComponent::captureClicked()

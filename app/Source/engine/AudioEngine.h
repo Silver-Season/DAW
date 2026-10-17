@@ -15,6 +15,7 @@
 #include "daw/engine/Clip.h"
 
 #include <atomic>
+#include <limits>
 #include <functional>
 #include <map>
 #include <memory>
@@ -150,6 +151,28 @@ public:
     bool stopRecord (int64_t trackId);
     bool launchAligned (int64_t trackId, int scene, double beat);
 
+    // Arrangement recording (docs/spec/03-arrangement.md, task 3.4). Normally called through ArrangementRecorder.
+    // start: from a stopped transport it starts the transport with the count-in of the project, the recording begins at
+    // monotonic beat 0; from a playing one at the next launch-quantisation boundary. While it runs the audio thread logs
+    // the song position jumps and the Session View launches as EngineEvents, and the arrangement of the tracks that
+    // record (and do not overdub) is silent where the recording replaces it. stop ends it at once.
+    bool startArrangementRecord();
+    bool stopArrangementRecord();
+    enum ArrangementRecordState : int
+    {
+        arrangementIdle = 0,
+        arrangementWaiting = 1,  // armed: the count-in or the quantisation boundary has not come yet
+        arrangementRunning = 2,
+        arrangementFinished = 3  // ended (stop, or the transport stopped); the message thread collects it and calls acknowledge
+    };
+    int getArrangementRecordState() const { return arrRecState.load(); }
+    double getArrangementRecordStartBeat() const { return arrRecStart.load(); } // monotonic clock
+    double getArrangementRecordEndBeat() const { return arrRecEnd.load(); }
+    void acknowledgeArrangementRecord() { arrRecState.store (arrangementIdle); }
+    // The log of an arrangement recording, in order. Message thread. Returns how many were appended.
+    size_t popEngineEvents (std::vector<EngineEvent>& out);
+    uint32_t getEngineEventDrops() const { return engineEventDrops.load (std::memory_order_relaxed); }
+
     // Live input events that reached a track (or none), for the recorder and the capture buffer. Message thread.
     // Returns how many were appended to `out`.
     size_t popInputEvents (std::vector<daw::engine::InputEvent>& out);
@@ -250,6 +273,11 @@ private:
     void routeInputEvents (const PlaybackGraph&, const daw::engine::Transport::Block&, double samplesPerBeat, int64_t blockEngineStart, bool anyArmed);
     bool acceptsLiveMidi (const TrackRuntime&, bool fromKeyboard, bool anyArmed) const;
     void updateRecordCompensation();
+    void startArrangementRecording (const PlaybackGraph&);
+    void updateArrangementRecord (double blockEndBeat);
+    void logSongWindows (const daw::engine::Transport::Block&, double samplesPerBeat);
+    void pushEngineEvent (const EngineEvent&);
+    bool isRecordTarget (const TrackRuntime&, bool anyArmed) const;
     void renderTrack (const PlaybackGraph::Track&, const daw::engine::Transport::Block&, double samplesPerBeat, int numSamples,
                       bool killNotes, bool anySolo, bool anyArmed);
 
@@ -335,6 +363,18 @@ private:
     // The arrangement properties of the model, copied by applyProjectProperties
     std::atomic<double> arrLoopStart { 0.0 }, arrLoopEnd { 16.0 }, arrPlayStart { 0.0 };
     std::atomic<bool> arrLoopOn { false }, anyInSession { false };
+    std::atomic<bool> punchInOn { false }, punchOutOn { false };
+
+    // Arrangement recording: the state machine is written by the audio thread (and acknowledged by the message thread),
+    // the log travels through a fixed SPSC queue.
+    std::atomic<int> arrRecState { arrangementIdle };
+    std::atomic<double> arrRecStart { 0.0 }, arrRecEnd { TrackRuntime::kNoEnd };
+    static constexpr int kEngineEventQueueSize = 8192;
+    juce::AbstractFifo engineEventFifo { kEngineEventQueueSize };
+    std::vector<EngineEvent> engineEvents = std::vector<EngineEvent> ((size_t) kEngineEventQueueSize);
+    std::atomic<uint32_t> engineEventDrops { 0 };
+    double expectedSongBeat = std::numeric_limits<double>::quiet_NaN(); // audio thread: where the next window should begin
+    bool logEvents = false;                                              // audio thread: the current block is logged
     bool continueSong = false; // audio thread: the next start of the transport continues where the song stopped
     std::atomic<float> masterGain { 1.0f };
     std::atomic<float> tuneA4 { 440.0f }; // project tuning, given to every Prisma

@@ -43,8 +43,20 @@ void clearRange (ProjectModel&, const TrackRef& track, double from, double to);
 //==============================================================================
 // Creating clips (each returns the new clip; its content is always its own copy with fresh ids)
 ArrangementClipRef addEmptyClip (ProjectModel&, const TrackRef&, double start, double lengthBeats, const juce::String& name = {});
+// A clip made by recording (task 3.4). `passes` are the contents of the takes, all lasting `lengthBeats` from `start`;
+// the clip shows `activePass` (0-based) and keeps the others as takes (clip.takesNode()). One pass = a plain clip.
+struct RecordedPass
+{
+    std::vector<daw::engine::Note> notes;
+    std::vector<daw::engine::ControllerEvent> controllers;
+};
+ArrangementClipRef addRecordedClip (ProjectModel&, const TrackRef&, double start, double lengthBeats, const std::vector<RecordedPass>& passes,
+                                    int activePass, const juce::String& name = {});
 // A copy of a Session View clip. Length: the clip length; the loop flag follows the clip's.
 ArrangementClipRef addSlotClip (ProjectModel&, const TrackRef&, const ClipRef& source, double start);
+// A part of a Session View clip as the session played it (arrangement recording): `length` beats from `start`, entered at
+// `offset` of the content, looping as the clip does. Overlaps are resolved.
+ArrangementClipRef addSlotClipPart (ProjectModel&, const TrackRef&, const ClipRef& source, double start, double length, double offset);
 // A copy of an arrangement clip (Alt-drag, Cmd+V from live clips) on `dest` at `start`.
 ArrangementClipRef copyClip (ProjectModel&, const ArrangementClipRef& source, const TrackRef& dest, double start);
 // A copy of a clip that was copied earlier as a free-standing ACLIP tree (the clipboard of the view: source.state.createCopy()).
@@ -53,6 +65,18 @@ ArrangementClipRef pasteClip (ProjectModel&, const TrackRef& dest, const juce::V
 ArrangementClipRef duplicateAfter (ProjectModel&, const ArrangementClipRef&);
 // Cmd+D on a time selection: copies what lies in [from, to) on these tracks to [to, to + (to - from)).
 Clips duplicateRange (ProjectModel&, const std::vector<TrackRef>&, double from, double to);
+
+//==============================================================================
+// Takes
+struct TakeInfo
+{
+    int number = 0; // 1 = the first pass of the recording
+    bool active = false;
+};
+// All takes of the clip sorted by number, the one that is shown marked; empty for a clip without takes.
+std::vector<TakeInfo> takesOf (const ArrangementClipRef&);
+// Shows take `number`: its content and the content that is shown now trade places. False if there is no such take.
+bool switchTake (ProjectModel&, const ArrangementClipRef&, int number);
 
 //==============================================================================
 // Moving and stretching

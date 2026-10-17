@@ -43,7 +43,7 @@ juce::uint32 nowMs() { return juce::Time::getMillisecondCounter(); }
 } // namespace
 
 //==============================================================================
-SessionRecorder::SessionRecorder (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
+SessionRecorder::SessionRecorder (AudioEngine& e, ProjectModel& m) : engine (e), model (m), arr (e, m)
 {
     scratch.reserve (4096);
 }
@@ -172,8 +172,10 @@ void SessionRecorder::poll()
             snapshots[trackId] = s;
         }
     positionAtPoll = engine.getPositionBeats();
+    const auto arrangementState = arr.snapshot();
 
     drainEvents();
+    arr.process (arrangementState);
 
     for (auto it = recs.begin(); it != recs.end();)
     {
@@ -207,6 +209,7 @@ void SessionRecorder::drainEvents()
         return;
     for (const auto& e : scratch)
     {
+        arr.feedInput (e);
         capture_.push (e);
         if (e.playing)
             if (const auto it = recs.find (e.trackId); it != recs.end() && (it->second.events.size() < 200000))
