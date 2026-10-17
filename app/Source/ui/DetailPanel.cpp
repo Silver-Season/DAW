@@ -945,8 +945,10 @@ void DetailPanel::tick()
     const auto track = model.findTrack (shownTrack);
     if (! transposeField.isEditing())
         transposeField.setValue (track.isValid() ? track.transpose() : 0);
-    transposeField.setEnabled (track.isValid());
-    recordSwitch->setEnabled (track.isValid());
+    // without a track the summary card is empty, so its two controls go too
+    const bool cardShown = track.isValid() && ! editor->isVisible();
+    transposeField.setVisible (cardShown);
+    recordSwitch->setVisible (cardShown);
     recordSwitch->setSource (track.isValid() ? track.recordSource() : juce::String ("midi"));
     const auto summary = track.isValid() ? track.name() + "|" + juce::String (track.colour()) + "|" + track.input() + "|" + track.monitor()
                                                + "|" + juce::String (track.numDevices())
