@@ -1,0 +1,20 @@
+// Flanger ("flanger"): STUB until its DSP lands (docs/spec/06-effects-mixing.md, task 6.2). Passes the sound through.
+#include "daw/fx/BasicEffect.h"
+
+namespace daw::fx
+{
+namespace
+{
+class FlangerEffect final : public BasicEffect
+{
+public:
+    FlangerEffect() : BasicEffect ({}) {}
+    std::string_view type() const override { return "flanger"; }
+
+protected:
+    void processWet (float* const*, int, int, const float* const*) override {}
+};
+} // namespace
+
+std::unique_ptr<Effect> makeFlanger() { return std::make_unique<FlangerEffect>(); }
+} // namespace daw::fx
