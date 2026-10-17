@@ -35,7 +35,9 @@ public:
     int browserWidth() const;  // 180 .. 420
     void setBrowserWidth (int);
     int detailHeight() const;  // 160 .. 480
+    int editorHeight() const;  // 160 .. 900, the panel while it shows the clip editor
     void setDetailHeight (int);
+    void setEditorHeight (int);
     bool browserVisible() const;
     void setBrowserVisible (bool);
     bool detailVisible() const;

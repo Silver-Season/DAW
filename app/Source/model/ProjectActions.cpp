@@ -6,6 +6,82 @@
 ProjectActions::ProjectActions (ProjectModel& m, AudioEngine* e) : model (m), engine (e) {}
 
 //==============================================================================
+void ProjectActions::setProjectScale (int root, const juce::String& mode)
+{
+    if (root == model.scaleRoot() && mode == model.scaleMode())
+        return;
+    begin (Strings::undoProjectScale);
+    model.setScale (juce::jlimit (0, 11, root), mode);
+}
+
+void ProjectActions::setProjectTuning (double hz)
+{
+    if (std::abs (hz - model.tuningA4()) < 1.0e-9)
+        return;
+    begin (Strings::undoTuning);
+    model.setTuningA4 (hz);
+}
+
+void ProjectActions::setProjectSignature (int num, int den)
+{
+    if (num == model.sigNum() && den == model.sigDen())
+        return;
+    begin (Strings::undoSignature);
+    model.setSignature (juce::jlimit (1, 32, num), den);
+}
+
+void ProjectActions::setProjectAuthor (const juce::String& text)
+{
+    if (text == model.author())
+        return;
+    begin (Strings::undoAuthor);
+    model.setAuthor (text);
+}
+
+void ProjectActions::setProjectNotes (const juce::String& text)
+{
+    if (text == model.projectNotes())
+        return;
+    begin (Strings::undoProjectNotes);
+    model.setProjectNotes (text);
+}
+
+void ProjectActions::setQuantiseSettings (const ProjectModel::QuantiseSettings& q)
+{
+    begin (Strings::undoQuantiseSettings);
+    model.setQuantiseSettings (q);
+}
+
+void ProjectActions::setClipLoopEnabled (int64_t clipId, bool on)
+{
+    const auto clip = model.findClip (clipId);
+    if (! clip.isValid() || clip.loopEnabled() == on)
+        return;
+    begin (Strings::undoLoopSwitch);
+    clip.setLoopEnabled (on, &model.undo);
+}
+
+void ProjectActions::setClipScale (int64_t clipId, bool own, int root, const juce::String& mode)
+{
+    const auto clip = model.findClip (clipId);
+    if (! clip.isValid())
+        return;
+    begin (Strings::undoClipScale);
+    clip.setOwnScale (own, &model.undo);
+    clip.setScale (juce::jlimit (0, 11, root), mode, &model.undo);
+}
+
+void ProjectActions::setTrackTranspose (int64_t trackId, int semitones)
+{
+    const auto track = model.findTrack (trackId);
+    semitones = juce::jlimit (-48, 48, semitones);
+    if (! track.isValid() || track.transpose() == semitones)
+        return;
+    begin (Strings::undoTrackTranspose);
+    track.setTranspose (semitones, &model.undo);
+}
+
+//==============================================================================
 TrackRef ProjectActions::addMidiTrack (int insertIndex)
 {
     begin (Strings::undoNewTrack);
@@ -97,9 +173,8 @@ ClipRef ProjectActions::createEmptyClip (int64_t trackId, int scene)
     const auto track = model.findTrack (trackId);
     if (! track.isValid() || scene < 0 || scene >= model.numScenes() || track.clipAt (scene).isValid())
         return {};
-    const double bar = (double) model.root.getProperty (ids::sigNum, 4) * 4.0 / (double) model.root.getProperty (ids::sigDen, 4);
     begin (Strings::undoNewClip);
-    return model.createClip (track, scene, bar);
+    return model.createClip (track, scene, model.beatsPerBar());
 }
 
 void ProjectActions::renameClip (int64_t trackId, int scene, const juce::String& name)

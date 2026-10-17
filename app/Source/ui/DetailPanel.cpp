@@ -811,11 +811,54 @@ void DeviceChainView::tick()
 }
 
 //==============================================================================
-DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : engine (e), model (m)
+DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : engine (e), model (m), actions (a), selection (s)
 {
     chainView = std::make_unique<DeviceChainView> (e, m, a, s);
     addAndMakeVisible (*chainView);
+    editor = std::make_unique<PianoRoll> (e, m, a, s);
+    addChildComponent (*editor);
     setHelpText (Strings::help::detailInfo);
+
+    transposeField.setRange (-48.0, 48.0, 1.0);
+    transposeField.setDecimals (0);
+    transposeField.setDragSensitivity (0.15);
+    transposeField.setHelpText (Strings::help::trackTranspose);
+    transposeField.onGestureStart = [this] { model.undo.beginNewTransaction (Strings::undoTrackTranspose); };
+    transposeField.onValueChange = [this] (double v) {
+        if (const auto track = model.findTrack (shownTrack); track.isValid())
+            track.setTranspose ((int) std::lround (v), &model.undo);
+    };
+    addAndMakeVisible (transposeField);
+}
+
+void DetailPanel::setEditorMode (bool on)
+{
+    editorOn = on;
+    updateEditor();
+}
+
+void DetailPanel::updateEditor()
+{
+    int64_t clipId = 0;
+    if (editorOn && selection.get().kind == Selection::Kind::clip)
+        if (const auto track = model.findTrack (selection.get().trackId); track.isValid())
+            if (const auto clip = track.clipAt (selection.get().scene); clip.isValid())
+                clipId = clip.id();
+    // With the editor on but no clip selected the chain stays: the editor has nothing to show.
+    const bool shown = clipId != 0;
+    if (shown != editorShown)
+    {
+        editorShown = shown;
+        editor->setVisible (shown);
+        chainView->setVisible (! shown);
+        transposeField.setVisible (! shown);
+        resized();
+        repaint();
+        if (onEditorShownChanged)
+            onEditorShownChanged();
+    }
+    if (shown && editor->clipId() != clipId)
+        editor->setClip (clipId);
 }
 
 DetailPanel::~DetailPanel() = default;
@@ -827,6 +870,7 @@ void DetailPanel::setOpenDeviceHandler (std::function<void (int64_t)> handler)
 
 void DetailPanel::tick()
 {
+    updateEditor();
     const auto selected = model.selectedTrack();
     if (selected != shownTrack || ! model.findTrack (shownTrack).isValid())
     {
@@ -836,6 +880,9 @@ void DetailPanel::tick()
     chainView->tick();
 
     const auto track = model.findTrack (shownTrack);
+    if (! transposeField.isEditing())
+        transposeField.setValue (track.isValid() ? track.transpose() : 0);
+    transposeField.setEnabled (track.isValid());
     const auto summary = track.isValid() ? track.name() + "|" + juce::String (track.colour()) + "|" + track.input() + "|" + track.monitor()
                                                + "|" + juce::String (track.numDevices())
                                          : juce::String();
@@ -852,6 +899,8 @@ void DetailPanel::paint (juce::Graphics& g)
     g.fillAll (t.chrome);
     g.setColour (t.line);
     g.fillRect (0, 0, getWidth(), 1);
+    if (editorShown)
+        return;
     g.fillRect (kInfoWidth - 1, 1, 1, getHeight() - 1);
 
     auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (14, 12);
@@ -891,10 +940,16 @@ void DetailPanel::paint (juce::Graphics& g)
     const auto monitor = track.monitor();
     line (Strings::detail::monitor, monitor == "in" ? Strings::detail::monitorIn : (monitor == "off" ? Strings::detail::monitorOff : Strings::detail::monitorAuto));
     line (Strings::detail::chain, Strings::detail::devices (track.numDevices()));
+    g.setColour (t.dimText);
+    g.setFont (t.uiFont (12.5f));
+    g.drawText (Strings::detail::transpose + ": ", area.removeFromTop (22).withWidth (110), juce::Justification::centredLeft, false);
 }
 
 void DetailPanel::resized()
 {
     chainView->setBounds (getLocalBounds().withTrimmedLeft (kInfoWidth).withTrimmedTop (1));
+    editor->setBounds (getLocalBounds().withTrimmedTop (1));
+    // below the three lines of the summary card: 14 + 16 + 22 + 6 + 3 * 22 + 13
+    transposeField.setBounds (14 + 112, 13 + 16 + 22 + 6 + 3 * 22, 76, 20);
 }
 } // namespace ui

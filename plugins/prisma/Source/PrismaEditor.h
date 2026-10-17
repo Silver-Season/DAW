@@ -119,6 +119,24 @@ public:
     void releaseKeysNotDown();
     void shiftOctave (int delta);
 
+    // The note the A key plays (always a C) and the velocity of C / V. The owner shows them: this panel is
+    // often not on screen at all.
+    int getBaseNote() const { return baseNote; }
+    int getVelocity() const { return velocity; }
+    // Called after Z / X / C / V (even when the value did not change because a limit was reached), with
+    // true if the velocity was the thing that moved.
+    std::function<void (bool velocityChanged)> onChanged;
+    // Replaces the English caption beside the keys (base note, velocity).
+    std::function<juce::String (int baseNote, int velocity)> captionFormatter;
+    void refreshCaption() { updateLabel(); }
+    // Which note a key plays. Key i is the i-th of "awsedftgyhujkolp;" (a semitone each, from the base note).
+    // Return kDefaultNote to keep baseNote + i, or kNoNote to leave the key silent (the scale mode skips the black ones).
+    static constexpr int kDefaultNote = -2, kNoNote = -1;
+    std::function<int (int keyIndex, int baseNote)> noteForKey;
+    static bool isWhiteKeyIndex (int i) { return i == 0 || i == 2 || i == 4 || i == 5 || i == 7 || i == 9 || i == 11 || i == 12 || i == 14 || i == 16; }
+    // 0..9 for the ten white-row keys, -1 for the others
+    static int whiteKeyDegree (int i);
+
     void resized() override;
 
 private:

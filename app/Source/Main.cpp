@@ -73,7 +73,7 @@ private:
             setName (content->windowTitle());
             setContentOwned (content, true);
             setResizable (true, true);
-            setResizeLimits (1100, 700, 8000, 6000);
+            setResizeLimits (1210, 700, 8000, 6000);
             if (const auto state = settings.windowState(); state.isNotEmpty())
                 restoreWindowStateFromString (state);
             else

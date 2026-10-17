@@ -2,6 +2,7 @@
 
 #include "../Strings.h"
 #include "Chrome.h"
+#include "ScalePicker.h"
 #include "../engine/AudioEngine.h"
 
 
@@ -22,6 +23,7 @@ public:
     juce::String text;
     Role role = Role::normal;
     bool on = false;
+    bool accentInk = false; // the label in the accent colour (the scale button while a scale is set)
     std::function<void()> onClick;
 
     IconButton (std::function<juce::Path (juce::Rectangle<float>)> iconFn, const juce::String& label, Role r, const juce::String& help)
@@ -46,6 +48,8 @@ public:
         juce::Colour fill = t.panel, ink = t.text, border = t.line;
         if (role == Role::record)
             ink = t.record;
+        else if (accentInk)
+            ink = t.accent;
         if (on)
         {
             const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : t.accent);
@@ -96,6 +100,15 @@ public:
     Lamp (const juce::String& label, const juce::String& help) : text (label)
     {
         setHelpText (help);
+    }
+
+    void setText (const juce::String& t)
+    {
+        if (t != text)
+        {
+            text = t;
+            repaint();
+        }
     }
 
     void setLit (bool v, bool useGreen)
@@ -212,9 +225,29 @@ public:
 class TopBar::Tabs final : public juce::Component, public HelpProvider
 {
 public:
+    Tabs() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+
+    std::function<void (bool arrangement)> onSwitch;
+
+    void setArrangement (bool a)
+    {
+        if (a != arrangement)
+        {
+            arrangement = a;
+            repaint();
+        }
+    }
+
     juce::String helpAt (juce::Point<int> p) const override
     {
         return p.x < getWidth() / 2 ? Strings::help::tabSession : Strings::help::tabArrangement;
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        const bool right = e.x >= getWidth() / 2;
+        if (right != arrangement && onSwitch)
+            onSwitch (right);
     }
 
     void paint (juce::Graphics& g) override
@@ -223,18 +256,26 @@ public:
         auto r = getLocalBounds().toFloat().reduced (0.5f);
         g.setColour (t.panel);
         g.fillRoundedRectangle (r, t.radius);
-        auto left = r.removeFromLeft (r.getWidth() * 0.46f);
-        g.setColour (t.panel2);
-        g.fillRoundedRectangle (left, t.radius);
-        g.setColour (t.accent);
-        g.fillRect (left.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
-        g.setColour (t.text);
-        g.setFont (t.uiFont (12.0f, 500));
-        g.drawText (Strings::transport::sessionTab, left.toNearestInt(), juce::Justification::centred, false);
-        g.setColour (t.dimText.withAlpha (0.7f));
-        g.drawText (Strings::transport::arrangementTab, r.toNearestInt(), juce::Justification::centred, false);
+        auto left = r.removeFromLeft (r.getWidth() * 0.5f);
+        const auto drawTab = [&] (juce::Rectangle<float> area, const juce::String& text, bool active) {
+            if (active)
+            {
+                g.setColour (t.panel2);
+                g.fillRoundedRectangle (area, t.radius);
+                g.setColour (t.accent);
+                g.fillRect (area.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
+            }
+            g.setColour (active ? t.text : t.dimText);
+            g.setFont (t.uiFont (12.0f, 500));
+            g.drawText (text, area.toNearestInt(), juce::Justification::centred, false);
+        };
+        drawTab (left, Strings::transport::sessionTab, ! arrangement);
+        drawTab (r, Strings::transport::arrangementTab, arrangement);
         strokeCell (g, getLocalBounds().toFloat(), t.line);
     }
+
+private:
+    bool arrangement = false;
 };
 
 //==============================================================================
@@ -261,6 +302,13 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
     capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
     version = std::make_unique<IconButton> (nullptr, Strings::transport::versionNone, Role::normal, Strings::help::version);
+    scaleButton = std::make_unique<IconButton> (nullptr, Strings::transport::scaleOff, Role::normal, Strings::help::scaleButton);
+    scaleButton->onClick = [this] {
+        showScalePicker (*scaleButton, model.scaleRoot(), model.scaleMode(), [this] (int root, const juce::String& mode) {
+            model.undo.beginNewTransaction (Strings::undoProjectScale);
+            model.setScale (root, mode);
+        });
+    };
     for (auto* b : { metronome.get(), record.get(), loop.get(), capture.get() })
         b->setEnabled (false);
     version->onClick = [this] {
@@ -277,6 +325,10 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
 
     morph = std::make_unique<FakeSlider>();
     tabs = std::make_unique<Tabs>();
+    tabs->onSwitch = [this] (bool arrangement) {
+        if (onViewSwitched)
+            onViewSwitched (arrangement);
+    };
     midiLamp = std::make_unique<Lamp> (Strings::transport::midi, Strings::help::midiIn);
     keysLamp = std::make_unique<Lamp> (Strings::transport::keysOn, Strings::help::keysIndicator);
     cpu = std::make_unique<CpuMeter>();
@@ -286,7 +338,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     };
 
     for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), loop.get(), capture.get(),
-                                                              version.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
+                                                              version.get(), scaleButton.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
         addAndMakeVisible (c);
     lastMidiCount = engine.getHardwareMidiCount();
     tick();
@@ -303,9 +355,19 @@ void TopBar::setVersionText (const juce::String& text)
     }
 }
 
+void TopBar::setArrangementShown (bool shown)
+{
+    tabs->setArrangement (shown);
+}
+
 void TopBar::setComputerKeysOn (bool on)
 {
     keysLamp->setLit (on, true);
+}
+
+void TopBar::setKeysOctave (const juce::String& octave)
+{
+    keysLamp->setText (Strings::transport::keysOn + " " + octave);
 }
 
 void TopBar::tick()
@@ -317,9 +379,9 @@ void TopBar::tick()
         tempo.setValue (model.tempo());
 
     const double beats = engine.getPositionBeats();
-    const int sigNum = juce::jmax (1, (int) model.root.getProperty (ids::sigNum, 4));
-    const int bar = (int) std::floor (beats / sigNum) + 1;
-    const int beat = (int) std::floor (std::fmod (beats, (double) sigNum)) + 1;
+    const double barBeats = model.beatsPerBar(); // 6/8 is three quarter notes long
+    const int bar = (int) std::floor (beats / barBeats + 1.0e-9) + 1;
+    const int beat = (int) std::floor (std::fmod (beats, barBeats) + 1.0e-9) + 1;
     const int sixteenth = (int) std::floor (std::fmod (beats * 4.0, 4.0)) + 1;
     const auto text = juce::String (bar) + ". " + juce::String (beat) + ". " + juce::String (sixteenth);
     if (text != positionText)
@@ -335,6 +397,14 @@ void TopBar::tick()
         midiFlashUntil = juce::Time::getMillisecondCounter() + 120;
     }
     midiLamp->setLit (juce::Time::getMillisecondCounter() < midiFlashUntil, false);
+    const auto label = scaleLabel (model.scaleRoot(), model.scaleMode());
+    if (label != scaleText)
+    {
+        scaleText = label;
+        scaleButton->text = label;
+        scaleButton->accentInk = model.scaleMode().isNotEmpty();
+        scaleButton->repaint();
+    }
     cpu->setLoad ((float) engine.getDeviceManager().getCpuUsage());
     wasPlaying = playing;
 }
@@ -358,7 +428,7 @@ void TopBar::paint (juce::Graphics& g)
         g.setFont (t.numFont (13.0f));
         g.drawText (text, area, juce::Justification::centred, false);
     };
-    const int num = (int) model.root.getProperty (ids::sigNum, 4), den = (int) model.root.getProperty (ids::sigDen, 4);
+    const int num = model.sigNum(), den = model.sigDen();
     field (signatureArea, juce::String (num) + " / " + juce::String (den));
     field (positionArea, positionText);
 
@@ -398,6 +468,8 @@ void TopBar::resized()
     r.removeFromLeft (80 + small);
     signatureArea = juce::Rectangle<int> (60, h).withCentre ({ r.getX() + 30, cy });
     r.removeFromLeft (60 + small);
+    place (*scaleButton, 100);
+    r.removeFromLeft (small);
     place (*metronome, h);
     r.removeFromLeft (gap);
 
@@ -419,7 +491,7 @@ void TopBar::resized()
     };
     takeRight (*cpu, 80, 20);
     r.removeFromRight (gap);
-    takeRight (*keysLamp, 52, 20);
+    takeRight (*keysLamp, 80, 20);
     takeRight (*midiLamp, 52, 20);
     r.removeFromRight (gap);
     takeRight (*version, 96);

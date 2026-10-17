@@ -36,6 +36,9 @@ public:
     void setProjectFolder (const juce::File&);
     juce::Array<juce::File> places() const;
     void scanPlaces (bool onlyIfStale);
+    // The folder is linked, not copied: only its path goes into the settings. Both "Add folder..." and a folder
+    // dropped on the panel come here. False if it is not a folder or is there already. Does not rescan.
+    bool addPlaceFolder (const juce::File&);
 
     // The scan of one folder, synchronous (used by the job and by tests): sound files, MIDI files, and the
     // same files grouped under the place for the "Places" category.

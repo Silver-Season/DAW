@@ -46,6 +46,8 @@ public:
     std::function<void (const browser::DropResult&, const browser::DragItem&)> onDropped;
     // "Save chain..." in the menu of a track header.
     std::function<void (int64_t trackId)> onSaveChain;
+    // Double-click on a clip (or on an empty slot, which makes a clip): open it in the clip editor.
+    std::function<void (int64_t trackId, int scene)> onOpenClip;
 
     // Layout facts used by tests and the screenshot script.
     int numColumns() const { return (int) columnX.size(); }

@@ -8,6 +8,7 @@
 #include "../app/Source/Strings.h"
 #include "../app/Source/model/ProjectActions.h"
 #include "../app/Source/ui/Chrome.h"
+#include "../app/Source/ui/ComputerKeys.h"
 #include "../app/Source/ui/Controls.h"
 #include "../app/Source/ui/EditCommands.h"
 #include "../app/Source/ui/Theme.h"
@@ -489,8 +490,67 @@ void testControlsAndHelp()
 }
 } // namespace
 
+void testComputerKeys()
+{
+    std::printf ("[test ui-5] computer keys: octave and velocity are announced\n");
+    juce::MidiKeyboardState state;
+    ui::ComputerKeys keys (state);
+    juce::StringArray messages;
+    int stateChanges = 0;
+    keys.onMessage = [&] (const juce::String& m) { messages.add (m); };
+    keys.onStateChanged = [&] { ++stateChanges; };
+    const auto press = [&] (juce::juce_wchar c, int mods = 0) { return keys.keyPressed (juce::KeyPress (c, juce::ModifierKeys (mods), c)); };
+    namespace K = Strings::keyboardUi;
+
+    check (keys.octaveText() == "C3", "the A key starts on C3");
+
+    // switched off: Z and X explain themselves, other keys stay silent and unhandled
+    check (! press ('z') && messages.size() == 1 && messages[0] == K::keysOffHint, "off: Z shows the hint and is not taken");
+    check (! press ('X') && messages.size() == 2 && messages[1] == K::keysOffHint, "off: X shows the hint");
+    check (! press ('a') && ! press ('c') && ! press ('v') && ! press ('q') && messages.size() == 2, "off: other keys do nothing");
+    check (! press ('z', juce::ModifierKeys::commandModifier) && ! press ('z', juce::ModifierKeys::shiftModifier) && messages.size() == 2,
+           "off: Cmd+Z and Shift+Z are not ours");
+    check (keys.octaveText() == "C3", "off: the octave did not move");
+
+    keys.setOn (true);
+    check (stateChanges == 1 && keys.isOn(), "switching on notifies the lamp");
+    messages.clear();
+    check (press ('x') && messages.size() == 1 && messages[0] == K::octaveMessage (72), "X: octave up is announced");
+    check (messages[0] == juce::String (juce::CharPointer_UTF8 ("\xd0\x9e\xd0\xba\xd1\x82\xd0\xb0\xd0\xb2\xd0\xb0: C4\xe2\x80\x93" "E5")), "the message reads Октава: C4–E5");
+    check (keys.octaveText() == "C4" && keys.panel().getBaseNote() == 72, "the lamp text follows the octave");
+    check (press ('z') && press ('z') && keys.octaveText() == "C2" && messages[messages.size() - 1] == K::octaveMessage (48), "Z twice goes two octaves down");
+    check (press ('c') && keys.panel().getVelocity() == 80 && messages[messages.size() - 1] == K::velocityMessage (80), "C: velocity down is announced");
+    check (press ('v') && press ('v') && messages[messages.size() - 1] == K::velocityMessage (120), "V: velocity up is announced");
+    check (stateChanges >= 7, "every change refreshes the lamp");
+
+    for (int i = 0; i < 12; ++i)
+        press ('z');
+    check (keys.panel().getBaseNote() == 12 && messages[messages.size() - 1] == K::octaveMessage (12), "at the lowest octave the message still appears");
+
+    // scale mode: the A row plays degrees of the project scale, the black row is silent
+    keys.projectScale = [] { return ui::ComputerKeys::ScaleInfo { 2, "minor" }; }; // D minor
+    keys.setOn (true);
+    while (keys.panel().getBaseNote() < 60)
+        press ('x');
+    auto& panel = keys.panel();
+    check (panel.noteForKey (0, 60) == 62 && panel.noteForKey (2, 60) == 64 && panel.noteForKey (4, 60) == 65 && panel.noteForKey (5, 60) == 67,
+           "D minor: A S D F play D E F G");
+    check (panel.noteForKey (9, 60) == 70 && panel.noteForKey (16, 60) == 77, "H is the sixth degree (Bb), the ; key the tenth (F)");
+    check (panel.noteForKey (1, 60) == prisma_ui::KeyboardPanel::kNoNote, "the black-key row is silent in scale mode");
+    keys.setInScale (false);
+    check (panel.noteForKey (1, 60) == prisma_ui::KeyboardPanel::kDefaultNote, "scale mode off: chromatic again");
+    keys.setInScale (true);
+    keys.projectScale = [] { return ui::ComputerKeys::ScaleInfo { 0, "" }; };
+    check (panel.noteForKey (1, 60) == prisma_ui::KeyboardPanel::kDefaultNote, "no project scale: chromatic");
+
+    keys.setOn (false);
+    messages.clear();
+    check (! press ('x') && messages.size() == 1 && messages[0] == K::keysOffHint, "off again: the hint returns");
+}
+
 void tests::runUiTests()
 {
+    testComputerKeys();
     testThemes();
     testActionTransactions();
     testActionsWithEngine();

@@ -10,7 +10,11 @@
 #include "ui/AppMenu.h"
 #include "ui/BrowserPanel.h"
 #include "ui/Chrome.h"
+#include "ui/ComputerKeys.h"
+#include "ui/ArrangementView.h"
 #include "ui/DetailPanel.h"
+#include "ui/KeyboardStrip.h"
+#include "ui/ProjectPropertiesWindow.h"
 #include "ui/EditCommands.h"
 #include "ui/SettingsWindow.h"
 #include "ui/SessionView.h"
@@ -65,6 +69,10 @@ public:
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     ui::BrowserPanel& getBrowser() { return *browser; }
     ui::DetailPanel& getDetailPanel() { return *detail; }
+    ui::KeyboardStrip& getKeyboardStrip() { return *keyboardStrip; }
+    ui::ComputerKeys& getComputerKeys() { return computerKeys; }
+    bool isArrangementShown() const { return arrangementShown; }
+    bool isKeyboardStripWanted() const { return stripWanted; }
 
 private:
     class ShortcutRouter;
@@ -76,6 +84,11 @@ private:
 
     void setBrowserVisible (bool);
     void setDetailVisible (bool);
+    void setArrangementShown (bool);
+    void setKeyboardStripVisible (bool);
+    void openClipEditor (int64_t trackId, int scene);
+    int currentDetailHeight() const;
+    void showProjectProperties();
     void setUiScale (double);
     void applyTheme();
     void updateTitle();
@@ -117,6 +130,11 @@ private:
     std::unique_ptr<ui::SessionView> session;
     std::unique_ptr<ui::DetailPanel> detail;
     std::unique_ptr<ui::InfoBar> infoBar;
+    std::unique_ptr<ui::ArrangementView> arrangement;
+    std::unique_ptr<ui::KeyboardStrip> keyboardStrip;
+    std::unique_ptr<ui::ProjectPropertiesWindow> propertiesWindow;
+    bool arrangementShown = false, stripWanted = false;
+    double stripFraction = 0.0; // 0 hidden, 1 shown; slides in the 30 Hz timer
     ui::Splitter browserSplitter { true }, detailSplitter { false };
     ui::EdgeTab browserTab { 3 }, detailTab { 2 };
     ui::ScanlineOverlay scanlines;
@@ -127,10 +145,9 @@ private:
     std::unique_ptr<ShortcutRouter> router;
     class NoteKeysListener;
     std::unique_ptr<NoteKeysListener> noteKeys;
-    prisma_ui::KeyboardPanel keyboard; // not shown: it turns the computer keys into notes (key M switches it on)
-    bool computerKeysOn = false;
+    ui::ComputerKeys computerKeys; // turns the computer keys into notes (key M switches it on); the panel is shown in the keyboard strip
 
-    int browserWidth, detailHeight, dragStartSize = 0;
+    int browserWidth, detailHeight, editorHeight, dragStartSize = 0;
     bool browserVisible, detailVisible;
     juce::String lastTitle;
     std::unique_ptr<juce::FileChooser> chooser;
