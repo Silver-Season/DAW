@@ -76,7 +76,6 @@ public:
 
 private:
     class NameField;
-    PianoRoll& owner;
     juce::Viewport viewport;
     class Content;
     std::unique_ptr<Content> content;

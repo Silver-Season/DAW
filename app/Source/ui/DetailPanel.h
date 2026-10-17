@@ -45,9 +45,7 @@ public:
 private:
     void updateEditor();
 
-    AudioEngine& engine;
     ProjectModel& model;
-    ProjectActions& actions;
     SelectionState& selection;
     std::unique_ptr<DeviceChainView> chainView;
     std::unique_ptr<PianoRoll> editor;

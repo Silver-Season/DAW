@@ -811,7 +811,7 @@ void DeviceChainView::tick()
 }
 
 //==============================================================================
-DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : engine (e), model (m), actions (a), selection (s)
+DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : model (m), selection (s)
 {
     chainView = std::make_unique<DeviceChainView> (e, m, a, s);
     addAndMakeVisible (*chainView);

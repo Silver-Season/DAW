@@ -158,22 +158,22 @@ void PianoRoll::Ruler::mouseDrag (const juce::MouseEvent& e)
     {
         case Part::braceStart:
         {
-            const double v = juce::jlimit (0.0, origEnd - minLength, beat);
-            if (std::abs (v - c.loopStart()) > 1.0e-12)
+            const double value = juce::jlimit (0.0, origEnd - minLength, beat);
+            if (std::abs (value - c.loopStart()) > 1.0e-12)
             {
                 open (Strings::undoLoopRange);
-                c.setLoopStart (v, &um);
+                c.setLoopStart (value, &um);
             }
             break;
         }
         case Part::braceEnd:
         {
-            const double v = juce::jmax (origStart + minLength, beat);
-            if (std::abs (v - c.lengthBeats()) > 1.0e-12)
+            const double value = juce::jmax (origStart + minLength, beat);
+            if (std::abs (value - c.lengthBeats()) > 1.0e-12)
             {
                 open (Strings::undoLoopRange);
-                c.setLengthBeats (v, &um);
-                if (c.startOffset() >= v)
+                c.setLengthBeats (value, &um);
+                if (c.startOffset() >= value)
                     c.setStartOffset (origStart, &um);
             }
             break;
@@ -193,11 +193,11 @@ void PianoRoll::Ruler::mouseDrag (const juce::MouseEvent& e)
         }
         case Part::startPoint:
         {
-            const double v = juce::jlimit (0.0, juce::jmax (0.0, c.lengthBeats() - minLength), beat);
-            if (std::abs (v - c.startOffset()) > 1.0e-12)
+            const double value = juce::jlimit (0.0, juce::jmax (0.0, c.lengthBeats() - minLength), beat);
+            if (std::abs (value - c.startOffset()) > 1.0e-12)
             {
                 open (Strings::undoStartPoint);
-                c.setStartOffset (v, &um);
+                c.setStartOffset (value, &um);
             }
             break;
         }
@@ -225,7 +225,7 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
     g.fillAll (t.panel);
     if (! owner.hasClip())
         return;
-    const auto& v = owner.v;
+    const auto& vw = owner.v;
     const auto scale = owner.scale();
     const int firstRow = juce::jmax (0, owner.yToRow (0)), lastRow = juce::jmin (owner.numRows() - 1, owner.yToRow (getHeight()));
     const auto accent = owner.clipColour();
@@ -242,33 +242,33 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
         if (held)
         {
             g.setColour (accent);
-            g.fillRect (0, y, getWidth(), v.rowHeight);
+            g.fillRect (0, y, getWidth(), vw.rowHeight);
         }
         else
         {
             // white keys light, black keys dark, whatever the skin: the lightness decides which way round
             g.setColour (whiteKey);
-            g.fillRect (0, y, getWidth(), v.rowHeight);
+            g.fillRect (0, y, getWidth(), vw.rowHeight);
             if (black)
             {
                 g.setColour (blackKey);
-                g.fillRect (0, y, getWidth() * 3 / 5, v.rowHeight);
+                g.fillRect (0, y, getWidth() * 3 / 5, vw.rowHeight);
             }
             if (inScale && daw::music::pitchClass (pitch, scale.root) == 0)
             {
                 g.setColour (t.accent.withAlpha (0.45f));
-                g.fillRect (0, y, getWidth(), v.rowHeight);
+                g.fillRect (0, y, getWidth(), vw.rowHeight);
             }
         }
         g.setColour (t.line);
-        g.fillRect (0, y + v.rowHeight - 1, getWidth(), 1);
+        g.fillRect (0, y + vw.rowHeight - 1, getWidth(), 1);
 
-        const bool label = pitch % 12 == 0 || v.fold || (inScale && v.rowHeight >= 14);
-        if (label && v.rowHeight >= 9)
+        const bool label = pitch % 12 == 0 || vw.fold || (inScale && vw.rowHeight >= 14);
+        if (label && vw.rowHeight >= 9)
         {
             g.setColour (held ? t.clipInk : keyInk.withAlpha (pitch % 12 == 0 ? 1.0f : 0.6f));
-            g.setFont (t.numFont (juce::jmin (11.0f, (float) v.rowHeight - 3.0f), pitch % 12 == 0 ? 600 : 400));
-            g.drawText (juce::MidiMessage::getMidiNoteName (pitch, true, true, 3), getLocalBounds().withY (y).withHeight (v.rowHeight).withTrimmedRight (4),
+            g.setFont (t.numFont (juce::jmin (11.0f, (float) vw.rowHeight - 3.0f), pitch % 12 == 0 ? 600 : 400));
+            g.drawText (juce::MidiMessage::getMidiNoteName (pitch, true, true, 3), getLocalBounds().withY (y).withHeight (vw.rowHeight).withTrimmedRight (4),
                         juce::Justification::centredRight, false);
         }
     }

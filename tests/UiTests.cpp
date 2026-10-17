@@ -490,6 +490,8 @@ void testControlsAndHelp()
 }
 } // namespace
 
+namespace
+{
 void testComputerKeys()
 {
     std::printf ("[test ui-5] computer keys: octave and velocity are announced\n");
@@ -547,6 +549,7 @@ void testComputerKeys()
     messages.clear();
     check (! press ('x') && messages.size() == 1 && messages[0] == K::keysOffHint, "off again: the hint returns");
 }
+} // namespace
 
 void tests::runUiTests()
 {

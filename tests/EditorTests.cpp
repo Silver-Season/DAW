@@ -69,7 +69,7 @@ public:
     void getStateInformation (juce::MemoryBlock&) override {}
     void setStateInformation (const void*, int) override {}
 
-    void reset() { count.store (0); }
+    void reset() override { count.store (0); }
     // The note-ons so far, in order.
     std::vector<int> ons() const
     {

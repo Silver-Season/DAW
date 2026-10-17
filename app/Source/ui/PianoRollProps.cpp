@@ -162,17 +162,17 @@ public:
         const auto transaction = [this] { owner.model.undo.beginNewTransaction (Strings::undoLoopRange); };
         loopStartField.onGestureStart = loopEndField.onGestureStart = transaction;
         startField.onGestureStart = [this] { owner.model.undo.beginNewTransaction (Strings::undoStartPoint); };
-        loopStartField.onValueChange = [this] (double v) {
+        loopStartField.onValueChange = [this] (double value) {
             if (const auto c = owner.clip(); c.isValid())
-                c.setLoopStart (juce::jmin (v, c.lengthBeats() - kMinNoteLength), &owner.model.undo);
+                c.setLoopStart (juce::jmin (value, c.lengthBeats() - kMinNoteLength), &owner.model.undo);
         };
-        loopEndField.onValueChange = [this] (double v) {
+        loopEndField.onValueChange = [this] (double value) {
             if (const auto c = owner.clip(); c.isValid())
-                c.setLengthBeats (juce::jmax (v, c.loopStart() + kMinNoteLength), &owner.model.undo);
+                c.setLengthBeats (juce::jmax (value, c.loopStart() + kMinNoteLength), &owner.model.undo);
         };
-        startField.onValueChange = [this] (double v) {
+        startField.onValueChange = [this] (double value) {
             if (const auto c = owner.clip(); c.isValid())
-                c.setStartOffset (juce::jmin (v, c.lengthBeats() - kMinNoteLength), &owner.model.undo);
+                c.setStartOffset (juce::jmin (value, c.lengthBeats() - kMinNoteLength), &owner.model.undo);
         };
     }
 
@@ -271,15 +271,15 @@ private:
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&gridChip), [this, safe = juce::Component::SafePointer<PianoRoll> (&owner)] (int result) {
             if (safe == nullptr || result == 0)
                 return;
-            auto& v = safe->v;
+            auto& vw = safe->v;
             if (result == 1)
-                v.adaptiveGrid = true;
+                vw.adaptiveGrid = true;
             else if (result == 20)
-                v.triplet = ! v.triplet;
+                vw.triplet = ! vw.triplet;
             else
             {
-                v.adaptiveGrid = false;
-                v.denominator = denominators[result - 10];
+                vw.adaptiveGrid = false;
+                vw.denominator = denominators[result - 10];
             }
             juce::ignoreUnused (this);
             safe->props->refresh();
@@ -301,7 +301,7 @@ private:
 };
 
 //==============================================================================
-PianoRoll::Props::Props (PianoRoll& o) : owner (o)
+PianoRoll::Props::Props (PianoRoll& o)
 {
     setHelpText (Strings::help::editorProps);
     content = std::make_unique<Content> (o);

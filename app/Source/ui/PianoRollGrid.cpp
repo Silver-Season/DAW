@@ -70,7 +70,7 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
     const auto c = owner.clip();
     if (! c.isValid())
         return;
-    const auto& v = owner.v;
+    const auto& vw = owner.v;
     const auto scale = owner.scale();
     const int w = getWidth(), h = getHeight();
 
@@ -84,23 +84,23 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
         if (isBlackKey (pitch))
         {
             g.setColour (t.panel2.withAlpha (0.55f));
-            g.fillRect (0, y, w, v.rowHeight);
+            g.fillRect (0, y, w, vw.rowHeight);
         }
         if (scale.scale != nullptr)
         {
             if (! daw::music::inScale (pitch, scale.root, *scale.scale))
             {
                 g.setColour (t.background.withAlpha (0.45f));
-                g.fillRect (0, y, w, v.rowHeight);
+                g.fillRect (0, y, w, vw.rowHeight);
             }
             else if (daw::music::pitchClass (pitch, scale.root) == 0)
             {
                 g.setColour (t.accent.withAlpha (0.14f));
-                g.fillRect (0, y, w, v.rowHeight);
+                g.fillRect (0, y, w, vw.rowHeight);
             }
         }
         g.setColour (t.line.withAlpha (pitch % 12 == 0 ? 0.9f : 0.35f));
-        g.fillRect (0, y + v.rowHeight - 1, w, 1);
+        g.fillRect (0, y + vw.rowHeight - 1, w, 1);
     }
 
     // the part of the grid past the end of the clip
@@ -148,10 +148,10 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
             strokeCell (g, r, t.text, 1.5f, 0.35f);
         else
             strokeCell (g, r, base.darker (0.5f), 1.0f, 0.35f);
-        if (v.rowHeight >= 12 && r.getWidth() > 22.0f)
+        if (vw.rowHeight >= 12 && r.getWidth() > 22.0f)
         {
             g.setColour (t.clipInk);
-            g.setFont (t.numFont ((float) v.rowHeight - 5.0f));
+            g.setFont (t.numFont ((float) vw.rowHeight - 5.0f));
             g.drawText (juce::MidiMessage::getMidiNoteName (note.pitch, true, true, 3), r.toNearestInt().reduced (3, 0),
                         juce::Justification::centredLeft, false);
         }
