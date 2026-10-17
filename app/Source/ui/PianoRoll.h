@@ -26,7 +26,7 @@ class PianoRoll final : public juce::Component,
 {
 public:
     static constexpr int kPropsWidth = 180, kKeysWidth = 56, kRulerHeight = 30, kVelocityHeight = 64;
-    static constexpr int kControllerHeader = 22, kControllerBody = 40, kScrollBar = 10;
+    static constexpr int kControllerHeader = 22, kControllerBody = 52, kScrollBar = 10;
     static constexpr int kMinRowHeight = 6, kMaxRowHeight = 24;
     static constexpr double kMinNoteLength = 1.0 / 64.0;
 

@@ -67,7 +67,7 @@ private:
 
 //==============================================================================
 MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
-    : engine (e), model (m), settings (e.getSettings()), actions (m, &e),
+    : engine (e), model (m), settings (e.getSettings()), actions (m, &e), recorder (e, m),
       library (settings.libraryPath().isNotEmpty() ? juce::File (settings.libraryPath()) : library::UserLibrary::defaultRoot()),
       sources (settings, e.getKnownPlugins(), library), browserActions (m, e, library),
       doc (e, m, settings, library, juce::File::getSpecialLocation (juce::File::userMusicDirectory)), editCommands (e, m, actions, selection),
@@ -78,6 +78,9 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     setHelpText (Strings::help::logo);
 
     topBar = std::make_unique<ui::TopBar> (engine, model);
+    topBar->setRecorder (&recorder);
+    topBar->onRecordClicked = [this] { recordClicked(); };
+    topBar->onCaptureClicked = [this] { captureClicked(); };
     topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources);
@@ -89,6 +92,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     engine.getKnownPlugins().addChangeListener (this);
     session = std::make_unique<ui::SessionView> (engine, model, actions, selection, editCommands);
     session->setBrowserActions (&browserActions);
+    session->setRecorder (&recorder);
     session->onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
     session->onSaveChain = [this] (int64_t trackId) { saveChainOf (trackId); };
     session->setMixerVisible (settings.mixerVisible());
@@ -216,6 +220,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
 
     model.root.addListener (this);
     model.undo.addChangeListener (this);
+    recorder.startPolling();
     doc.onDocumentChanged = [this] { documentChanged(); };
     doc.onWriteFailed = [this] (const juce::String& error) { infoBar->showMessage (error, 10000); };
     ThemeManager::get().addChangeListener (this);
@@ -239,6 +244,8 @@ void MainComponent::attachKeyListeners (juce::Component& window)
 MainComponent::~MainComponent()
 {
     stopTimer();
+    topBar->setRecorder (nullptr);
+    session->setRecorder (nullptr);
 #if JUCE_MAC
     juce::MenuBarModel::setMacMainMenu (nullptr);
 #endif
@@ -387,7 +394,7 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
     using namespace ui::commands;
     commands.addArray ({ newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
-                         deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        toggleBrowser, toggleDetail,
+                         deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        captureMidi,        toggleBrowser, toggleDetail,
                          toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
 }
 
@@ -448,6 +455,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case newScene: set (M::newScene, createCategory, true, key ('i', cmd)); break;
         case captureScene: set (M::captureScene, createCategory, true, key ('i', cmd | shift)); break;
         case newClip: set (M::newClip, createCategory, model.numTracks() > 0, key ('m', cmd | shift)); break;
+        case captureMidi: set (M::captureMidi, createCategory, model.numTracks() > 0, key ('c', cmd | shift)); break;
 
         case toggleBrowser:
             set (M::browser, viewCategory, true, key ('b', cmd | alt));
@@ -527,6 +535,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         case newScene: editCommands.newScene(); return true;
         case captureScene: editCommands.captureScene(); return true;
         case newClip: editCommands.newClip(); return true;
+        case captureMidi: captureClicked(); return true;
 
         case toggleBrowser: setBrowserVisible (! browserVisible); return true;
         case toggleDetail: setDetailVisible (! detailVisible); return true;
@@ -565,6 +574,37 @@ bool MainComponent::perform (const InvocationInfo& info)
         default: break;
     }
     return false;
+}
+
+//==============================================================================
+// The track that live notes go to: the selected one (a selected clip belongs to its track).
+int64_t MainComponent::selectedTrackForRecording() const
+{
+    const auto& sel = selection.get();
+    if ((sel.kind == ui::Selection::Kind::clip || sel.kind == ui::Selection::Kind::track || sel.kind == ui::Selection::Kind::device)
+        && model.findTrack (sel.trackId).isValid())
+        return sel.trackId;
+    return model.selectedTrack();
+}
+
+int MainComponent::selectedSceneForRecording() const
+{
+    const auto& sel = selection.get();
+    if ((sel.kind == ui::Selection::Kind::clip || sel.kind == ui::Selection::Kind::scene) && sel.scene >= 0 && sel.scene < model.numScenes())
+        return sel.scene;
+    return 0;
+}
+
+void MainComponent::recordClicked()
+{
+    if (! recorder.sessionRecord (selectedSceneForRecording()) && ! recorder.isAnythingRecording())
+        infoBar->showMessage (Strings::recording::recordNoTrack, 3500);
+}
+
+void MainComponent::captureClicked()
+{
+    const auto summary = recorder.capture (selectedTrackForRecording(), selectedSceneForRecording());
+    infoBar->showMessage (summary.info, 5000);
 }
 
 //==============================================================================

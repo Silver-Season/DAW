@@ -18,6 +18,14 @@ struct Note
     int velocity = 100;
 };
 
+// A controller movement stored in a clip: time in beats from the clip start. status is 0xB0 (data1 = controller
+// number, data2 = value), 0xE0 (pitch bend, data1 = low 7 bits, data2 = high 7 bits) or 0xD0 (channel pressure, data1 = value).
+struct ControllerEvent
+{
+    double time = 0.0;
+    uint8_t status = 0xB0, data1 = 0, data2 = 0;
+};
+
 // A clip plays from `startOffset` to its end (`lengthBeats`). With `loop` on it then repeats the brace
 // [loopStart, lengthBeats) for as long as it is playing; with `loop` off it plays that one pass and stops.
 // Everything is in beats from the start of the clip's content.
@@ -30,6 +38,7 @@ struct MidiClip
     double startOffset = 0.0; // where playback begins when the clip is launched
     bool loop = true;
     std::vector<Note> notes;
+    std::vector<ControllerEvent> controllers; // sorted by time
     int64_t id = 0; // model clip id (0 = none): lets the engine recognise "the same clip" in a new playback graph
 
     // Sanitised copies of the three positions: 0 <= loopStart < end, loopStart <= ... , start < end.
@@ -71,6 +80,10 @@ public:
 
     // Queues a launch; it starts on the next multiple of `quantiseBeats` (0 = immediately).
     void launch (int slot, const MidiClip* clip, double nowBeat, double quantiseBeats);
+    // Starts the clip as if it had been launched at `startBeat`, which may already lie a little in the past by
+    // the time the clip reached the graph. Notes that began within a quarter beat before the block in which
+    // the launch happens are played at its first sample, so the downbeat of a freshly recorded loop is not lost.
+    void launchAt (int slot, const MidiClip* clip, double startBeat);
     void stop (double nowBeat, double quantiseBeats);
     void stopImmediately();
 
@@ -97,11 +110,14 @@ private:
     void releaseHeld (int offset, std::vector<MidiEvent>& out);
     void track (const std::vector<MidiEvent>& events, size_t from);
 
+    static constexpr double kCatchUpBeats = 0.25;
+
     int playing = kNoClip, queued = kNoClip;
     const MidiClip* playingClip = nullptr;
     const MidiClip* queuedClip = nullptr;
     double startBeat = 0.0, queuedBeat = 0.0, stopBeat = 0.0;
-    bool stopQueued = false;
+    bool stopQueued = false, catchUp = false;
+    bool resetControllers = false; // the clip moved sustain or pitch bend, so they are reset when it ends
     std::vector<uint8_t> held = std::vector<uint8_t> (128, 0);
 };
 
@@ -122,6 +138,12 @@ public:
     }
     double getTempo() const noexcept { return bpm; }
     void play() noexcept { playing = true; }
+    // Starts from `beat` (negative for a count-in) as if the transport had been stopped, but keeps the play state.
+    void startAt (double beat) noexcept
+    {
+        anchorBeat = beat;
+        anchorSample = positionSamples;
+    }
     void stop() noexcept
     {
         playing = false;

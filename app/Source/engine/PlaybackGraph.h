@@ -53,6 +53,23 @@ struct TrackRuntime
     std::atomic<int> playingSlot { -1 }, queuedSlot { -1 };
     std::atomic<double> playingStartBeat { 0.0 }; // lets the UI draw the progress bar of the playing clip
 
+    // Recording (docs/spec/02, task 2.2). Written by the audio thread when it handles a record command and as the
+    // transport passes the start and end beats; the recorder on the message thread reads them (and sets the state
+    // back to idle once it has taken a finished recording). The state is stored last, so a reader that sees a state
+    // sees the other values that go with it.
+    enum RecordState : int
+    {
+        recordIdle = 0,
+        recordWaiting = 1,   // armed for the start beat (a count-in or a launch quantisation is running)
+        recordRunning = 2,
+        recordFinished = 3   // the end beat has passed; the message thread has to collect the notes
+    };
+    static constexpr double kNoEnd = 1.0e18;
+    std::atomic<int> recordState { recordIdle };
+    std::atomic<int> recordScene { -1 };
+    std::atomic<double> recordStartBeat { 0.0 }, recordEndBeat { kNoEnd };
+    std::atomic<bool> recordOverdub { false };
+
     // audio thread only
     daw::engine::ClipPlayer player;
     juce::AudioBuffer<float> buffer;
@@ -117,10 +134,14 @@ struct EngineCommand
         launchScene,
         resume,
         stopTrack,
-        stopAll
+        stopAll,
+        startRecord,   // trackId, sceneIndex: record into that slot
+        stopRecord,    // trackId
+        launchAligned  // trackId, sceneIndex, beat: play the clip as if it had been launched at `beat`
     };
 
     Type type = Type::stopAll;
     int64_t trackId = -1;
     int sceneIndex = -1;
+    double beat = 0.0;
 };

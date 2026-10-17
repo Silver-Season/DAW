@@ -15,9 +15,10 @@ public:
         const double beats = engine.positionBeats.load();
         const double bpm = engine.tempo.load();
         info.setBpm (bpm);
-        info.setTimeSignature (juce::AudioPlayHead::TimeSignature { 4, 4 });
+        info.setTimeSignature (juce::AudioPlayHead::TimeSignature { engine.sigNum.load(), engine.sigDen.load() });
         info.setPpqPosition (beats);
-        info.setPpqPositionOfLastBarStart (std::floor (beats / 4.0) * 4.0);
+        const double bar = juce::jmax (1.0, engine.beatsPerBar.load());
+        info.setPpqPositionOfLastBarStart (std::floor (beats / bar) * bar);
         info.setTimeInSeconds (beats * 60.0 / bpm);
         info.setTimeInSamples ((int64_t) (beats * 60.0 / bpm * engine.sampleRate.load()));
         info.setIsPlaying (engine.playing.load());
@@ -43,6 +44,7 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
     knownPlugins.addChangeListener (this);
 
     playHead = std::make_unique<PlayHead> (*this);
+    correctionMs = settings.recordCorrectionMs();
 
     master.setSize (kMaxChannels, blockSize);
     hardwareMidi.ensureSize (4096);
@@ -205,6 +207,41 @@ bool AudioEngine::stopAllClips()
     return pushCommand ({ EngineCommand::Type::stopAll, -1, -1 });
 }
 
+bool AudioEngine::startRecord (int64_t trackId, int scene)
+{
+    return pushCommand ({ EngineCommand::Type::startRecord, trackId, scene, 0.0 });
+}
+
+bool AudioEngine::stopRecord (int64_t trackId)
+{
+    return pushCommand ({ EngineCommand::Type::stopRecord, trackId, -1, 0.0 });
+}
+
+bool AudioEngine::launchAligned (int64_t trackId, int scene, double beat)
+{
+    return pushCommand ({ EngineCommand::Type::launchAligned, trackId, scene, beat });
+}
+
+size_t AudioEngine::popInputEvents (std::vector<daw::engine::InputEvent>& out)
+{
+    const auto scope = inputFifo.read (inputFifo.getNumReady());
+    out.insert (out.end(), inputEvents.begin() + scope.startIndex1, inputEvents.begin() + scope.startIndex1 + scope.blockSize1);
+    out.insert (out.end(), inputEvents.begin() + scope.startIndex2, inputEvents.begin() + scope.startIndex2 + scope.blockSize2);
+    return (size_t) (scope.blockSize1 + scope.blockSize2);
+}
+
+void AudioEngine::setRecordCorrectionMs (double ms)
+{
+    correctionMs = juce::jlimit (-50.0, 50.0, ms);
+    settings.setRecordCorrectionMs (correctionMs.load());
+    updateRecordCompensation();
+}
+
+void AudioEngine::updateRecordCompensation()
+{
+    recordCompensation = autoCompensation.load() + juce::roundToInt (correctionMs.load() * sampleRate.load() / 1000.0);
+}
+
 void AudioEngine::previewFactoryPreset (int program)
 {
     preview.playFactoryProgram (program);
@@ -242,6 +279,9 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     sampleRate = device->getCurrentSampleRate();
     blockSize = juce::jmax (16, device->getCurrentBufferSizeSamples());
     transport.prepare (sampleRate);
+    metronome.prepare (sampleRate);
+    autoCompensation = device->getOutputLatencyInSamples() + blockSize / 2;
+    updateRecordCompensation();
     master.setSize (kMaxChannels, blockSize);
     preview.prepare (sampleRate, blockSize);
 
@@ -321,8 +361,103 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
         return scene >= 0 && scene < (int) t.slots.size() ? t.slots[(size_t) scene].get() : nullptr;
     };
 
-    const double now = transport.getPositionBeats();
+    // During a count-in the position is negative, but nothing may start before beat 0.
+    const double now = std::max (0.0, transport.getPositionBeats());
     const double q = playing.load() ? quantise.load() : 0.0;
+    const double bpb = beatsPerBar.load();
+
+    // A launch ends the recording of the track it launches on (at the bar line of the launch, counted from the
+    // start of the recording); an overdub simply ends there.
+    const auto recordingEndsWithLaunch = [&] (TrackRuntime& rt) {
+        const int state = rt.recordState.load();
+        if (state == TrackRuntime::recordWaiting)
+        {
+            rt.recordState = TrackRuntime::recordIdle;
+            return;
+        }
+        if (state != TrackRuntime::recordRunning)
+            return;
+        const double at = daw::engine::nextQuantisedBeat (now, q);
+        const double start = rt.recordStartBeat.load();
+        const double end = rt.recordOverdub.load() ? at : start + bpb * std::max (1.0, std::ceil ((at - start) / bpb - 1.0e-9));
+        if (end < rt.recordEndBeat.load())
+            rt.recordEndBeat = end;
+    };
+    const auto launch = [&] (const PlaybackGraph::Track& t, int scene, const daw::engine::MidiClip* clip) {
+        recordingEndsWithLaunch (*t.runtime);
+        t.runtime->player.launch (scene, clip, now, q);
+        playing = true; // launching a clip starts the transport, like in Live
+    };
+
+    const auto startRecording = [&] (const PlaybackGraph::Track& t, int scene) {
+        auto& rt = *t.runtime;
+        if (rt.recordState.load() != TrackRuntime::recordIdle)
+            return;
+        const bool running = playing.load() || transport.isPlaying();
+        const auto* playingNow = rt.player.playingSlot() >= 0 ? slotClip (t, rt.player.playingSlot()) : nullptr;
+        const bool overdub = running && overdubOn.load() && playingNow != nullptr && rt.player.playingSlot() == scene;
+
+        double start = now;
+        if (! running)
+        {
+            // Count-in: the transport begins before beat 0 and the recording at beat 0.
+            const int bars = countInBars.load();
+            transport.startAt (bars > 0 ? -(double) bars * bpb : 0.0);
+            playing = true;
+            start = 0.0;
+        }
+        else if (! overdub)
+            start = daw::engine::nextQuantisedBeat (now, quantise.load());
+
+        rt.recordScene = scene;
+        rt.recordStartBeat = start;
+        rt.recordOverdub = overdub;
+        if (overdub)
+        {
+            rt.recordEndBeat = TrackRuntime::kNoEnd;
+            rt.recordState = TrackRuntime::recordRunning;
+            return;
+        }
+        // The clip that plays on the track gives way at the start beat.
+        rt.player.stop (start, 0.0);
+        const int bars = recordFixedBars.load();
+        rt.recordEndBeat = bars > 0 ? start + (double) bars * bpb : TrackRuntime::kNoEnd;
+        rt.recordState = TrackRuntime::recordWaiting;
+    };
+
+    const auto stopRecording = [&] (const PlaybackGraph::Track& t) {
+        auto& rt = *t.runtime;
+        const int state = rt.recordState.load();
+        if (state == TrackRuntime::recordWaiting)
+            rt.recordState = TrackRuntime::recordIdle; // never began: nothing to keep
+        else if (state == TrackRuntime::recordRunning)
+        {
+            const double start = rt.recordStartBeat.load();
+            const double end = rt.recordOverdub.load() ? now : start + bpb * std::max (1.0, std::ceil ((now - start) / bpb - 1.0e-9));
+            if (end < rt.recordEndBeat.load())
+                rt.recordEndBeat = end;
+        }
+    };
+
+    // Returns false if the clip is not in the graph (yet).
+    const auto launchAt = [&] (const EngineCommand& c) {
+        if (auto* t = findTrack (c.trackId))
+            if (auto* clip = slotClip (*t, c.sceneIndex))
+            {
+                t->runtime->player.launchAt (c.sceneIndex, clip, c.beat);
+                return true;
+            }
+        return false;
+    };
+
+    // Aligned launches that waited for their clip
+    for (int i = 0; i < numDeferred;)
+    {
+        if (launchAt (deferred[(size_t) i].command) || ++deferred[(size_t) i].age > 400)
+            deferred[(size_t) i] = deferred[(size_t) --numDeferred];
+        else
+            ++i;
+    }
 
     const auto scope = commandFifo.read (commandFifo.getNumReady());
     const auto handle = [&] (const EngineCommand& c) {
@@ -331,19 +466,13 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
             case EngineCommand::Type::launchClip:
                 if (auto* t = findTrack (c.trackId))
                     if (auto* clip = slotClip (*t, c.sceneIndex))
-                    {
-                        t->runtime->player.launch (c.sceneIndex, clip, now, q);
-                        playing = true; // launching a clip starts the transport, like in Live
-                    }
+                        launch (*t, c.sceneIndex, clip);
                 break;
             case EngineCommand::Type::launchScene:
                 for (const auto& t : graph.tracks)
                 {
                     if (auto* clip = slotClip (t, c.sceneIndex))
-                    {
-                        t.runtime->player.launch (c.sceneIndex, clip, now, q);
-                        playing = true;
-                    }
+                        launch (t, c.sceneIndex, clip);
                     else
                         t.runtime->player.stop (now, q);
                 }
@@ -363,12 +492,134 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 for (const auto& t : graph.tracks)
                     t.runtime->player.stop (now, q);
                 break;
+            case EngineCommand::Type::startRecord:
+                if (auto* t = findTrack (c.trackId))
+                    startRecording (*t, c.sceneIndex);
+                break;
+            case EngineCommand::Type::stopRecord:
+                if (auto* t = findTrack (c.trackId))
+                    stopRecording (*t);
+                break;
+            case EngineCommand::Type::launchAligned:
+                if (! launchAt (c) && numDeferred < (int) deferred.size())
+                    deferred[(size_t) numDeferred++] = { c, 0 };
+                break;
         }
     };
     for (int i = 0; i < scope.blockSize1; ++i)
         handle (commands[(size_t) (scope.startIndex1 + i)]);
     for (int i = 0; i < scope.blockSize2; ++i)
         handle (commands[(size_t) (scope.startIndex2 + i)]);
+}
+
+// The transport was stopped: recordings that are running end where the stop caught them (a new recording rounded up
+// to whole bars, at least one); recordings that had not begun are dropped.
+void AudioEngine::finishRecordingsAtStop (const PlaybackGraph& graph)
+{
+    const double now = std::max (0.0, transport.getPositionBeats());
+    const double bpb = beatsPerBar.load();
+    for (const auto& t : graph.tracks)
+    {
+        auto& rt = *t.runtime;
+        const int state = rt.recordState.load();
+        if (state == TrackRuntime::recordWaiting)
+            rt.recordState = TrackRuntime::recordIdle;
+        else if (state == TrackRuntime::recordRunning)
+        {
+            const double start = rt.recordStartBeat.load();
+            rt.recordEndBeat = rt.recordOverdub.load() ? now : start + bpb * std::max (1.0, std::ceil ((now - start) / bpb - 1.0e-9));
+            rt.recordState = TrackRuntime::recordFinished;
+        }
+    }
+}
+
+// Moves the recordings along as the transport passes their start and end beats.
+void AudioEngine::updateRecordStates (const PlaybackGraph& graph, double blockEndBeat)
+{
+    for (const auto& t : graph.tracks)
+    {
+        auto& rt = *t.runtime;
+        int state = rt.recordState.load();
+        if (state == TrackRuntime::recordWaiting && rt.recordStartBeat.load() < blockEndBeat)
+        {
+            state = TrackRuntime::recordRunning;
+            rt.recordState = state;
+        }
+        if (state == TrackRuntime::recordRunning && rt.recordEndBeat.load() <= blockEndBeat)
+            rt.recordState = TrackRuntime::recordFinished;
+    }
+}
+
+bool AudioEngine::acceptsLiveMidi (const TrackRuntime& rt, bool fromKeyboard, bool anyArmed) const
+{
+    // Live MIDI goes to armed tracks; with no armed track the selected one is armed automatically.
+    if (! (rt.arm.load() || (! anyArmed && rt.trackId == selectedTrackId.load())))
+        return false;
+    switch ((TrackInputMode) rt.inputMode.load())
+    {
+        case TrackInputMode::allMidi: return true;
+        case TrackInputMode::keyboard: return fromKeyboard;
+        case TrackInputMode::midiDevice: return ! fromKeyboard;
+        case TrackInputMode::none: return false;
+    }
+    return false;
+}
+
+// Every note, controller, bend and pressure message of this block goes to the recorder and the capture buffer,
+// once per track it reaches (once with track 0 if it reaches none).
+void AudioEngine::routeInputEvents (const PlaybackGraph& graph, const daw::engine::Transport::Block& block, double spb, int64_t blockEngineStart,
+                                    bool anyArmed)
+{
+    const int compensation = recordCompensation.load();
+    const bool transportPlaying = transport.isPlaying();
+
+    const auto push = [&] (const daw::engine::InputEvent& e) {
+        const auto scope = inputFifo.write (1);
+        if (scope.blockSize1 + scope.blockSize2 < 1)
+        {
+            inputDrops.fetch_add (1, std::memory_order_relaxed);
+            return;
+        }
+        inputEvents[(size_t) (scope.blockSize1 > 0 ? scope.startIndex1 : scope.startIndex2)] = e;
+    };
+
+    const auto route = [&] (const juce::MidiBuffer& buffer, bool fromKeyboard) {
+        for (const auto meta : buffer)
+        {
+            const int size = meta.numBytes;
+            if (size < 2 || size > 3)
+                continue;
+            const int type = meta.data[0] & 0xF0;
+            if (type != 0x80 && type != 0x90 && type != 0xB0 && type != 0xD0 && type != 0xE0)
+                continue;
+            if (size < (type == 0xD0 ? 2 : 3))
+                continue;
+
+            daw::engine::InputEvent e;
+            e.engineSample = blockEngineStart + meta.samplePosition;
+            e.beat = block.startBeat + (double) (meta.samplePosition - compensation) / spb;
+            e.playing = transportPlaying;
+            e.size = (uint8_t) size;
+            for (int i = 0; i < size; ++i)
+                e.bytes[i] = meta.data[i];
+
+            bool reached = false;
+            for (const auto& t : graph.tracks)
+                if (acceptsLiveMidi (*t.runtime, fromKeyboard, anyArmed))
+                {
+                    e.trackId = t.runtime->trackId;
+                    push (e);
+                    reached = true;
+                }
+            if (! reached)
+            {
+                e.trackId = 0;
+                push (e);
+            }
+        }
+    };
+    route (hardwareMidi, false);
+    route (keyboardMidi, true);
 }
 
 namespace
@@ -483,26 +734,18 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     for (const auto& e : rt.events)
     {
         const uint8_t bytes[3] { e.status, e.data1, e.data2 };
-        addTransposed (rt.midi, bytes, 3, e.sampleOffset, semitones, rt.clipSounding);
+        const int type = e.status & 0xF0;
+        addTransposed (rt.midi, bytes, type == 0xC0 || type == 0xD0 ? 2 : 3, e.sampleOffset, semitones, rt.clipSounding);
     }
 
-    // Live MIDI goes to armed tracks; with no armed track the selected one is armed automatically.
-    const bool armed = rt.arm.load() || (! anyArmed && rt.trackId == selectedTrackId.load());
     const auto addLive = [&] (const juce::MidiBuffer& source) {
         for (const auto meta : source)
             addTransposed (rt.midi, meta.data, meta.numBytes, meta.samplePosition, semitones, rt.liveSounding);
     };
-    if (armed)
-        switch ((TrackInputMode) rt.inputMode.load())
-        {
-            case TrackInputMode::allMidi:
-                addLive (hardwareMidi);
-                addLive (keyboardMidi);
-                break;
-            case TrackInputMode::keyboard: addLive (keyboardMidi); break;
-            case TrackInputMode::midiDevice: addLive (hardwareMidi); break;
-            case TrackInputMode::none: break;
-        }
+    if (acceptsLiveMidi (rt, false, anyArmed))
+        addLive (hardwareMidi);
+    if (acceptsLiveMidi (rt, true, anyArmed))
+        addLive (keyboardMidi);
 
     if (t.chain.empty())
         return;
@@ -544,6 +787,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         if (outputs[ch] != nullptr)
             juce::FloatVectorOperations::clear (outputs[ch], numSamples);
 
+    // The clock of InputEvent::engineSample counts every block, whether or not there is a graph to play.
+    const int64_t blockEngineStart = engineSamples;
+    engineSamples += numSamples;
+    engineSampleCount.store (engineSamples, std::memory_order_relaxed);
+
     const PlaybackGraph* graph = current.load (std::memory_order_acquire);
     if (graph == nullptr)
         return;
@@ -561,6 +809,19 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     }
     // Only now may the message thread delete what older graphs held.
     seenGeneration.store (graph->generation, std::memory_order_release);
+
+    // Stop first, so that a record command that arrives with it starts a fresh transport.
+    const bool killNotes = stopRequested.exchange (false);
+    if (killNotes)
+    {
+        finishRecordingsAtStop (*graph);
+        for (const auto& t : graph->tracks)
+        {
+            t.runtime->resumeSlot = t.runtime->player.playingSlot();
+            t.runtime->player.stopImmediately();
+        }
+        transport.stop();
+    }
 
     processCommands (*graph);
 
@@ -583,16 +844,6 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         (e.source == MidiInputQueue::keyboard ? keyboardMidi : hardwareMidi).addEvent (e.bytes, e.size, offset);
     }
 
-    const bool killNotes = stopRequested.exchange (false);
-    if (killNotes)
-    {
-        for (const auto& t : graph->tracks)
-        {
-            t.runtime->resumeSlot = t.runtime->player.playingSlot();
-            t.runtime->player.stopImmediately();
-        }
-        transport.stop();
-    }
     if (! juce::exactlyEqual (transport.getTempo(), tempo.load()))
         transport.setTempo (tempo.load());
     if (playing.load() && ! transport.isPlaying())
@@ -602,11 +853,19 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     const double spb = transport.samplesPerBeat();
 
     master.clear();
-    bool anySolo = false, anyArmed = false;
+    bool anySolo = false, anyArmed = false, anyRecording = false;
     for (const auto& t : graph->tracks)
     {
         anySolo = anySolo || t.runtime->solo.load();
         anyArmed = anyArmed || t.runtime->arm.load();
+    }
+
+    routeInputEvents (*graph, block, spb, blockEngineStart, anyArmed);
+    updateRecordStates (*graph, block.endBeat);
+    for (const auto& t : graph->tracks)
+    {
+        const int state = t.runtime->recordState.load();
+        anyRecording = anyRecording || state == TrackRuntime::recordWaiting || state == TrackRuntime::recordRunning;
     }
 
     for (const auto& t : graph->tracks)
@@ -618,6 +877,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     master.applyGain (masterGain.load());
     masterMeterL.store (juce::jmax (masterMeterL.load(), master.getMagnitude (0, 0, numSamples)), std::memory_order_relaxed);
     masterMeterR.store (juce::jmax (masterMeterR.load(), master.getMagnitude (1, 0, numSamples)), std::memory_order_relaxed);
+
+    // The metronome goes in after the master chain and the master gain (its own volume, no limiter in the way). It
+    // is a live aid: the offline export must never call this. The count-in always clicks.
+    {
+        const bool countIn = block.startBeat < 0.0;
+        const bool emit = transport.isPlaying() && (countIn || (metronomeOn.load() && (! metronomeOnlyRecording.load() || anyRecording)));
+        metronome.render (master.getWritePointer (0), master.getWritePointer (1), numSamples, block.startBeat, spb, beatsPerBar.load(),
+                          metronomeGain.load(), metronomeWood.load() ? Metronome::Sound::wood : Metronome::Sound::classic, emit);
+    }
 
     for (int ch = 0; ch < juce::jmin (2, numOutputs); ++ch)
         if (outputs[ch] != nullptr)

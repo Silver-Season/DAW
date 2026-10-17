@@ -9,6 +9,7 @@
 #include "../model/ProjectActions.h"
 
 class AudioEngine;
+class SessionRecorder;
 
 namespace ui
 {
@@ -46,6 +47,8 @@ public:
     std::function<void (const browser::DropResult&, const browser::DragItem&)> onDropped;
     // "Save chain..." in the menu of a track header.
     std::function<void (int64_t trackId)> onSaveChain;
+    // Where the record circles of the slots lead; the grid also draws the recordings in progress from it.
+    void setRecorder (SessionRecorder* r) { recorder = r; }
     // Double-click on a clip (or on an empty slot, which makes a clip): open it in the clip editor.
     std::function<void (int64_t trackId, int scene)> onOpenClip;
 
@@ -155,6 +158,7 @@ private:
     bool mixerVisible = true;
     bool structureDirty = true, propertiesDirty = true;
     browser::BrowserActions* dropActions = nullptr;
+    SessionRecorder* recorder = nullptr;
     DropSpot dropSpot;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SessionView)

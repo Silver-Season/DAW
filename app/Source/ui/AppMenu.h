@@ -36,6 +36,7 @@ enum : juce::CommandID
     newScene,
     captureScene,
     newClip,
+    captureMidi,
 
     toggleBrowser,
     toggleDetail,

@@ -82,6 +82,10 @@ public:
     bool midiInputPlays (const juce::String& identifier) const;
     void setMidiInputPlays (const juce::String& identifier, bool);
 
+    // Manual correction of the recorded MIDI position in milliseconds, -50..+50 (docs/spec/02, task 2.2).
+    double recordCorrectionMs() const;
+    void setRecordCorrectionMs (double);
+
     // Plugins (list written by the plugin scanner)
     std::unique_ptr<juce::XmlElement> knownPlugins() const;
     void setKnownPlugins (const juce::XmlElement&);

@@ -4,6 +4,7 @@
 #include "browser/BrowserActions.h"
 #include "browser/BrowserSources.h"
 #include "engine/AudioEngine.h"
+#include "engine/SessionRecorder.h"
 #include "model/ProjectActions.h"
 #include "model/ProjectModel.h"
 #include "project/ProjectSession.h"
@@ -83,7 +84,11 @@ private:
     void timerCallback() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
-    void valueTreeRedirected (juce::ValueTree&) override { closeEditorsOfMissingDevices(); }
+    void valueTreeRedirected (juce::ValueTree&) override
+    {
+        recorder.reset(); // the track ids of the old project mean other tracks now
+        closeEditorsOfMissingDevices();
+    }
 
     void setBrowserVisible (bool);
     void setDetailVisible (bool);
@@ -116,12 +121,17 @@ private:
     void openInstrumentEditor (int64_t deviceId);
     void closeEditorsOfMissingDevices();
     void showSettings (ui::SettingsWindow::Tab);
+    int64_t selectedTrackForRecording() const;
+    int selectedSceneForRecording() const;
+    void recordClicked();
+    void captureClicked();
     void showPluginScanner();
 
     AudioEngine& engine;
     ProjectModel& model;
     Settings& settings;
     ProjectActions actions;
+    SessionRecorder recorder; // MIDI recording and capture; polls the engine at 30 Hz
     library::UserLibrary library;
     browser::BrowserSources sources;
     browser::BrowserActions browserActions;

@@ -73,7 +73,10 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Chrome.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/EditCommands.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ComputerKeys.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/TransportMenus.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioEngine.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/Metronome.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/SessionRecorder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/EngineGraph.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RtCheck.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PreviewPlayer.cpp
@@ -94,6 +97,7 @@ if(DAW_BUILD_JUCE)
             tests/ProjectTests.cpp
             tests/BrowserTests.cpp
             tests/EditorTests.cpp
+            tests/RecordingTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0

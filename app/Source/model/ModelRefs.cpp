@@ -102,7 +102,8 @@ void ClipRef::updateNote (int index, const daw::engine::Note& n, juce::UndoManag
 
 void ClipRef::setNotes (const std::vector<daw::engine::Note>& list, juce::UndoManager* um) const
 {
-    state.removeAllChildren (um);
+    for (int i = numNotes() - 1; i >= 0; --i)
+        state.removeChild (i, um); // the controllers stay
     for (const auto& n : list)
         addNote (n, um);
 }
@@ -119,4 +120,69 @@ ClipRef TrackRef::clipAt (int scene) const
 {
     const auto slot = slotsNode().getChild (scene);
     return ClipRef (slot.isValid() ? slot.getChildWithName (ids::CLIP) : juce::ValueTree());
+}
+
+//==============================================================================
+std::vector<daw::engine::ControllerEvent> ClipRef::controllers() const
+{
+    std::vector<daw::engine::ControllerEvent> out;
+    const auto node = state.getChildWithName (ids::CONTROLLERS);
+    out.reserve ((size_t) node.getNumChildren());
+    for (const auto& c : node)
+    {
+        daw::engine::ControllerEvent e;
+        e.time = (double) c.getProperty (ids::time, 0.0);
+        const int value = (int) c.getProperty (ids::value, 0);
+        if (c.hasType (ids::CC))
+        {
+            e.status = 0xB0;
+            e.data1 = (uint8_t) juce::jlimit (0, 127, (int) c.getProperty (ids::number, 1));
+            e.data2 = (uint8_t) juce::jlimit (0, 127, value);
+        }
+        else if (c.hasType (ids::BEND))
+        {
+            const int v = juce::jlimit (0, 16383, value);
+            e.status = 0xE0;
+            e.data1 = (uint8_t) (v & 0x7F);
+            e.data2 = (uint8_t) (v >> 7);
+        }
+        else if (c.hasType (ids::PRESSURE))
+        {
+            e.status = 0xD0;
+            e.data1 = (uint8_t) juce::jlimit (0, 127, value);
+        }
+        else
+            continue;
+        out.push_back (e);
+    }
+    std::stable_sort (out.begin(), out.end(), [] (const auto& a, const auto& b) { return a.time < b.time; });
+    return out;
+}
+
+void ClipRef::setControllers (const std::vector<daw::engine::ControllerEvent>& list, juce::UndoManager* um) const
+{
+    const auto old = state.getChildWithName (ids::CONTROLLERS);
+    if (old.isValid())
+        state.removeChild (old, um);
+    if (list.empty())
+        return;
+
+    juce::ValueTree node (ids::CONTROLLERS);
+    for (const auto& e : list)
+    {
+        const int type = e.status & 0xF0;
+        juce::ValueTree c (type == 0xB0 ? ids::CC : (type == 0xE0 ? ids::BEND : ids::PRESSURE));
+        if (type == 0xB0)
+        {
+            c.setProperty (ids::number, (int) e.data1, nullptr);
+            c.setProperty (ids::value, (int) e.data2, nullptr);
+        }
+        else if (type == 0xE0)
+            c.setProperty (ids::value, (e.data2 << 7) | e.data1, nullptr);
+        else
+            c.setProperty (ids::value, (int) e.data1, nullptr);
+        c.setProperty (ids::time, e.time, nullptr);
+        node.appendChild (c, nullptr);
+    }
+    state.appendChild (node, um); // always the last child, after the notes
 }

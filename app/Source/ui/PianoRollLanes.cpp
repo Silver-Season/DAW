@@ -503,6 +503,12 @@ juce::Rectangle<int> PianoRoll::ControllerStrip::tabArea (int i) const
     return { PianoRoll::kKeysWidth + 8 + i * 92, 2, 88, PianoRoll::kControllerHeader - 4 };
 }
 
+juce::Rectangle<int> PianoRoll::ControllerStrip::bodyArea() const
+{
+    return { PianoRoll::kKeysWidth, PianoRoll::kControllerHeader, juce::jmax (0, getWidth() - PianoRoll::kKeysWidth - PianoRoll::kScrollBar),
+             juce::jmax (0, getHeight() - PianoRoll::kControllerHeader) };
+}
+
 void PianoRoll::ControllerStrip::paint (juce::Graphics& g)
 {
     const auto& t = theme();
@@ -527,11 +533,121 @@ void PianoRoll::ControllerStrip::paint (juce::Graphics& g)
         g.setColour (on ? t.text : t.dimText);
         g.drawText (*names[i], r.toNearestInt(), juce::Justification::centred, false);
     }
-    g.setColour (t.dimText);
-    g.setFont (t.uiFont (11.0f));
-    g.drawText (Strings::editor::controllersSoon,
-                getLocalBounds().withTrimmedTop (PianoRoll::kControllerHeader).withTrimmedLeft (PianoRoll::kKeysWidth + 8).reduced (4, 0),
-                juce::Justification::centredLeft, true);
+
+    const auto body = bodyArea();
+    if (body.isEmpty())
+        return;
+    g.setColour (t.panel);
+    g.fillRect (body);
+    const auto clip = owner.clip();
+    if (! clip.isValid())
+        return;
+
+    juce::Graphics::ScopedSaveState state (g);
+    g.reduceClipRegion (body);
+    const int top = body.getY() + 3, bottom = body.getBottom() - 3;
+    const auto xOf = [this] (double beat) { return (double) PianoRoll::kKeysWidth + owner.beatToX (beat); };
+    const auto yOf = [top, bottom] (double v) { return (float) bottom - (float) v * (float) (bottom - top); };
+
+    // bar lines full, beat lines faint (the same rhythm as the grid above)
+    const double bpb = owner.beatsPerBar();
+    const double firstBeat = std::floor (owner.xToBeat (0.0)), lastBeat = std::ceil (owner.xToBeat ((double) body.getWidth()));
+    for (double b = juce::jmax (0.0, firstBeat); b <= lastBeat; b += 1.0)
+    {
+        const bool barLine = std::abs (std::fmod (b, bpb)) < 1.0e-6;
+        if (! barLine && owner.v.pxPerBeat < 14.0)
+            continue;
+        g.setColour (t.line.withAlpha (barLine ? 1.0f : 0.4f));
+        g.fillRect ((int) std::round (xOf (b)), body.getY(), 1, body.getHeight());
+    }
+    for (int q = 1; q <= 3; ++q)
+    {
+        g.setColour (t.line.withAlpha (q == 2 && lane() == clipedit::ControllerLane::pitchBend ? 0.9f : 0.3f));
+        g.fillRect (body.getX(), (int) yOf ((double) q / 4.0), body.getWidth(), 1);
+    }
+
+    const float clipEnd = (float) xOf (clip.lengthBeats());
+    if (clipEnd < (float) body.getRight())
+    {
+        g.setColour (t.chrome.withAlpha (0.6f));
+        g.fillRect (juce::jmax ((float) body.getX(), clipEnd), (float) body.getY(), (float) body.getRight() - juce::jmax ((float) body.getX(), clipEnd), (float) body.getHeight());
+    }
+
+    // The step line: each event holds its value until the next one (or the end of the clip).
+    std::vector<daw::engine::ControllerEvent> events;
+    for (const auto& e : clip.controllers())
+        if (clipedit::isLaneEvent (e, lane()))
+            events.push_back (e);
+    if (events.empty())
+    {
+        g.setColour (t.dimText);
+        g.setFont (t.uiFont (11.0f));
+        g.drawText (Strings::editor::controllersEmpty, body.reduced (8, 0), juce::Justification::centredLeft, true);
+        return;
+    }
+    const auto colour = t.textPalette (clip.colour());
+    juce::Path line;
+    float lastY = 0.0f;
+    for (size_t i = 0; i < events.size(); ++i)
+    {
+        const float x = (float) xOf (events[i].time);
+        const float y = yOf (clipedit::laneValue (events[i], lane()));
+        if (i == 0)
+            line.startNewSubPath (x, y);
+        else
+        {
+            line.lineTo (x, lastY);
+            line.lineTo (x, y);
+        }
+        lastY = y;
+    }
+    line.lineTo ((float) xOf (juce::jmax (clip.lengthBeats(), events.back().time)), lastY);
+
+    juce::Path area (line);
+    area.lineTo (area.getCurrentPosition().x, (float) bottom);
+    area.lineTo ((float) xOf (events.front().time), (float) bottom);
+    area.closeSubPath();
+    g.setColour (colour.withAlpha (0.22f));
+    g.fillPath (area);
+    g.setColour (colour);
+    g.strokePath (line, juce::PathStrokeType (1.5f));
+    for (const auto& e : events)
+        g.fillEllipse ((float) xOf (e.time) - 2.0f, yOf (clipedit::laneValue (e, lane())) - 2.0f, 4.0f, 4.0f);
+}
+
+void PianoRoll::ControllerStrip::addStrokePoint (juce::Point<int> p)
+{
+    const auto body = bodyArea();
+    const auto clip = owner.clip();
+    if (! clip.isValid() || body.isEmpty())
+        return;
+    const int top = body.getY() + 3, bottom = body.getBottom() - 3;
+    const double beat = owner.xToBeat ((double) (p.x - PianoRoll::kKeysWidth));
+    const double value = juce::jlimit (0.0, 1.0, (double) (bottom - p.y) / (double) juce::jmax (1, bottom - top));
+    stroke.emplace_back (juce::jlimit (0.0, clip.lengthBeats(), beat), value);
+
+    // Redrawn from what the clip held when the stroke began, in the one transaction of the stroke.
+    const auto events = clipedit::drawControllerStroke (original, lane(), stroke, clip.lengthBeats());
+    if (! transactionOpen)
+    {
+        owner.model.undo.beginNewTransaction (Strings::recording::undoDrawController);
+        transactionOpen = true;
+    }
+    clip.setControllers (events, &owner.model.undo);
+    repaint();
+}
+
+void PianoRoll::ControllerStrip::mouseDrag (const juce::MouseEvent& e)
+{
+    if (drawing)
+        addStrokePoint (e.getPosition());
+}
+
+void PianoRoll::ControllerStrip::mouseUp (const juce::MouseEvent&)
+{
+    drawing = transactionOpen = false;
+    stroke.clear();
+    original.clear();
 }
 
 void PianoRoll::ControllerStrip::mouseDown (const juce::MouseEvent& e)
@@ -549,6 +665,16 @@ void PianoRoll::ControllerStrip::mouseDown (const juce::MouseEvent& e)
     {
         owner.v.controllersOpen = ! owner.v.controllersOpen;
         owner.layoutParts();
+        return;
     }
+    if (owner.v.controllersOpen && bodyArea().contains (e.getPosition()))
+        if (const auto clip = owner.clip(); clip.isValid())
+        {
+            drawing = true;
+            transactionOpen = false;
+            stroke.clear();
+            original = clip.controllers();
+            addStrokePoint (e.getPosition());
+        }
 }
 } // namespace ui

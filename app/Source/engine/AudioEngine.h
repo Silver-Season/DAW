@@ -6,10 +6,12 @@
 
 #include "../Settings.h"
 #include "../model/ProjectModel.h"
+#include "Metronome.h"
 #include "MidiInputQueue.h"
 #include "PlaybackGraph.h"
 #include "PreviewPlayer.h"
 
+#include "daw/engine/Capture.h"
 #include "daw/engine/Clip.h"
 
 #include <atomic>
@@ -104,13 +106,39 @@ public:
     void stop();
     bool isPlaying() const { return playing.load(); }
     double getTempo() const { return tempo.load(); }
+    // Negative while a count-in plays (-4 .. 0 for one bar of 4/4).
     double getPositionBeats() const { return positionBeats.load(); }
+    bool isCountingIn() const { return playing.load() && positionBeats.load() < 0.0; }
+    double getBeatsPerBar() const { return beatsPerBar.load(); }
 
     // Session View commands: queued for the audio thread. They return false if the queue is full.
     bool launchClip (int64_t trackId, int scene);
     bool launchScene (int scene);
     bool stopTrack (int64_t trackId);
     bool stopAllClips();
+
+    // Recording (docs/spec/02, task 2.2). Normally called through SessionRecorder, which collects the notes.
+    // startRecord: from a stopped transport it starts the transport (with the count-in of the project) and the
+    // recording begins at beat 0; from a playing one at the next launch-quantisation boundary. A track that
+    // plays the clip of the slot while OVR is on is overdubbed instead. stopRecord ends a recording at the next bar
+    // line (an overdub at once) and cancels one that has not begun. launchAligned plays a clip that was just
+    // recorded as if it had been launched at `beat`, which may lie a few milliseconds in the past.
+    bool startRecord (int64_t trackId, int scene);
+    bool stopRecord (int64_t trackId);
+    bool launchAligned (int64_t trackId, int scene, double beat);
+
+    // Live input events that reached a track (or none), for the recorder and the capture buffer. Message thread.
+    // Returns how many were appended to `out`.
+    size_t popInputEvents (std::vector<daw::engine::InputEvent>& out);
+    uint32_t getInputEventDrops() const { return inputDrops.load (std::memory_order_relaxed); }
+    // Samples the audio thread has processed since the engine was created (the clock of InputEvent::engineSample).
+    int64_t getEngineSample() const { return engineSampleCount.load (std::memory_order_relaxed); }
+
+    // How far earlier than the block position a live event is placed: output latency + half a block + the manual
+    // correction of the settings (spec 2.2, "MIDI delay"). In samples.
+    int getRecordCompensationSamples() const { return recordCompensation.load(); }
+    void setRecordCorrectionMs (double ms); // -50..+50, also stored in the settings
+    double getRecordCorrectionMs() const { return correctionMs.load(); }
 
     // Live MIDI from any thread, with the time (ms, juce::Time::getMillisecondCounterHiRes) it happened.
     // The audio thread turns the time into a sample offset inside the block. Used by the device callbacks
@@ -194,6 +222,11 @@ private:
     // audio thread (AudioEngine.cpp)
     void reconcileWithGraph (const PlaybackGraph&);
     void processCommands (const PlaybackGraph&);
+    void finishRecordingsAtStop (const PlaybackGraph&);
+    void updateRecordStates (const PlaybackGraph&, double blockEndBeat);
+    void routeInputEvents (const PlaybackGraph&, const daw::engine::Transport::Block&, double samplesPerBeat, int64_t blockEngineStart, bool anyArmed);
+    bool acceptsLiveMidi (const TrackRuntime&, bool fromKeyboard, bool anyArmed) const;
+    void updateRecordCompensation();
     void renderTrack (const PlaybackGraph::Track&, const daw::engine::Transport::Block&, double samplesPerBeat, int numSamples,
                       bool killNotes, bool anySolo, bool anyArmed);
 
@@ -245,6 +278,34 @@ private:
     std::atomic<int> toneSamplesLeft { 0 };
     int toneSamplesTotal = 0;   // audio thread
     double tonePhase = 0.0;     // audio thread
+
+    // Transport preferences and recording settings, copied from the model
+    std::atomic<bool> metronomeOn { false }, metronomeOnlyRecording { false }, metronomeWood { false }, overdubOn { false };
+    std::atomic<float> metronomeGain { 0.5f };
+    std::atomic<int> countInBars { 1 }, recordFixedBars { 0 };
+    std::atomic<double> beatsPerBar { 4.0 };
+    std::atomic<int> sigNum { 4 }, sigDen { 4 }; // for the plugins' play head
+    std::atomic<int> recordCompensation { 0 }, autoCompensation { 0 };
+    std::atomic<double> correctionMs { 0.0 };
+
+    // Live input events, audio thread -> message thread (single producer, single consumer)
+    static constexpr int kInputQueueSize = 16384;
+    juce::AbstractFifo inputFifo { kInputQueueSize };
+    std::vector<daw::engine::InputEvent> inputEvents = std::vector<daw::engine::InputEvent> ((size_t) kInputQueueSize);
+    std::atomic<uint32_t> inputDrops { 0 };
+    std::atomic<int64_t> engineSampleCount { 0 };
+    int64_t engineSamples = 0; // audio thread
+
+    // launchAligned commands whose clip is not in the graph yet (the graph is published a moment after the model
+    // changed); retried for a while. Audio thread.
+    struct Deferred
+    {
+        EngineCommand command;
+        int age = 0;
+    };
+    std::array<Deferred, 16> deferred;
+    int numDeferred = 0;
+    Metronome metronome; // audio thread
 
     std::atomic<bool> playing { false }, stopRequested { false };
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };

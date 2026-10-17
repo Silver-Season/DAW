@@ -153,6 +153,15 @@ void ProjectActions::setTrackSolo (int64_t trackId, bool on, bool exclusive)
     }
 }
 
+void ProjectActions::setTrackRecordSource (int64_t trackId, const juce::String& source)
+{
+    const auto track = model.findTrack (trackId);
+    if (! track.isValid() || track.recordSource() == source)
+        return;
+    begin (Strings::recording::undoRecordSource);
+    track.setRecordSource (source, &model.undo);
+}
+
 void ProjectActions::setTrackArm (int64_t trackId, bool on, bool exclusive)
 {
     if (! model.findTrack (trackId).isValid())
