@@ -73,6 +73,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Chrome.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/EditCommands.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ComputerKeys.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/TransportMenus.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioEngine.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/Metronome.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/SessionRecorder.cpp

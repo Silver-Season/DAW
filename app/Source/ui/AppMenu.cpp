@@ -78,6 +78,8 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::newScene);
             add (commands::captureScene);
             add (commands::newClip);
+            menu.addSeparator();
+            add (commands::captureMidi);
             break;
         case 3:
         {

@@ -4,6 +4,8 @@
 #include "Chrome.h"
 #include "ScalePicker.h"
 #include "../engine/AudioEngine.h"
+#include "../engine/SessionRecorder.h"
+#include "TransportMenus.h"
 
 
 namespace ui
@@ -25,6 +27,7 @@ public:
     bool on = false;
     bool accentInk = false; // the label in the accent colour (the scale button while a scale is set)
     std::function<void()> onClick;
+    std::function<void()> onPopup; // right mouse button
 
     IconButton (std::function<juce::Path (juce::Rectangle<float>)> iconFn, const juce::String& label, Role r, const juce::String& help)
         : icon (std::move (iconFn)), text (label), role (r)
@@ -88,7 +91,14 @@ public:
     void mouseExit (const juce::MouseEvent&) override { repaint(); }
     void mouseUp (const juce::MouseEvent& e) override
     {
-        if (isEnabled() && getLocalBounds().contains (e.getPosition()) && onClick)
+        if (! isEnabled() || ! getLocalBounds().contains (e.getPosition()))
+            return;
+        if (e.mods.isPopupMenu())
+        {
+            if (onPopup)
+                onPopup();
+        }
+        else if (onClick)
             onClick();
     }
 };
@@ -299,6 +309,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     play = std::make_unique<IconButton> (I::play, juce::String(), Role::play, Strings::help::play);
     stop = std::make_unique<IconButton> (I::stop, juce::String(), Role::normal, Strings::help::stop);
     record = std::make_unique<IconButton> (I::record, juce::String(), Role::record, Strings::help::record);
+    overdub = std::make_unique<IconButton> (nullptr, Strings::recording::ovr, Role::normal, Strings::help::overdub);
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
     capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
     version = std::make_unique<IconButton> (nullptr, Strings::transport::versionNone, Role::normal, Strings::help::version);
@@ -309,8 +320,21 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
             model.setScale (root, mode);
         });
     };
-    for (auto* b : { metronome.get(), record.get(), loop.get(), capture.get() })
-        b->setEnabled (false);
+    loop->setEnabled (false);
+    metronome->onClick = [this] { model.setMetronome (! model.metronome()); };
+    metronome->onPopup = [this] {
+        makeMetronomeMenu (model).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (metronome.get()));
+    };
+    record->onClick = [this] {
+        if (onRecordClicked)
+            onRecordClicked();
+    };
+    record->onPopup = [this] { makeRecordMenu (model).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (record.get())); };
+    overdub->onClick = [this] { model.setOverdub (! model.overdub()); };
+    capture->onClick = [this] {
+        if (onCaptureClicked)
+            onCaptureClicked();
+    };
     version->onClick = [this] {
         if (onVersionClicked)
             onVersionClicked();
@@ -337,7 +361,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
             onCpuClicked();
     };
 
-    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), loop.get(), capture.get(),
+    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), overdub.get(), loop.get(), capture.get(),
                                                               version.get(), scaleButton.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
         addAndMakeVisible (c);
     lastMidiCount = engine.getHardwareMidiCount();
@@ -360,6 +384,13 @@ void TopBar::setArrangementShown (bool shown)
     tabs->setArrangement (shown);
 }
 
+void TopBar::setRecorder (SessionRecorder* r)
+{
+    recorder = r;
+    ribbonVersion = r != nullptr ? r->getCaptureVersion() - 1 : 0;
+    updateRibbon();
+}
+
 void TopBar::setComputerKeysOn (bool on)
 {
     keysLamp->setLit (on, true);
@@ -378,17 +409,32 @@ void TopBar::tick()
     if (! tempo.isEditing() && std::abs (tempo.getValue() - model.tempo()) > 0.004)
         tempo.setValue (model.tempo());
 
-    const double beats = engine.getPositionBeats();
-    const double barBeats = model.beatsPerBar(); // 6/8 is three quarter notes long
-    const int bar = (int) std::floor (beats / barBeats + 1.0e-9) + 1;
-    const int beat = (int) std::floor (std::fmod (beats, barBeats) + 1.0e-9) + 1;
-    const int sixteenth = (int) std::floor (std::fmod (beats * 4.0, 4.0)) + 1;
-    const auto text = juce::String (bar) + ". " + juce::String (beat) + ". " + juce::String (sixteenth);
+    const auto text = formatPosition (engine.getPositionBeats(), model.beatsPerBar()); // 6/8 is three quarter notes long
     if (text != positionText)
     {
         positionText = text;
         repaint (positionArea);
     }
+
+    metronome->setOn (model.metronome());
+    overdub->setOn (model.overdub());
+    {
+        // Lit while a recording runs, blinking while one waits for its start or the count-in plays.
+        bool recording = false, waiting = engine.isCountingIn();
+        if (recorder != nullptr)
+            for (const auto& track : model.tracks())
+            {
+                SessionRecorder::Progress p;
+                if (recorder->getProgress (track.id(), p))
+                    (p.waiting ? waiting : recording) = true;
+                else if (recorder->isTrackRecording (track.id()))
+                    waiting = true;
+            }
+        const bool blink = (juce::Time::getMillisecondCounter() / 250) % 2 == 0 || ! engine.getSettings().animations();
+        recordLit = recording || (waiting && blink);
+        record->setOn (recordLit);
+    }
+    updateRibbon();
 
     const auto count = engine.getHardwareMidiCount();
     if (count != lastMidiCount)
@@ -433,20 +479,77 @@ void TopBar::paint (juce::Graphics& g)
     field (positionArea, positionText);
 
     if (! ribbonArea.isEmpty())
+        paintRibbon (g);
+}
+
+void TopBar::updateRibbon()
+{
+    if (recorder == nullptr || ribbonStripArea.isEmpty())
+        return;
+    // 15 frames a second at most, and only when new notes arrived or the strip has moved by a pixel
+    if ((++tickCounter & 1) != 0)
+        return;
+    const double sr = engine.getSampleRate() > 0.0 ? engine.getSampleRate() : 44100.0;
+    const int64_t pixel = (int64_t) std::floor ((double) engine.getEngineSample() / sr * (double) ribbonStripArea.getWidth()
+                                                / daw::engine::CaptureBuffer::kWindowSeconds);
+    const auto version = recorder->getCaptureVersion();
+    if (version == ribbonVersion && pixel == ribbonPixel)
+        return;
+    if (version != ribbonVersion)
     {
-        // The "10 min" capture ribbon: an empty strip until stage 2.
-        const auto r = ribbonArea.toFloat();
-        fillCell (g, r, t.panel);
-        strokeCell (g, r, t.line);
-        g.setColour (t.dimText);
-        g.setFont (t.uiFont (10.5f, 500));
-        g.drawText (Strings::transport::capture10.toUpperCase(), ribbonArea.withTrimmedLeft (9).withWidth (46), juce::Justification::centredLeft, false);
-        const auto strip = juce::Rectangle<float> (130.0f, 24.0f).withCentre ({ r.getX() + 58.0f + 65.0f, r.getCentreY() });
-        g.setColour (t.panel2.withAlpha (0.7f));
-        g.fillRoundedRectangle (strip, 3.0f);
-        g.setColour (t.dimText.withAlpha (0.25f));
-        for (float x = strip.getX() + 3.0f; x < strip.getRight() - 3.0f; x += 4.0f)
-            g.fillRect (x, strip.getCentreY() - 1.0f, 2.0f, 2.0f);
+        std::vector<SessionRecorder::NoteMark> marks;
+        recorder->getRecentNoteOns (marks);
+        markSamples.clear();
+        markVelocities.clear();
+        markTracks.clear();
+        for (const auto& m : marks)
+        {
+            markSamples.push_back (m.engineSample);
+            markVelocities.push_back (m.velocity);
+            markTracks.push_back (m.trackId);
+        }
+    }
+    ribbonVersion = version;
+    ribbonPixel = pixel;
+    repaint (ribbonStripArea);
+}
+
+void TopBar::paintRibbon (juce::Graphics& g)
+{
+    // The "10 min" capture ribbon: the last ten minutes of playing, newest at the right edge. Every note-on is a
+    // stroke in the colour of its track, as tall as it was loud; the red line is "now".
+    const auto& t = theme();
+    const auto r = ribbonArea.toFloat();
+    fillCell (g, r, t.panel);
+    strokeCell (g, r, t.line);
+    g.setColour (t.dimText);
+    g.setFont (t.uiFont (10.5f, 500));
+    g.drawText (Strings::transport::capture10.toUpperCase(), ribbonArea.withTrimmedLeft (9).withWidth (46), juce::Justification::centredLeft, false);
+
+    const auto strip = ribbonStripArea.toFloat();
+    g.setColour (t.panel2.withAlpha (0.7f));
+    g.fillRoundedRectangle (strip, 3.0f);
+    {
+        juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (ribbonStripArea);
+        const double sr = engine.getSampleRate() > 0.0 ? engine.getSampleRate() : 44100.0;
+        const double now = (double) engine.getEngineSample();
+        const double window = daw::engine::CaptureBuffer::kWindowSeconds * sr;
+        const float right = strip.getRight() - 2.0f, width = strip.getWidth() - 2.0f;
+        const float maxHeight = strip.getHeight() - 4.0f;
+        for (size_t i = 0; i < markSamples.size(); ++i)
+        {
+            const double age = now - (double) markSamples[i];
+            if (age < 0.0 || age > window)
+                continue;
+            const float x = right - (float) (age / window) * width;
+            const float h = 3.0f + (float) juce::jlimit (1, 127, markVelocities[i]) / 127.0f * (maxHeight - 3.0f);
+            const auto track = markTracks[i] != 0 ? model.findTrack (markTracks[i]) : TrackRef();
+            g.setColour (track.isValid() ? t.palette (track.colour()) : t.dimText);
+            g.fillRect (x, strip.getCentreY() - h * 0.5f, 1.5f, h);
+        }
+        g.setColour (t.record);
+        g.fillRect (strip.getRight() - 2.0f, strip.getY(), 2.0f, strip.getHeight());
     }
 }
 
@@ -479,6 +582,8 @@ void TopBar::resized()
     r.removeFromLeft (small);
     place (*record, h);
     r.removeFromLeft (small);
+    place (*overdub, 40);
+    r.removeFromLeft (small);
     positionArea = juce::Rectangle<int> (90, h).withCentre ({ r.getX() + 45, cy });
     r.removeFromLeft (90 + small);
     place (*loop, h);
@@ -503,11 +608,13 @@ void TopBar::resized()
     const int ribbonWidth = 58 + 130 + 10 + 86 + 6;
     const int morphWidth = 18 + 90 + 18 + 24;
     ribbonArea = {};
+    ribbonStripArea = {};
     capture->setVisible (false);
     morph->setVisible (false);
     if (r.getWidth() >= ribbonWidth)
     {
         ribbonArea = juce::Rectangle<int> (ribbonWidth - 4, h).withCentre ({ r.getX() + (ribbonWidth - 4) / 2, cy });
+        ribbonStripArea = juce::Rectangle<int> (130, 24).withCentre ({ ribbonArea.getX() + 58 + 65, cy });
         capture->setVisible (true);
         capture->setBounds (juce::Rectangle<int> (82, 24).withCentre ({ ribbonArea.getRight() - 4 - 41, cy }));
         r.removeFromLeft (ribbonWidth - 4 + gap);

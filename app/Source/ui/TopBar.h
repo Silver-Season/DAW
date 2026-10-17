@@ -2,14 +2,17 @@
 
 #include "Controls.h"
 
+#include <vector>
+
 class AudioEngine;
 class ProjectModel;
+class SessionRecorder;
 
 namespace ui
 {
-// The 52 px bar on top of the window: logo, tempo, time signature, project scale, transport, version, CPU. Elements
-// that belong to later stages (metronome, record, loop, "10 min" ribbon, morph) are drawn inactive so that the
-// layout does not move when they arrive.
+// The 52 px bar on top of the window: logo, tempo, time signature, project scale, metronome, transport with record
+// and overdub, the "10 min" capture ribbon and its button, version, CPU. Elements that belong to later stages (loop,
+// morph) are drawn inactive so that the layout does not move when they arrive.
 class TopBar final : public juce::Component
 {
 public:
@@ -24,6 +27,12 @@ public:
     // The octave of the A key, shown in the KLAV lamp ("КЛАВ C3").
     void setKeysOctave (const juce::String& octave);
 
+    // The recorder gives the ribbon its notes and the record lamp its state; the window decides what the buttons do
+    // (it knows the selection): record = Session Record from the selected scene, capture = the last phrase.
+    void setRecorder (SessionRecorder*);
+    std::function<void()> onRecordClicked;
+    std::function<void()> onCaptureClicked;
+
     std::function<void()> onCpuClicked;
     // The version button: shows "v14 · 5 мин" and opens the history.
     std::function<void()> onVersionClicked;
@@ -36,6 +45,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    // The strip of the ribbon, for tests and the screenshot script (empty when the window is too narrow).
+    juce::Rectangle<int> ribbonStrip() const { return ribbonStripArea; }
+
 private:
     class IconButton;
     class Lamp;
@@ -47,17 +59,28 @@ private:
     ProjectModel& model;
 
     NumberField tempo;
-    std::unique_ptr<IconButton> metronome, play, stop, record, loop, capture, version, scaleButton;
+    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, capture, version, scaleButton;
     std::unique_ptr<FakeSlider> morph;
     std::unique_ptr<Tabs> tabs;
     std::unique_ptr<Lamp> midiLamp, keysLamp;
     std::unique_ptr<CpuMeter> cpu;
 
-    juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea;
+    juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea;
+    void paintRibbon (juce::Graphics&);
+    void updateRibbon();
     juce::String scaleText;
     juce::String positionText;
     uint32_t lastMidiCount = 0;
     juce::uint32 midiFlashUntil = 0;
     bool wasPlaying = false;
+
+    SessionRecorder* recorder = nullptr;
+    std::vector<int64_t> markTracks; // the ribbon's note-ons: engine sample, velocity and track, copied when the capture buffer changed
+    std::vector<int64_t> markSamples;
+    std::vector<int> markVelocities;
+    uint32_t ribbonVersion = 0;
+    int64_t ribbonPixel = -1;
+    int tickCounter = 0;
+    bool recordLit = false;
 };
 } // namespace ui
