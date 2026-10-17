@@ -54,6 +54,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
+    // Keys that reach a window without passing through this component (nothing focused in it, or a plugin
+    // window) still play notes and run shortcuts. The listeners live as long as this component.
+    void attachKeyListeners (juce::Component& window);
     bool keyStateChanged (bool) override;
     void focusLost (FocusChangeType) override;
 

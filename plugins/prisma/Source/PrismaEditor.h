@@ -162,11 +162,18 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    bool keyPressed (const juce::KeyPress& k) override { return keyboard.handleKeyPressed (k); }
-    bool keyStateChanged (bool) override { return keyboard.handleKeyStateChanged(); }
-    void focusLost (FocusChangeType) override { keyboard.releaseAll(); }
+    // Inside the DAW (no plugin wrapper) the DAW plays the computer keyboard into the armed track, with its own
+    // octave and velocity; the editor's keyboard then only answers the mouse.
+    bool keyPressed (const juce::KeyPress& k) override { return ownsComputerKeys() && keyboard.handleKeyPressed (k); }
+    bool keyStateChanged (bool) override { return ownsComputerKeys() && keyboard.handleKeyStateChanged(); }
+    void focusLost (FocusChangeType) override
+    {
+        if (ownsComputerKeys())
+            keyboard.releaseAll();
+    }
 
 private:
+    bool ownsComputerKeys() const { return processor.wrapperType != juce::AudioProcessor::wrapperType_Undefined; }
     void timerCallback() override;
     prisma_ui::Section& makeOscSection (int osc);
 
