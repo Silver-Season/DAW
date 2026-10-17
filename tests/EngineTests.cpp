@@ -107,6 +107,34 @@ void testEngine()
     engine.getKeyboardState().noteOff (1, 40, 0.0f);
     check (autoArm > 0.005, "the selected track is armed when nothing is armed by hand");
 
+    // Stop, then Play: the Session clips that were playing start again (only those).
+    runner.run (200);
+    engine.launchClip (id0, 0);
+    runner.run (250); // the launch waits for the next bar while the transport runs
+    check (rt0->playingSlot == 0 && rt1->playingSlot == -1, "only track 1 plays before stop");
+    engine.stop();
+    runner.run (5);
+    check (rt0->playingSlot == -1 && ! engine.isPlaying(), "stop stops the clip and the transport");
+    engine.play();
+    const double resumed = runner.run (100);
+    check (engine.isPlaying() && rt0->playingSlot == 0 && rt1->playingSlot == -1, "play brings back the clip that played at stop");
+    check (resumed > 0.005, "the resumed clip sounds");
+    engine.stop();
+    runner.run (5);
+    engine.stopAllClips();
+    engine.play();
+    runner.run (20);
+    check (rt0->playingSlot == 0, "play after stop resumes again");
+    engine.stopTrack (id0);
+    runner.run (200);
+    engine.stop();
+    runner.run (5);
+    engine.play();
+    runner.run (20);
+    check (rt0->playingSlot == -1 && engine.isPlaying(), "a clip stopped by hand before stop is not resumed; play still runs the transport");
+    engine.stop();
+    runner.run (5);
+
     check (runner.nonFinite == 0, "no NaN or Inf in the output");
     engine.audioDeviceStopped();
 }

@@ -520,9 +520,10 @@ public:
         if (! hit (e.getPosition(), column, scene) || column != pressColumn || scene != pressScene)
             return;
         const auto id = view.columnTrack[(size_t) column];
+        // A click selects; only the play marker at the left edge of the clip launches it.
         if (scene == stopRow)
             view.engine.stopTrack (id);
-        else if (view.model.findTrack (id).clipAt (scene).isValid())
+        else if (e.x - (view.columnX[(size_t) column] - view.scrollX) < kLaunchWidth && view.model.findTrack (id).clipAt (scene).isValid())
             view.engine.launchClip (id, scene);
     }
 
@@ -545,6 +546,7 @@ public:
 
 private:
     static constexpr int stopRow = -2;
+    static constexpr int kLaunchWidth = 26; // the play marker at the left edge of a clip
 
     struct State
     {

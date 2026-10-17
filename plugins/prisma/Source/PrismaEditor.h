@@ -115,6 +115,8 @@ public:
     bool handleKeyPressed (const juce::KeyPress&);
     bool handleKeyStateChanged();
     void releaseAll();
+    // Releases the notes whose keys are up, without starting any: for key-ups that went to another window.
+    void releaseKeysNotDown();
     void shiftOctave (int delta);
 
     void resized() override;
