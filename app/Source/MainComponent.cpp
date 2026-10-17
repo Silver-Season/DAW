@@ -186,6 +186,12 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     });
 }
 
+void MainComponent::attachKeyListeners (juce::Component& window)
+{
+    window.addKeyListener (noteKeys.get());
+    window.addKeyListener (router.get());
+}
+
 MainComponent::~MainComponent()
 {
     stopTimer();
@@ -896,8 +902,7 @@ void MainComponent::openInstrumentEditor (int64_t deviceId)
                 editorWindows.erase (deviceId);
         });
     });
-    window->addKeyListener (noteKeys.get());
-    window->addKeyListener (router.get());
+    attachKeyListeners (*window);
     editorWindows[deviceId] = std::move (window);
 }
 

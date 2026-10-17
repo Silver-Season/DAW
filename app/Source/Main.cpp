@@ -72,6 +72,7 @@ private:
             content->onTitleChanged = [this] (const juce::String& title) { setName (title); };
             setName (content->windowTitle());
             setContentOwned (content, true);
+            content->attachKeyListeners (*this);
             setResizable (true, true);
             setResizeLimits (1100, 700, 8000, 6000);
             if (const auto state = settings.windowState(); state.isNotEmpty())
@@ -82,6 +83,12 @@ private:
         }
 
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+        void activeWindowStatusChanged() override
+        {
+            // Give the keyboard to the content when the window comes back without a focused component in it.
+            if (isActiveWindow() && content != nullptr && ! content->hasKeyboardFocus (true))
+                content->grabKeyboardFocus();
+        }
         void startup() { content->startup(); }
         void requestQuit (std::function<void()> quitNow) { content->requestQuit (std::move (quitNow)); }
 
