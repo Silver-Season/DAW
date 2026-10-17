@@ -470,8 +470,12 @@ public:
                 fillCell (g, cell, t.clipColour (clip.colour(), isPlaying));
                 if (dropTarget || selected)
                     strokeCell (g, cell, dropTarget ? t.accent : t.text, 2.0f);
-                if (recScene == s) // an overdub runs on this clip: red outline, pulsing
+                if (recScene == s) // an overdub runs on this clip: red outline, pulsing, and the notes played so far
+                {
                     strokeCell (g, cell, t.record.withAlpha (animate ? pulse (now) : 1.0f), 2.0f);
+                    if (hasProgress)
+                        paintNoteMarks (g, cell, progress.notes, clip.lengthBeats(), t.clipInk.withAlpha (0.45f));
+                }
 
                 // play marker
                 const auto icon = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
@@ -699,30 +703,38 @@ private:
         while (fixedBars == 0 && (double) totalBars * bpb < p.lengthBeats + 1.0e-6)
             totalBars *= 2;
         const double total = (double) totalBars * bpb;
-        const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (6.0f);
         g.setColour (t.clipInk.withAlpha (0.7f));
         g.fillRect (cell.getX(), cell.getBottom() - 3.0f, cell.getWidth() * (float) juce::jlimit (0.0, 1.0, p.lengthBeats / total), 3.0f);
 
-        if (! p.notes.empty() && area.getWidth() > 8.0f)
-        {
-            int lo = 127, hi = 0;
-            for (const auto& n : p.notes)
-            {
-                lo = juce::jmin (lo, n.pitch);
-                hi = juce::jmax (hi, n.pitch);
-            }
-            const float top = cell.getY() + 5.0f, height = cell.getHeight() - 12.0f;
-            const float span = (float) juce::jmax (7, hi - lo);
-            g.setColour (t.clipInk.withAlpha (0.85f));
-            for (const auto& n : p.notes)
-            {
-                const float x = area.getX() + (float) (n.start / total) * area.getWidth();
-                const float w = juce::jmax (1.5f, (float) (n.length / total) * area.getWidth());
-                const float y = top + height - (float) (n.pitch - lo) / span * height;
-                g.fillRect (x, y - 1.0f, juce::jmin (w, area.getRight() - x), 2.0f);
-            }
-        }
+        paintNoteMarks (g, cell, p.notes, total, t.clipInk.withAlpha (0.85f));
         juce::ignoreUnused (track);
+    }
+
+    // Notes as short strokes across the slot, lowest at the bottom; `total` beats span the width right of the marker.
+    static void paintNoteMarks (juce::Graphics& g, juce::Rectangle<float> cell, const std::vector<daw::engine::Note>& notes, double total,
+                                juce::Colour colour)
+    {
+        const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (6.0f);
+        if (notes.empty() || area.getWidth() <= 8.0f || total <= 0.0)
+            return;
+        int lo = 127, hi = 0;
+        for (const auto& n : notes)
+        {
+            lo = juce::jmin (lo, n.pitch);
+            hi = juce::jmax (hi, n.pitch);
+        }
+        const float top = cell.getY() + 5.0f, height = cell.getHeight() - 12.0f;
+        const float span = (float) juce::jmax (7, hi - lo);
+        g.setColour (colour);
+        for (const auto& n : notes)
+        {
+            const float x = area.getX() + (float) (n.start / total) * area.getWidth();
+            if (x >= area.getRight())
+                continue;
+            const float w = juce::jmax (1.5f, (float) (n.length / total) * area.getWidth());
+            const float y = top + height - (float) (n.pitch - lo) / span * height;
+            g.fillRect (x, y - 1.0f, juce::jmin (w, area.getRight() - x), 2.0f);
+        }
     }
 
     // The rainbow glint that runs across a playing clip (the "sheen" of the concept).

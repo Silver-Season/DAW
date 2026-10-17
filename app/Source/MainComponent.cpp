@@ -101,6 +101,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
         commandManager.commandStatusChanged();
     };
     detail = std::make_unique<ui::DetailPanel> (engine, model, actions, selection);
+    detail->pianoRoll().setRecorder (&recorder);
     detail->setOpenDeviceHandler ([this] (int64_t deviceId) { openInstrumentEditor (deviceId); });
     detail->chain().onPresetMenu = [this] (int64_t deviceId, juce::Point<int> screenPosition) { showDeviceMenu (deviceId, screenPosition); };
     detail->chain().setBrowserActions (&browserActions);
@@ -246,6 +247,7 @@ MainComponent::~MainComponent()
     stopTimer();
     topBar->setRecorder (nullptr);
     session->setRecorder (nullptr);
+    detail->pianoRoll().setRecorder (nullptr);
 #if JUCE_MAC
     juce::MenuBarModel::setMacMainMenu (nullptr);
 #endif

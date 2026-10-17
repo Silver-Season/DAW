@@ -519,10 +519,28 @@ void testOverdub()
     r.recorder.poll();
 
     const std::vector<Sched> played { noteOn (5.0, 64), noteOff (5.5, 64), noteOn (10.0, 67), noteOff (10.5, 67) };
+    r.runTo (5.7, played);
+    r.recorder.poll();
+    {
+        std::vector<daw::engine::Note> pending;
+        check (r.recorder.getOverdubNotes (clip.id(), pending), "the overdub shows what it has played before the layer is written");
+        check (clip.numNotes() == 1 && pending.size() == 1 && pending[0].pitch == 64 && std::abs (pending[0].start - 1.0) < 0.003,
+               "the pending note is drawn where it will be written, in beats of the clip");
+        std::vector<daw::engine::Note> none;
+        check (! r.recorder.getOverdubNotes (clip.id() + 1000, none) && none.empty(), "another clip has no pending notes");
+    }
     r.runTo (8.6, played); // the loop has started its third pass: the first layer is written
     r.recorder.poll();
     check (clip.numNotes() == 2, "after the first pass of playing, its layer is in the clip (" + juce::String (clip.numNotes()) + " notes)");
     check (r.recorder.isRecording (id, 0), "and the recording goes on");
+    r.runTo (10.2, played);
+    r.recorder.poll();
+    {
+        std::vector<daw::engine::Note> pending;
+        r.recorder.getOverdubNotes (clip.id(), pending);
+        const bool held = std::any_of (pending.begin(), pending.end(), [] (const auto& n) { return n.pitch == 67 && std::abs (n.start - 2.0) < 0.003; });
+        check (held && pending.size() == 1, "a note still held is drawn from where it began");
+    }
     r.runTo (10.8, played);
     r.recorder.stopRecording (id);
     r.runTo (11.5, played);

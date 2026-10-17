@@ -156,6 +156,19 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
                         juce::Justification::centredLeft, false);
         }
     }
+    // notes an overdub has played but not written yet (it writes them when the loop comes round): dimmed outlines
+    for (const auto& n : owner.overdubNotes)
+    {
+        const int row = owner.rowOfPitch (n.pitch);
+        if (row < 0)
+            continue;
+        const int x = juce::roundToInt (owner.beatToX (n.start)), x2 = juce::roundToInt (owner.beatToX (n.start + n.length));
+        const auto r = juce::Rectangle<int> (x, owner.rowToY (row), juce::jmax (2, x2 - x), vw.rowHeight).toFloat().reduced (0.0f, 0.5f).withTrimmedRight (1.0f);
+        if (! r.intersects (getLocalBounds().toFloat()))
+            continue;
+        fillCell (g, r, base.withAlpha (0.22f), 0.35f);
+        strokeCell (g, r, base.withAlpha (0.7f), 1.0f, 0.35f);
+    }
     g.restoreState();
 
     if (gesture == Gesture::rubber)

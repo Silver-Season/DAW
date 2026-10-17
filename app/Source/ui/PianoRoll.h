@@ -10,6 +10,7 @@
 #include "../model/ProjectActions.h"
 
 class AudioEngine;
+class SessionRecorder;
 
 namespace ui
 {
@@ -41,6 +42,8 @@ public:
 
     // 30 Hz while visible: the playing cursor, the pending auditions, the pending model changes.
     void tick();
+    // While an overdub runs on the shown clip, the notes it has not written yet are drawn dimmed.
+    void setRecorder (SessionRecorder* r) { recorder = r; }
 
     // Commands that the window's menu and shortcuts reach (Cmd+U, Cmd+Shift+U).
     bool quantizeSelected();
@@ -171,6 +174,8 @@ private:
     SelectionState& selectionState;
 
     int64_t currentClip = 0;
+    SessionRecorder* recorder = nullptr;
+    std::vector<daw::engine::Note> overdubNotes; // what the overdub on this clip has played so far, not yet written
     bool viewInitialised = false;
     bool dirty = true, rowsDirty = true;
     View v;

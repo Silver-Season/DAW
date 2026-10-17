@@ -144,7 +144,50 @@ bool SessionRecorder::getProgress (int64_t trackId, Progress& out) const
             out.notes.push_back (n);
         }
     }
+    else
+        pendingOverdubNotes (trackId, rec, out.notes);
     return true;
+}
+
+bool SessionRecorder::getOverdubNotes (int64_t clipId, std::vector<Note>& out) const
+{
+    out.clear();
+    for (const auto& [trackId, rec] : recs)
+        if (rec.overdub && rec.sawState)
+            if (const auto clip = model.findTrack (trackId).clipAt (rec.scene); clip.isValid() && clip.id() == clipId)
+            {
+                pendingOverdubNotes (trackId, rec, out);
+                return true;
+            }
+    return false;
+}
+
+void SessionRecorder::pendingOverdubNotes (int64_t trackId, const Rec& rec, std::vector<Note>& out) const
+{
+    out.clear();
+    const auto clip = model.findTrack (trackId).clipAt (rec.scene);
+    const auto* rt = engine.findRuntime (trackId);
+    if (! clip.isValid() || rt == nullptr || ! rec.overdubStarted)
+        return;
+    // the same mapping flushOverdub uses, so that a note stays where it was drawn when it is written
+    const auto shape = shapeOf (clip);
+    const double playStart = rt->playingStartBeat.load();
+    const auto add = [&] (Note n) {
+        n.start = shape.positionAfter (n.start - playStart);
+        n.length = std::min (n.length, std::max (1.0e-3, shape.endBeat() - n.start));
+        out.push_back (n);
+    };
+    for (const auto& n : rec.pendingNotes)
+        add (n);
+    for (const auto& o : rec.assembler.openNotes())
+    {
+        Note n;
+        n.start = o.start;
+        n.length = std::max (1.0e-3, positionAtPoll - o.start);
+        n.pitch = o.pitch;
+        n.velocity = o.velocity;
+        add (n);
+    }
 }
 
 //==============================================================================

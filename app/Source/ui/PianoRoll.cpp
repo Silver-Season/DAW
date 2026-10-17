@@ -1,5 +1,7 @@
 #include "PianoRoll.h"
 
+#include "../engine/SessionRecorder.h"
+
 #include "PianoRollParts.h"
 #include "QuantiseWindow.h"
 
@@ -140,6 +142,20 @@ void PianoRoll::tick()
         repaint();
         for (auto* c : std::initializer_list<juce::Component*> { ruler.get(), keys.get(), grid.get(), velocityLane.get(), controllers.get() })
             c->repaint();
+    }
+
+    if (recorder != nullptr)
+    {
+        std::vector<daw::engine::Note> notes;
+        recorder->getOverdubNotes (currentClip, notes);
+        const auto same = [] (const daw::engine::Note& a, const daw::engine::Note& b) {
+            return a.pitch == b.pitch && std::abs (a.start - b.start) < 1.0e-9 && std::abs (a.length - b.length) < 1.0e-9;
+        };
+        if (! std::equal (notes.begin(), notes.end(), overdubNotes.begin(), overdubNotes.end(), same))
+        {
+            overdubNotes = std::move (notes);
+            grid->repaint();
+        }
     }
 
     // the auditions that have run out

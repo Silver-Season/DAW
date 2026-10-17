@@ -58,8 +58,12 @@ public:
         double lengthBeats = 0.0;   // how long the recording has run (a new recording: from the start beat)
         double startBeat = 0.0;
         std::vector<daw::engine::Note> notes; // beats from the start of the recording; open notes run to `lengthBeats`
+                                              // (an overdub: the notes not yet written, in beats of the clip)
     };
     bool getProgress (int64_t trackId, Progress& out) const;
+    // The notes an overdub on this clip has played but not yet written (they are written when the loop comes round),
+    // in beats of the clip, held notes running up to now. False if no overdub runs on the clip.
+    bool getOverdubNotes (int64_t clipId, std::vector<daw::engine::Note>& out) const;
 
     //==========================================================================
     // Capture ("always recording")
@@ -113,6 +117,7 @@ private:
     void flushOverdub (Rec&, const ClipRef&, const daw::engine::MidiClip& shape, double playStart, bool all, long beforePass);
     static long passOf (const daw::engine::MidiClip&, double elapsed);
     daw::engine::MidiClip shapeOf (const ClipRef&) const;
+    void pendingOverdubNotes (int64_t trackId, const Rec&, std::vector<daw::engine::Note>& out) const;
 
     AudioEngine& engine;
     ProjectModel& model;
