@@ -67,7 +67,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar = std::make_unique<ui::TopBar> (engine, model);
     topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
-    browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources, library);
+    browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources);
     sources.onChanged = [this] { browser->sourcesChanged(); };
     browser->onActivate = [this] (const browser::DragItem& item) {
         reportDrop (browserActions.useOnTrack (item, selection.get().trackId), item);
@@ -608,10 +608,19 @@ void MainComponent::showVersionHistory()
         [this] (const juce::String& text) { infoBar->showMessage (text); });
 }
 
+namespace
+{
+#if JUCE_LINUX
+constexpr bool useNativeFileDialogs = false; // the native chooser is unreliable under X11 window managers
+#else
+constexpr bool useNativeFileDialogs = true;
+#endif
+} // namespace
+
 void MainComponent::doOpenDialog()
 {
     chooser = std::make_unique<juce::FileChooser> (Strings::dialogOpenTitle, projectsFolder().isDirectory() ? projectsFolder() : juce::File::getSpecialLocation (juce::File::userMusicDirectory),
-                                                   "*.prisma", ! JUCE_LINUX);
+                                                   "*.prisma", useNativeFileDialogs);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                           [safe = juce::Component::SafePointer<MainComponent> (this)] (const juce::FileChooser& fc) {
                               if (safe != nullptr && fc.getResult() != juce::File())
@@ -798,7 +807,7 @@ void MainComponent::showDeviceMenu (int64_t deviceId, juce::Point<int> screenPos
 
     juce::Component::SafePointer<MainComponent> safe (this);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ screenPosition.x, screenPosition.y, 1, 1 }),
-                        [safe, deviceId, trackId, mine, instruments, kSave, kFactory, kUser, kPrismaInstrument, kPlugin] (int result) {
+                        [safe, deviceId, trackId, mine, instruments] (int result) {
                             if (safe == nullptr || result <= 0)
                                 return;
                             auto& self = *safe;

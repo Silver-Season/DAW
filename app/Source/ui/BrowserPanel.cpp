@@ -53,8 +53,8 @@ bool sameNav (int kindA, int idxA, int kindB, int idxB) { return kindA == kindB 
 } // namespace
 
 //==============================================================================
-BrowserPanel::BrowserPanel (AudioEngine& e, Settings& s, browser::BrowserSources& src, library::UserLibrary& lib)
-    : engine (e), settings (s), sources (src), library (lib)
+BrowserPanel::BrowserPanel (AudioEngine& e, Settings& s, browser::BrowserSources& src)
+    : engine (e), settings (s), sources (src)
 {
     setHelpText (Strings::help::browserPanel);
     setWantsKeyboardFocus (true);

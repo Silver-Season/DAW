@@ -19,7 +19,7 @@ class BrowserPanel final : public juce::Component, public HelpProvider, private 
 public:
     static constexpr int kMinWidth = 180, kMaxWidth = 420, kDefaultWidth = 236;
 
-    BrowserPanel (AudioEngine&, Settings&, browser::BrowserSources&, library::UserLibrary&);
+    BrowserPanel (AudioEngine&, Settings&, browser::BrowserSources&);
     ~BrowserPanel() override;
 
     void focusSearch();
@@ -97,7 +97,6 @@ private:
     AudioEngine& engine;
     Settings& settings;
     browser::BrowserSources& sources;
-    library::UserLibrary& library;
 
     juce::TextEditor search;
     juce::ScrollBar vbar { true };
