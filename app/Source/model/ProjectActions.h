@@ -25,6 +25,8 @@ public:
     void setTrackMute (int64_t trackId, bool on);
     void setTrackSolo (int64_t trackId, bool on, bool exclusive);
     void setTrackArm (int64_t trackId, bool on, bool exclusive);
+    // "midi" or "audio" (recording audio arrives with stage 5; the editor offers only MIDI until then).
+    void setTrackRecordSource (int64_t trackId, const juce::String& source);
 
     // Clips (a clip is addressed by its slot)
     ClipRef createEmptyClip (int64_t trackId, int scene); // one bar long

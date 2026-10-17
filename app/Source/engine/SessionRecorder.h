@@ -24,6 +24,8 @@ public:
 
     void startPolling() { startTimerHz (30); }
     void poll();
+    // Forgets recordings in flight (the project was replaced: its track ids mean other tracks now).
+    void reset() { recs.clear(); }
 
     //==========================================================================
     // Recording into slots
@@ -40,6 +42,12 @@ public:
 
     bool isRecording (int64_t trackId, int scene) const;
     bool isTrackRecording (int64_t trackId) const { return recs.count (trackId) > 0; }
+    // The scene the track records into, -1 if it does not record.
+    int recordingScene (int64_t trackId) const
+    {
+        const auto it = recs.find (trackId);
+        return it != recs.end() ? it->second.scene : -1;
+    }
     bool isAnythingRecording() const { return ! recs.empty(); }
 
     // What the slot draws while a recording runs.

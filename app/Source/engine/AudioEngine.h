@@ -284,6 +284,7 @@ private:
     std::atomic<float> metronomeGain { 0.5f };
     std::atomic<int> countInBars { 1 }, recordFixedBars { 0 };
     std::atomic<double> beatsPerBar { 4.0 };
+    std::atomic<int> sigNum { 4 }, sigDen { 4 }; // for the plugins' play head
     std::atomic<int> recordCompensation { 0 }, autoCompensation { 0 };
     std::atomic<double> correctionMs { 0.0 };
 

@@ -161,6 +161,7 @@ inline const juce::String tabSound = utf8 ("Звук");
 inline const juce::String tabMidi = utf8 ("MIDI");
 inline const juce::String tabAppearance = utf8 ("Внешний вид");
 inline const juce::String tabLibrary = utf8 ("Библиотека");
+inline const juce::String tabRecording = utf8 ("Запись");
 inline const juce::String driver = utf8 ("Драйвер");
 inline const juce::String input = utf8 ("Вход");
 inline const juce::String output = utf8 ("Выход");
@@ -243,6 +244,7 @@ inline const juce::String newTrack = utf8 ("MIDI-дорожка");
 inline const juce::String newScene = utf8 ("Сцена");
 inline const juce::String captureScene = utf8 ("Сцена с играющими клипами");
 inline const juce::String newClip = utf8 ("Пустой MIDI-клип");
+inline const juce::String captureMidi = utf8 ("Захватить MIDI");
 inline const juce::String browser = utf8 ("Браузер");
 inline const juce::String detail = utf8 ("Детальная панель");
 inline const juce::String mixer = utf8 ("Микшер");
@@ -423,7 +425,7 @@ inline const juce::String controllers = utf8 ("Контроллеры");
 inline const juce::String modwheel = utf8 ("Modwheel");
 inline const juce::String pitchBend = utf8 ("Pitch Bend");
 inline const juce::String sustain = utf8 ("Сустейн");
-inline const juce::String controllersSoon = utf8 ("Движения колеса, питч-бенда и сустейна записываются вместе с MIDI (этап 2.2); здесь они появятся.");
+inline const juce::String controllersEmpty = utf8 ("Нет движений: запишите их с MIDI-клавиатуры или проведите мышью");
 inline const juce::String menuSelectAll = utf8 ("Выделить все");
 inline const juce::String menuInvert = utf8 ("Инвертировать выделение");
 inline const juce::String menuSelectPitch = utf8 ("Выделить ноты этой высоты");
@@ -527,6 +529,35 @@ inline juce::String plural (int n, const char* one, const char* few, const char*
 inline const juce::String undoRecordClip = utf8 ("Запись клипа");
 inline const juce::String undoOverdub = utf8 ("Overdub");
 inline const juce::String undoCaptureMidi = utf8 ("Захват MIDI");
+inline const juce::String undoRecordSource = utf8 ("Источник записи");
+inline const juce::String undoDrawController = utf8 ("Рисование контроллера");
+inline const juce::String ovr = utf8 ("OVR");
+// Transport menus (docs/spec/02, tasks 2.1 and 2.3)
+inline const juce::String menuVolume = utf8 ("Громкость");
+inline const juce::String menuOnlyRecording = utf8 ("Только во время записи");
+inline const juce::String menuCountIn = utf8 ("Отсчёт");
+inline const juce::String menuClickSound = utf8 ("Звук клика");
+inline const juce::String soundClassic = utf8 ("Классический");
+inline const juce::String soundWood = utf8 ("Деревянный");
+inline const juce::String none = utf8 ("Нет");
+inline const juce::String off = utf8 ("Выкл");
+inline const juce::String menuFixedLength = utf8 ("Фиксированная длина записи");
+inline const juce::String menuRecordQuantise = utf8 ("Квантизация записи");
+inline juce::String bars (int n) { return plural (n, "такт", "такта", "тактов"); }
+inline juce::String volumeDb (int db) { return db <= -60 ? utf8 ("−∞") : (db == 0 ? juce::String ("0 ") : utf8 ("−") + juce::String (-db) + " ") + utf8 ("дБ"); }
+// "−1. 3": the count-in shows the bar and beat that are left before the recording starts
+inline const juce::String recordSourceLabel = utf8 ("Запись");
+inline const juce::String sourceMidi = utf8 ("MIDI");
+inline const juce::String sourceAudio = utf8 ("Звук");
+inline const juce::String audioSoon = utf8 ("Запись звука появится на этапе 5");
+// Settings, tab "Запись"
+inline const juce::String correction = utf8 ("Поправка задержки");
+inline const juce::String correctionReset = utf8 ("Сбросить");
+inline const juce::String automaticCompensation = utf8 ("Автоматическая компенсация");
+inline const juce::String correctionNote = utf8 ("Записанные ноты сдвигаются на задержку звука и полбуфера, как слышит игрок. Если ноты ложатся в запись чуть раньше или позже, поправьте вручную.");
+inline juce::String signedMs (double v) { return (v > 0.05 ? juce::String ("+") : (v < -0.05 ? utf8 ("−") : juce::String())) + juce::String (std::abs (v), 1).replace (".", ",") + utf8 (" мс"); }
+inline juce::String autoMs (double v) { return juce::String (v, 1).replace (".", ",") + utf8 (" мс"); }
+inline const juce::String recordNoTrack = utf8 ("Нечего записывать: взведите MIDI-дорожку или выберите её");
 inline const juce::String captureNothing = utf8 ("Нечего захватывать: сыграйте что-нибудь на MIDI-клавиатуре");
 inline const juce::String captureNoTrack = utf8 ("Выберите MIDI-дорожку, на которую захватить фразу");
 // "Захвачено 8 тактов, 112 нот → Arp, сцена Drop"
@@ -540,20 +571,25 @@ inline juce::String captured (int bars, int notes, const juce::String& track, co
 namespace help
 {
 inline juce::String make (const juce::String& title, const juce::String& text) { return title + "\n" + text; }
-inline const juce::String soon2 = utf8 ("Появится на этапе 2");
 inline const juce::String soon3 = utf8 ("Появится на этапе 3");
 inline const juce::String soon6 = utf8 ("Появится на этапе 6");
 
 inline const juce::String logo = make (utf8 ("Призма"), utf8 ("Главное окно DAW. Цвета дорожек идут по спектру слева направо."));
 inline const juce::String tempo = make (utf8 ("Темп"), utf8 ("Ударов в минуту. Тяните мышью, колесо меняет, двойной щелчок вводит число. Shift: точнее."));
 inline const juce::String signature = make (utf8 ("Размер"), utf8 ("Размер такта проекта. Меняется в окне «Свойства проекта» (Cmd+Alt+P)."));
-inline const juce::String metronome = make (utf8 ("Метроном"), soon2);
+inline const juce::String metronome = make (utf8 ("Метроном"), utf8 ("Щелчок включает метроном проекта. Правая кнопка: громкость, «Только во время записи», отсчёт, звук клика."));
 inline const juce::String play = make (utf8 ("Играть"), utf8 ("Запускает и останавливает воспроизведение. Пробел делает то же самое."));
 inline const juce::String stop = make (utf8 ("Стоп"), utf8 ("Останавливает воспроизведение и все клипы. Повторное нажатие возвращает в начало."));
-inline const juce::String record = make (utf8 ("Запись"), soon2);
+inline const juce::String record = make (utf8 ("Запись"), utf8 ("Запись в выбранную сцену на взведённых дорожках; повторный щелчок останавливает. Правая кнопка: фиксированная длина и квантизация записи."));
+inline const juce::String overdub = make (utf8 ("Overdub"), utf8 ("Включён: запись на играющий клип добавляет ноты слоями, старые не стираются. Каждый круг отменяется отдельно."));
 inline const juce::String position = make (utf8 ("Позиция"), utf8 ("Такты, доли и шестнадцатые от начала воспроизведения."));
 inline const juce::String loop = make (utf8 ("Петля"), soon3);
-inline const juce::String ribbon = make (utf8 ("Лента «10 мин»"), utf8 ("Последние 10 минут игры всегда в памяти. ") + soon2);
+inline const juce::String ribbon = make (utf8 ("Лента «10 мин»"), utf8 ("Вечная запись: последние 10 минут игры. Нажмите “Захватить” или Cmd+Shift+C"));
+inline const juce::String recordSlot = make (utf8 ("Кружок записи"), utf8 ("Щелчок начинает запись в этот слот на ближайшей границе запуска. Нужна взведённая (или выбранная) MIDI-дорожка."));
+inline const juce::String recordingSlot = make (utf8 ("Идёт запись"), utf8 ("Щелчок заканчивает запись на ближайшем такте. Клип сразу играет по кругу. Cmd+Z удаляет записанный клип."));
+inline const juce::String trackRecordSource = make (utf8 ("Источник записи"), utf8 ("Что пишет эта дорожка: MIDI с клавиатуры или звук с входа."));
+inline const juce::String trackRecordAudio = make (utf8 ("Запись звука"), utf8 ("Запись звука появится на этапе 5"));
+inline const juce::String controllerLane = make (utf8 ("Полоса контроллера"), utf8 ("Тяните мышью, чтобы нарисовать значения: события этого типа под мазком заменяются. Весь мазок отменяется одним Cmd+Z."));
 inline const juce::String morph = make (utf8 ("Морф A ↔ B"), utf8 ("Плавный переход между снимками ручек. ") + soon6);
 inline const juce::String tabSession = make (utf8 ("Session"), utf8 ("Сетка клипов для живой игры. Tab переключает Session и Arrangement."));
 inline const juce::String tabArrangement = make (utf8 ("Arrangement"), utf8 ("Пока пустой вид: Arrangement появится на этапе 3. Tab переключает Session и Arrangement."));

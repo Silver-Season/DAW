@@ -15,9 +15,10 @@ public:
         const double beats = engine.positionBeats.load();
         const double bpm = engine.tempo.load();
         info.setBpm (bpm);
-        info.setTimeSignature (juce::AudioPlayHead::TimeSignature { 4, 4 });
+        info.setTimeSignature (juce::AudioPlayHead::TimeSignature { engine.sigNum.load(), engine.sigDen.load() });
         info.setPpqPosition (beats);
-        info.setPpqPositionOfLastBarStart (std::floor (beats / 4.0) * 4.0);
+        const double bar = juce::jmax (1.0, engine.beatsPerBar.load());
+        info.setPpqPositionOfLastBarStart (std::floor (beats / bar) * bar);
         info.setTimeInSeconds (beats * 60.0 / bpm);
         info.setTimeInSamples ((int64_t) (beats * 60.0 / bpm * engine.sampleRate.load()));
         info.setIsPlaying (engine.playing.load());

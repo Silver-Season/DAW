@@ -185,6 +185,8 @@ void AudioEngine::applyProjectProperties()
         if (auto* prisma = dynamic_cast<PrismaProcessor*> (d->processor.get()))
             prisma->setTuneA4 (tuneA4.load());
     beatsPerBar = model->beatsPerBar();
+    sigNum = model->sigNum();
+    sigDen = model->sigDen();
     metronomeOn = model->metronome();
     metronomeOnlyRecording = model->metronomeOnlyRecording();
     metronomeWood = model->metronomeSound() == "wood";
