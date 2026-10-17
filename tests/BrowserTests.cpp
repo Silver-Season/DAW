@@ -428,6 +428,33 @@ void testDrops()
         model.undo.undo();
     }
 }
+
+void testToneAndPreview()
+{
+    std::printf ("[test] settings test tone and browser pre-listening reach the output\n");
+    Fixture f;
+    FakeDevice device;
+    f.engine.audioDeviceAboutToStart (&device);
+    f.engine.rebuildGraphIfNeeded();
+    Runner runner { f.engine };
+    check (runner.run (10) < 1e-6, "silent at rest");
+
+    f.engine.playTestTone();
+    const double tone = runner.run (20);
+    // 440 Hz sine at -20 dBFS: peak 0.1, RMS 0.0707
+    check (tone > 0.05 && tone < 0.09 && runner.peak < 0.11f, "the test tone is a quiet sine");
+    runner.run (120); // one second is about 94 blocks of 512
+    check (! f.engine.isTestToneSounding() && runner.run (5) < 1e-6, "the test tone ends after a second");
+
+    f.engine.setPreviewVolumeDb (-6.0f);
+    f.engine.previewFactoryPreset (2);
+    const double heard = runner.run (60);
+    check (heard > 0.002, "a pre-listened preset is audible");
+    f.engine.stopPreview();
+    runner.run (10); // the fade-out
+    check (runner.run (20) < 1e-5, "stopping the preview silences it");
+    check (runner.nonFinite == 0, "no bad samples");
+}
 } // namespace
 
 void tests::runBrowserTests()
@@ -436,4 +463,5 @@ void tests::runBrowserTests()
     testPlaceScan();
     testFavouritesAndRecents();
     testDrops();
+    testToneAndPreview();
 }

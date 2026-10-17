@@ -147,7 +147,7 @@ inline const juce::String kindRestore = utf8 ("до возврата");
 inline const juce::String empty = utf8 ("Версий пока нет. Сохраните проект: каждое сохранение и автосохранение попадает сюда.");
 inline juce::String labelPrompt (int number) { return utf8 ("Метка версии v") + juce::String (number) + utf8 (". Пустая строка снимает метку."); }
 inline juce::String restoreTitle (int number) { return utf8 ("Вернуться к версии v") + juce::String (number) + utf8 ("?"); }
-inline const juce::String restoreText = utf8 ("Текущее состояние сохранится отдельной версией, ничего не пропадёт.");
+inline const juce::String restoreText = utf8 ("Текущее состояние сохранится отдельной версией, ничего не пропадёт. Но история отмены (Cmd+Z) очистится: сам возврат отменить нельзя, только вернуться к версии «до возврата».");
 inline const juce::String restoreOk = utf8 ("Вернуться");
 inline const juce::String restored = utf8 ("Проект возвращён к выбранной версии");
 } // namespace versions
@@ -383,7 +383,6 @@ inline juce::String make (const juce::String& title, const juce::String& text) {
 inline const juce::String soon2 = utf8 ("Появится на этапе 2");
 inline const juce::String soon3 = utf8 ("Появится на этапе 3");
 inline const juce::String soon6 = utf8 ("Появится на этапе 6");
-inline const juce::String soonFiles = utf8 ("Появится вместе с файлами проекта");
 
 inline const juce::String logo = make (utf8 ("Призма"), utf8 ("Главное окно DAW. Цвета дорожек идут по спектру слева направо."));
 inline const juce::String tempo = make (utf8 ("Темп"), utf8 ("Ударов в минуту. Тяните мышью, колесо меняет, двойной щелчок вводит число. Shift: точнее."));
@@ -398,7 +397,7 @@ inline const juce::String ribbon = make (utf8 ("Лента «10 мин»"), utf8
 inline const juce::String morph = make (utf8 ("Морф A ↔ B"), utf8 ("Плавный переход между снимками ручек. ") + soon6);
 inline const juce::String tabSession = make (utf8 ("Session"), utf8 ("Сетка клипов для живой игры."));
 inline const juce::String tabArrangement = make (utf8 ("Arrangement"), soon3);
-inline const juce::String version = make (utf8 ("История версий"), soonFiles);
+inline const juce::String version = make (utf8 ("История версий"), utf8 ("Номер версии и время с последнего сохранения. Щелчок открывает список: метки, возврат к версии."));
 inline const juce::String cpu = make (utf8 ("Нагрузка процессора"), utf8 ("Щелчок открывает настройки звука."));
 inline const juce::String midiIn = make (utf8 ("MIDI-вход"), utf8 ("Мигает, когда приходят события с MIDI-устройств."));
 inline const juce::String keysIndicator = make (utf8 ("Клавиатура компьютера"), utf8 ("Когда горит, буквенные клавиши играют ноты. Включается клавишей M."));
