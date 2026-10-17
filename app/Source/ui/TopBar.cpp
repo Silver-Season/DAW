@@ -531,7 +531,8 @@ void TopBar::paint (juce::Graphics& g)
     ui::drawLogo (g, logoArea.toFloat());
     g.setColour (t.text);
     g.setFont (t.uiFont (15.0f, 600));
-    g.drawText (Strings::labelAppName, logoArea.withTrimmedLeft (30).withWidth (80), juce::Justification::centredLeft, false);
+    if (! compact)
+        g.drawText (Strings::labelAppName, logoArea.withTrimmedLeft (30).withWidth (80), juce::Justification::centredLeft, false);
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
         fillCell (g, area.toFloat(), t.panel);
@@ -631,7 +632,9 @@ void TopBar::resized()
 
     // Left to right
     logoArea = juce::Rectangle<int> (22, 22).withCentre ({ r.getX() + 11, cy });
-    r.removeFromLeft (108 + gap);
+    // Below this width the name of the program, and some padding, give way to the transport buttons of stage 3.
+    compact = getWidth() < 1340;
+    r.removeFromLeft ((compact ? 22 : 108) + gap);
 
     tempo.setBounds (juce::Rectangle<int> (80, h).withCentre ({ r.getX() + 40, cy }));
     r.removeFromLeft (80 + small);
@@ -664,14 +667,14 @@ void TopBar::resized()
         c.setBounds (juce::Rectangle<int> (w, height).withCentre ({ r.getRight() - w / 2, cy }));
         r.removeFromRight (w);
     };
-    takeRight (*cpu, 80, 20);
+    takeRight (*cpu, compact ? 56 : 80, 20);
     r.removeFromRight (gap);
-    takeRight (*keysLamp, 80, 20);
+    takeRight (*keysLamp, compact ? 70 : 80, 20);
     takeRight (*midiLamp, 52, 20);
     r.removeFromRight (gap);
-    takeRight (*version, 96);
+    takeRight (*version, compact ? 76 : 96);
     r.removeFromRight (gap);
-    takeRight (*tabs, 176, 30);
+    takeRight (*tabs, compact ? 150 : 176, 30);
     r.removeFromRight (gap);
 
     // Middle: the ribbon and the morph slider appear only if there is room for them.

@@ -66,6 +66,7 @@ private:
     std::unique_ptr<CpuMeter> cpu;
 
     juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea;
+    bool compact = false;
     void paintRibbon (juce::Graphics&);
     void updateRibbon();
     juce::String scaleText;
