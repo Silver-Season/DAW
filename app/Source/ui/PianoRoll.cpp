@@ -4,6 +4,9 @@
 #include "QuantiseWindow.h"
 
 #include "../engine/AudioEngine.h"
+#include "../model/ArrangementEdit.h"
+
+#include "daw/engine/Arrangement.h"
 
 #include <set>
 
@@ -173,14 +176,61 @@ void PianoRoll::tick()
             shape.loop = c.loopEnabled();
             beat = shape.positionAfter (juce::jmax (0.0, engine.getPositionBeats() - rt->playingStartBeat.load()));
         }
+        // The content of an arrangement clip plays while the song passes over its clip and the track is not in Session View.
+        const auto holder = clip().state.getParent();
+        if (scene < 0 && holder.hasType (ids::ACLIP))
+        {
+            const ArrangementClipRef a (holder);
+            const double song = engine.getSongPositionBeats();
+            auto* rt = engine.findRuntime (trackOfClip());
+            if (rt != nullptr && ! rt->inSession.load() && song >= a.start() && song < a.end())
+            {
+                auto shape = clip().toMidiClip();
+                shape.startOffset = daw::engine::normaliseOffset (shape, a.offset(), a.loop());
+                shape.loop = a.loop();
+                const double elapsed = song - a.start();
+                if (a.loop() || elapsed < shape.endBeat() - shape.playStart())
+                    beat = shape.positionAfter (elapsed);
+            }
+        }
     }
     grid->setCursorBeat (beat);
+    updatePlayingNotes (beat);
 
     if (loopFlashUntil != 0 && (juce::int32) (juce::Time::getMillisecondCounter() - loopFlashUntil) >= 0)
     {
         loopFlashUntil = 0;
         ruler->repaint();
     }
+}
+
+void PianoRoll::updatePlayingNotes (double beat)
+{
+    std::vector<juce::ValueTree> now;
+    if (beat >= 0.0 && hasClip())
+    {
+        const auto c = clip();
+        for (int i = 0; i < c.numNotes(); ++i)
+        {
+            const auto node = c.state.getChild (i);
+            const auto note = ClipRef::readNote (node);
+            if (note.start > beat)
+                break; // the notes are sorted by start
+            if (beat < note.start + note.length)
+                now.push_back (node);
+        }
+    }
+    if (now == playingNotes)
+        return;
+    // Only the notes that light up or go dark are repainted, and the keys of their pitches.
+    for (const auto* list : { &playingNotes, &now })
+        for (const auto& n : *list)
+            grid->repaint (noteBounds (n).translated (-grid->getX(), -grid->getY()).expanded (2));
+    playingNotes = std::move (now);
+    playingPitches.fill (false);
+    for (const auto& n : playingNotes)
+        playingPitches[(size_t) juce::jlimit (0, 127, ClipRef::readNote (n).pitch)] = true;
+    keys->repaint();
 }
 
 void PianoRoll::timerCallback()
@@ -533,6 +583,17 @@ void PianoRoll::transposeSelected (int semitones, bool scaleStep)
     clipedit::transposeNotes (c, nodes, semitones, scaleStep ? scale() : clipedit::Scale {}, &model.undo);
     if (nodes.size() == 1)
         audition (ClipRef::readNote (nodes.front()).pitch, ClipRef::readNote (nodes.front()).velocity);
+    grid->repaint();
+}
+
+void PianoRoll::scaleClipTime (double factor)
+{
+    const auto c = clip();
+    if (! c.isValid())
+        return;
+    model.undo.beginNewTransaction (factor > 1.0 ? Strings::undoDoubleTime : Strings::undoHalveTime);
+    arrangement::scaleClipTime (model, c, factor);
+    zoomToClip();
     grid->repaint();
 }
 

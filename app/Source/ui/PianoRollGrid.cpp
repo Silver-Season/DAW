@@ -143,8 +143,11 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
         const auto note = ClipRef::readNote (node);
         const bool sel = owner.isSelected (node);
         const auto r = b.toFloat().reduced (0.0f, 0.5f).withTrimmedRight (1.0f);
-        fillCell (g, r, base.withAlpha (0.4f + 0.6f * (float) note.velocity / 127.0f), 0.35f);
-        if (sel)
+        const bool lit = owner.isPlayingNote (node);
+        fillCell (g, r, lit ? base.brighter (0.45f) : base.withAlpha (0.4f + 0.6f * (float) note.velocity / 127.0f), 0.35f);
+        if (lit)
+            strokeCell (g, r.expanded (1.0f), t.play, 2.0f, 0.35f); // the note sounds right now
+        else if (sel)
             strokeCell (g, r, t.text, 1.5f, 0.35f);
         else
             strokeCell (g, r, base.darker (0.5f), 1.0f, 0.35f);

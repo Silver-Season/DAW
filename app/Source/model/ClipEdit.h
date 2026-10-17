@@ -67,6 +67,10 @@ Nodes splitNotes (const ClipRef&, const Nodes&, double atBeat, juce::UndoManager
 // One note per pitch, from the earliest start to the latest end of the selected notes of that pitch. Returns the joined notes.
 Nodes joinNotes (const ClipRef&, const Nodes&, juce::UndoManager*);
 
+// Stretches the clip in time by `factor` (2 = twice as long, plays half as fast; 0.5 = twice as fast): notes,
+// controllers, the loop brace, the start point and the length. Notes keep their nodes, so a selection survives.
+void scaleTime (const ClipRef&, double factor, juce::UndoManager*);
+
 // The end of the last note.
 double lastNoteEnd (const ClipRef&);
 // The clip length (loop end) rounded up to a whole number of bars so that the note ending at `endBeat` fits;

@@ -1,6 +1,7 @@
 #include "ArrangementEdit.h"
 
 #include "../Strings.h"
+#include "ClipEdit.h"
 
 #include "daw/engine/Arrangement.h"
 
@@ -613,4 +614,18 @@ MarkerRef nextMarker (const ProjectModel& model, double beat)
             return m;
     return {};
 }
+void scaleClipTime (ProjectModel& model, const ClipRef& content, double factor)
+{
+    clipedit::scaleTime (content, factor, &model.undo);
+    const auto holder = content.state.getParent();
+    if (! holder.hasType (ids::ACLIP))
+        return;
+    const ArrangementClipRef a (holder);
+    a.setOffset (a.offset() * factor, &model.undo);
+    a.setLength (a.length() * factor, &model.undo);
+    if (factor > 1.0)
+        if (const auto track = trackOf (model, a); track.isValid())
+            resolveOverlaps (model, track, a.id());
+}
+
 } // namespace arrangement

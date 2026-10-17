@@ -259,6 +259,11 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
                 g.setColour (t.accent.withAlpha (0.45f));
                 g.fillRect (0, y, getWidth(), vw.rowHeight);
             }
+            if (owner.playingPitches[(size_t) pitch]) // a note of the clip sounds on this key now
+            {
+                g.setColour (accent.withAlpha (0.75f));
+                g.fillRect (0, y, getWidth(), vw.rowHeight);
+            }
         }
         g.setColour (t.line);
         g.fillRect (0, y + vw.rowHeight - 1, getWidth(), 1);

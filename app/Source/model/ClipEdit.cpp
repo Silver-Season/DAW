@@ -123,6 +123,30 @@ void transposeNotes (const ClipRef& clip, const Nodes& nodes, int semitones, con
     }
 }
 
+void scaleTime (const ClipRef& clip, double factor, juce::UndoManager* um)
+{
+    if (! clip.isValid() || factor <= 0.0)
+        return;
+    // The length first: a doubled note must not stick out of the old end while the notes are rewritten.
+    clip.setLengthBeats (clip.lengthBeats() * factor, um);
+    clip.setLoopStart (clip.loopStart() * factor, um);
+    clip.setStartOffset (clip.startOffset() * factor, um);
+    for (const auto& n : allNodes (clip))
+    {
+        auto note = ClipRef::readNote (n);
+        note.start *= factor;
+        note.length = juce::jmax (1.0 / 128.0, note.length * factor);
+        clip.updateNote (n, note, um);
+    }
+    auto controllers = clip.controllers();
+    if (! controllers.empty())
+    {
+        for (auto& c : controllers)
+            c.time *= factor;
+        clip.setControllers (controllers, um);
+    }
+}
+
 Nodes splitNotes (const ClipRef& clip, const Nodes& nodes, double atBeat, juce::UndoManager* um)
 {
     Nodes created;

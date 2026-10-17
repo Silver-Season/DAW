@@ -37,6 +37,10 @@ double songLengthBeats (const ProjectModel&);
 // Makes room for the clip `winnerId` on `track`: every other clip that overlaps it is cut in two (the part after the
 // winner becomes a new clip with its own copy of the content), trimmed at the near edge (offset follows) or removed.
 void resolveOverlaps (ProjectModel&, const TrackRef& track, int64_t winnerId);
+
+// ×2 / ÷2 of the clip editor: stretches the content of a clip in time (clipedit::scaleTime). The content of an arrangement
+// clip also stretches its place on the timeline from the same start, as in Live; a longer clip covers what follows it.
+void scaleClipTime (ProjectModel&, const ClipRef& content, double factor);
 // The same for a bare time range: removes whatever lies in [from, to) on the track (Delete on a time selection).
 void clearRange (ProjectModel&, const TrackRef& track, double from, double to);
 
