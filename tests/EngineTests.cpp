@@ -154,6 +154,7 @@ int main()
     runEditorTests();
     runRecordingTests();
     runArrangementTests();
+    runArrangementUiTests();
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

@@ -106,6 +106,7 @@ if(DAW_BUILD_JUCE)
             tests/EditorTests.cpp
             tests/RecordingTests.cpp
             tests/ArrangementTests.cpp
+            tests/ArrangementUiTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
