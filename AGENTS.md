@@ -12,3 +12,4 @@ Rules:
 - Every task ships with tests (`tests/`, `core/tests/`); `ctest` must pass and the build must have no warnings.
 - Engine and audio-thread code must not allocate, lock, or use `juce::String` / `ValueTree`.
 - Update `docs/HANDOFF.md` when you stop, even mid-task: what is done, what is not, the next step.
+- `README.md` is in English and `README.ru.md` is its Russian version: when a stage adds a README section, update both. Describe features by what they do, not by comparison with other DAWs.

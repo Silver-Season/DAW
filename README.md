@@ -1,196 +1,212 @@
 # DAW
 
-Цифровая звуковая станция для macOS в духе Ableton Live, с собственными встроенными синтезаторами.
-Архитектура и дорожная карта: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**English** · [Русский](README.ru.md)
 
-![Session View, тема «Призма»](media/session-prism.png)
+A digital audio workstation for macOS with its own built-in synthesizers: a session grid for launching clips across tracks and scenes, a linear arrangement timeline, MIDI recording, audio tracks and Prisma, a built-in wavetable synth. Open source under AGPLv3.
+Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Окно, темы и меню (этап 1б)
+> The user interface is in Russian for now. All UI strings live in one file (`app/Source/Strings.h`), and an English translation with a language switch is planned as a separate stage (see [Roadmap](#roadmap)). The screenshots below show the Russian UI.
 
-- **Окно**: верхняя панель (темп, размер, play/stop, позиция, лампы MIDI и клавиатуры, CPU), браузер слева (см. ниже), Session View, нижняя панель с цепочкой устройств (8 ручек Prisma, перетаскивание устройств, вкл/выкл, свернуть), инфо-панель с подсказкой под курсором. Ширина браузера, высота нижней панели и видимость панелей запоминаются.
-- **Session View**: любое число дорожек и сцен, прокрутка с закреплёнными заголовками дорожек и сцен, правка названий на месте (двойной клик или Cmd+R), 16 цветов палитры, перетаскивание клипа (Alt копирует), двойной клик по пустому слоту создаёт клип, контекстные меню дорожки, клипа и сцены. Каждое действие это одна запись в истории, Cmd+Z отменяет его целиком.
-- **Темы**: Призма, Неон, Студия, Бумага. Токены лежат в JSON (`app/Resources/themes`), свои темы можно положить в `~/Music/Prisma DAW/User Library/Themes`. Шрифты Onest и JetBrains Mono (лицензия OFL, файлы в `app/Resources/fonts`). Тему можно выбрать в меню Вид → Тема или переменной `DAW_THEME`.
-- **Меню и горячие клавиши**: все команды меню Файл, Правка, Создать и Вид; «Экспорт…» неактивен до этапа 4.
+![Session View, Prism theme](media/session-prism.png)
 
-| Клавиши | Действие |
+## Window, themes and menus (stage 1b)
+
+- **Window**: top bar (tempo, time signature, play/stop, position, MIDI and computer-keyboard lamps, CPU), browser on the left (see below), Session View, a bottom panel with the device chain (8 Prisma knobs, drag to reorder devices, on/off, collapse), and an info bar with help for whatever is under the mouse. Browser width, bottom panel height and panel visibility are remembered.
+- **Session View**: any number of tracks and scenes, scrolling with pinned track and scene headers, in-place renaming (double-click or Cmd+R), a 16-color palette, clip dragging (Alt copies), double-click on an empty slot creates a clip, context menus for tracks, clips and scenes. Every action is one history entry, and Cmd+Z undoes it as a whole.
+- **Themes**: Prism, Neon, Studio, Paper. Tokens are JSON files (`app/Resources/themes`); your own themes go to `~/Music/Prisma DAW/User Library/Themes`. Fonts are Onest and JetBrains Mono (OFL license, files in `app/Resources/fonts`). Pick a theme in View → Theme or with the `DAW_THEME` environment variable.
+- **Menus and shortcuts**: every command of the File, Edit, Create and View menus; "Export…" stays disabled until stage 4.
+
+| Keys | Action |
 |---|---|
-| Пробел | play/stop |
-| Cmd+Z / Cmd+Shift+Z | отмена / повтор |
-| Cmd+X / C / V | вырезать / копировать / вставить клип или сцену |
-| Cmd+D | дублировать |
-| Delete | удалить выбранное |
-| Cmd+R | переименовать |
-| Cmd+T | новая MIDI-дорожка |
-| Cmd+I / Cmd+Shift+I | новая сцена / захват сцены |
-| Cmd+Shift+M | новый пустой клип |
-| Cmd+Alt+B / L / M | показать или скрыть браузер / нижнюю панель / микшер |
-| Cmd+= / Cmd+- | масштаб интерфейса |
-| Cmd+F | поиск в браузере |
-| M | игра с клавиатуры Mac |
+| Space | play/stop |
+| Cmd+Z / Cmd+Shift+Z | undo / redo |
+| Cmd+X / C / V | cut / copy / paste a clip or scene |
+| Cmd+D | duplicate |
+| Delete | delete selection |
+| Cmd+R | rename |
+| Cmd+T | new MIDI track |
+| Cmd+I / Cmd+Shift+I | new scene / capture scene |
+| Cmd+Shift+M | new empty clip |
+| Cmd+Alt+B / L / M | show or hide the browser / bottom panel / mixer |
+| Cmd+= / Cmd+- | UI zoom |
+| Cmd+F | search in the browser |
+| M | play from the Mac keyboard |
 
-Скриншоты Session View: [Призма](media/session-prism.png), [Неон](media/session-neon.png), [Студия](media/session-studio.png), [Бумага](media/session-paper.png).
+Session View screenshots: [Prism](media/session-prism.png), [Neon](media/session-neon.png), [Studio](media/session-studio.png), [Paper](media/session-paper.png).
 
-## Браузер, проекты и настройки (этап 1в)
+## Browser, projects and settings (stage 1c)
 
-![Браузер и перетаскивание пресета на новую дорожку](media/browser.png)
+![Browser and dragging a preset onto a new track](media/browser.png)
 
-- **Браузер**: слева «Недавние», цветные метки и восемь разделов (Инструменты, Пресеты, Эффекты, Плагины, Цепочки, Звуки, MIDI-файлы, Места). Поиск работает по мере набора, по-русски и по-латыни, без учёта регистра и «ё». Выбранный пресет Prisma проигрывается фразой в темпе проекта (кнопка с наушниками внизу, громкость −12 дБ). Правая кнопка: метка цветом, переименовать и удалить свой пресет, показать в Finder. Папки для «Мест» добавляются кнопкой в самом браузере, в настройках или перетаскиванием папки из Finder.
-- **Перетаскивание**: из браузера на пустое место Session View (новая дорожка), на дорожку (заменяет инструмент), на слот (MIDI-файл становится клипом), на устройство в нижней панели (пресет того же типа применяется), в промежуток цепочки (эффект). MIDI-файл можно перетащить и прямо из Finder. Каждый сброс это одна запись истории, Cmd+Z отменяет его целиком. Двойной щелчок или Enter ставит выбранное на выбранную дорожку.
-- **Свои пресеты и цепочки**: треугольник на устройстве открывает меню «Сохранить пресет…», пресеты Prisma, «Мои пресеты» и замену инструмента. Правая кнопка по заголовку дорожки: «Сохранить цепочку…». Файлы лежат в `~/Music/Prisma DAW/User Library` (`Presets/<устройство>/*.dawpreset`, `Chains/*.dawchain`) и сразу видны в браузере.
-- **Проект**: папка `<Имя> Project` с файлом `<Имя>.prisma` (текст XML, версия схемы, миграции при открытии старых), `Backup/autosave.prisma` и `History/`. Состояние плагинов пишется в файл; при открытии сторонние плагины создаются в фоне (на устройстве крутится индикатор), не найденный плагин остаётся устройством «missing» с сохранённым состоянием и оживает, когда плагин появится. Запись атомарная и идёт в фоновом потоке.
-- **Автосохранение и восстановление**: раз в 60 секунд, если есть изменения. Если приложение закрылось аварийно (метка `session.lock` осталась), при запуске предлагается «Восстановить» / «Открыть последнее сохранение» / «Не открывать».
-- **История версий**: кнопка `v14 · 5 мин` в верхней панели. Сохранения и версии с метками живут вечно, из автосохранений остаются последние 50 и по одной на каждый час. Метка по двойному щелчку, «Восстановить» сначала сохраняет текущее состояние как версию «до возврата».
-- **Новый проект** берётся из `User Library/Templates/Default.prisma` (Файл → Сохранить как шаблон по умолчанию), при первом запуске открывается демо.
-- **Настройки** (Cmd+,): Звук (драйвер, вход, выход, частота, буфер без перезапуска, задержка в мс, имена каналов, тестовый сигнал 440 Гц, нагрузка CPU), MIDI (по каждому входу «Игра на дорожках», подключение и отключение на лету), Внешний вид (темы карточками, масштаб, анимации), Библиотека (папка User Library, «Места», повторное сканирование плагинов).
+- **Browser**: "Recent", color labels and eight sections on the left (Instruments, Presets, Effects, Plugins, Chains, Sounds, MIDI files, Places). Search filters as you type, in Cyrillic and Latin, ignoring case and "ё". A selected Prisma preset plays a phrase at the project tempo (headphones button at the bottom, −12 dB). Right-click: color label, rename and delete your own preset, show in Finder. Folders for "Places" are added with a button in the browser itself, in Settings, or by dropping a folder from Finder.
+- **Drag and drop**: from the browser onto empty Session View space (new track), onto a track (replaces the instrument), onto a slot (a MIDI file becomes a clip), onto a device in the bottom panel (a preset of the same type is applied), or into a gap in the chain (an effect). MIDI files can be dropped straight from Finder too. Every drop is one history entry, and Cmd+Z undoes it as a whole. Double-click or Enter puts the selected item on the selected track.
+- **Your own presets and chains**: the triangle on a device opens a menu with "Save preset…", Prisma presets, "My presets" and instrument replacement. Right-click on a track header: "Save chain…". Files live in `~/Music/Prisma DAW/User Library` (`Presets/<device>/*.dawpreset`, `Chains/*.dawchain`) and show up in the browser immediately.
+- **Project**: a `<Name> Project` folder with `<Name>.prisma` (text XML with a schema version, migrated when an older file is opened), `Backup/autosave.prisma` and `History/`. Plugin state is written to the file; on open, third-party plugins are created in the background (a spinner turns on the device), and a plugin that cannot be found stays as a "missing" device with its saved state and comes back to life when the plugin appears. Saving is atomic and runs on a background thread.
+- **Autosave and recovery**: every 60 seconds if something changed. If the app quit unexpectedly (the `session.lock` marker is left behind), the next launch offers "Recover" / "Open last save" / "Don't open".
+- **Version history**: the `v14 · 5 min` button in the top bar. Saves and labelled versions are kept forever; of the autosaves, the last 50 and one per hour are kept. Double-click to label a version; "Restore" first saves the current state as a "before restore" version.
+- **New project** comes from `User Library/Templates/Default.prisma` (File → Save as default template); the first launch opens a demo.
+- **Settings** (Cmd+,): Audio (driver, input, output, sample rate, buffer size without restart, latency in ms, channel names, 440 Hz test tone, CPU load), MIDI ("Play on tracks" per input, connect and disconnect on the fly), Appearance (theme cards, zoom, animations), Library (User Library folder, "Places", plugin rescan).
 
-![Настройки, вкладка «Звук»](media/settings-sound.png)
+![Settings, Audio tab](media/settings-sound.png)
 
-| Клавиши | Действие |
+| Keys | Action |
 |---|---|
-| Cmd+N / Cmd+O | новый / открыть проект |
-| Cmd+S / Cmd+Shift+S | сохранить / сохранить как |
-| Cmd+, | настройки |
-| Enter в поиске | поставить выбранное на дорожку |
-| Стрелки в поиске | перемещение по списку (и предпрослушивание) |
+| Cmd+N / Cmd+O | new / open project |
+| Cmd+S / Cmd+Shift+S | save / save as |
+| Cmd+, | settings |
+| Enter in search | put the selected item on the track |
+| Arrows in search | move through the list (with preview) |
 
-## Редактор клипа и лады (этап 2, часть А)
+## Clip editor and scales (stage 2, part A)
 
-![Piano roll, тема «Призма»](media/piano-roll-prism.png)
+![Piano roll, Prism theme](media/piano-roll-prism.png)
 
-- **Открыть клип**: двойной щелчок по клипу в Session View (по пустому слоту сначала создаёт клип на такт). Нижняя панель превращается в piano roll, Shift+Tab возвращает цепочку устройств, Tab переключает Session и Arrangement (до этапа 3 Arrangement это заглушка с линейкой). Высота редактора запоминается отдельно от высоты цепочки, двойной щелчок по границе панели растягивает её до 60 % окна и обратно.
-- **Ноты**: двойной щелчок рисует ноту или удаляет её, рамка выделяет, перетаскивание двигает (Cmd отключает прилипание, Alt копирует), правый край ноты меняет длину, карандаш (B) рисует и тянет длину. Нота длиннее клипа удлиняет петлю клипа до целого такта, инфо-панель сообщает об этом. Любой жест это одна запись истории. Нота звучит на дорожке при рисовании, выделении и переносе.
-- **Velocity**: столбики под сеткой, тянуть вверх и вниз, Alt+тянуть рисует рампу по нескольким нотам. Прозрачность ноты следует за velocity.
-- **Петля клипа**: скобка на линейке (края, середина, двойной щелчок включает и выключает), треугольник это точка старта. Выключенная петля играет клип один раз с точки старта. Cmd+L ставит петлю вокруг выделенных нот.
-- **Сетка и вид**: адаптивная сетка (шаг не меньше 12 пикселей) или 1/4 … 1/64 с триолями, Cmd+1 мельче, Cmd+2 крупнее, Cmd+3 триоли, Cmd+4 прилипание. Cmd+колесо или Cmd+= / Cmd+- масштаб, Alt+колесо высота строк. Fold показывает только строки с нотами, «Только лад» ограничивает новые ноты и перетаскивание ладом.
-- **Квантизация**: Cmd+U по выделенным нотам (если ничего не выделено, по всем) с настройками проекта, Cmd+Shift+U открывает окно: сетка, сила 0–100 %, свинг 0–75 %, «Квантовать концы нот».
-- **Лады**: кнопка «Лад» в верхней панели задаёт лад проекта (12 тоник, 13 ладов), в редакторе строки вне лада затемнены, тоника подсвечена, а у клипа может быть свой лад. Cmd+Shift+↑/↓ двигает ноты на ступень лада, кнопки −12 −1 +1 +12 в панели клипа транспонируют выделенные ноты.
-- **Свойства проекта** (Cmd+Alt+P): темп, размер, лад, строй A4 (415–466 Гц, влияет на встроенные синтезаторы), автор, заметки. Транспонирование дорожки (−48…+48) стоит в карточке дорожки внизу.
-- **Клавиатура**: Z/X и C/V работают видимо: инфо-панель показывает «Октава: C3–E4» и «Сила: 100», лампа «КЛАВ C3» показывает октаву, а при выключенной клавиатуре Z или X подсказывают «нажмите M». Cmd+Alt+K выдвигает экранную клавиатуру (по умолчанию скрыта). Если у проекта есть лад, клавиши ряда A S D F G H J K L ; играют его ступени, чёрный ряд молчит (переключатель «В ладу» в выдвижной клавиатуре).
-- **Перетаскивание папки** из Finder на браузер добавляет её в «Места» (папка подключается, не копируется), файл игнорируется.
+- **Open a clip**: double-click a clip in Session View (on an empty slot this first creates a one-bar clip). The bottom panel turns into a piano roll; Shift+Tab brings back the device chain, Tab switches between Session and Arrangement. The editor height is remembered separately from the chain height; double-clicking the panel border stretches it to 60 % of the window and back.
+- **Notes**: double-click draws or deletes a note, a marquee selects, dragging moves (Cmd disables snapping, Alt copies), the right edge of a note changes its length, the pencil (B) draws and drags out the length. A note longer than the clip extends the clip loop to a whole bar, and the info bar says so. Every gesture is one history entry. Notes sound on the track while drawing, selecting and moving.
+- **Velocity**: bars under the grid, drag up and down; Alt+drag draws a ramp across several notes. Note opacity follows velocity.
+- **Clip loop**: a bracket on the ruler (edges, middle, double-click toggles it); the triangle is the start point. With the loop off the clip plays once from the start point. Cmd+L puts the loop around the selected notes.
+- **Grid and view**: adaptive grid (steps of at least 12 pixels) or 1/4 … 1/64 with triplets; Cmd+1 finer, Cmd+2 coarser, Cmd+3 triplets, Cmd+4 snapping. Cmd+wheel or Cmd+= / Cmd+- zooms, Alt+wheel changes row height. Fold shows only rows with notes; "Scale only" restricts new notes and dragging to the scale.
+- **Quantize**: Cmd+U on the selected notes (all notes if nothing is selected) with the project settings; Cmd+Shift+U opens a dialog: grid, strength 0–100 %, swing 0–75 %, "Quantize note ends".
+- **Scales**: the "Scale" button in the top bar sets the project scale (12 roots, 13 modes); out-of-scale rows are dimmed in the editor, the root is highlighted, and a clip can have its own scale. Cmd+Shift+↑/↓ moves notes by a scale degree; the −12 −1 +1 +12 buttons in the clip panel transpose the selected notes.
+- **Project properties** (Cmd+Alt+P): tempo, time signature, scale, A4 tuning (415–466 Hz, affects the built-in synths), author, notes. Track transpose (−48…+48) is on the track card at the bottom.
+- **Computer keyboard**: Z/X and C/V give visible feedback: the info bar shows "Octave: C3–E4" and "Velocity: 100", the keyboard lamp shows the octave, and when the keyboard is off, Z or X hints "press M". Cmd+Alt+K slides out the on-screen keyboard (hidden by default). If the project has a scale, the A S D F G H J K L ; row plays its degrees and the black-key row is silent (the "In scale" switch on the slide-out keyboard).
+- **Dropping a folder** from Finder onto the browser adds it to "Places" (the folder is linked, not copied); files are ignored.
 
-| Клавиши | Действие |
+| Keys | Action |
 |---|---|
-| Tab / Shift+Tab | Session и Arrangement / редактор клипа и цепочка |
-| Cmd+U / Cmd+Shift+U | квантизация / окно квантизации |
-| Cmd+A / Cmd+Shift+A | выделить все / инвертировать |
-| Cmd+C / X / V / D | копировать, вырезать, вставить, дублировать ноты |
-| Cmd+E / Cmd+J | разрезать ноту у курсора / склеить |
-| ← → / Shift+← → | сдвиг ноты / её длины на шаг сетки |
-| ↑ ↓ / Shift+↑ ↓ | сдвиг на полутон / октаву, Cmd+Shift+↑ ↓ на ступень лада |
-| Cmd+L | петля вокруг выделения |
-| B | карандаш |
-| Cmd+Alt+P / Cmd+Alt+K | свойства проекта / экранная клавиатура |
+| Tab / Shift+Tab | Session and Arrangement / clip editor and chain |
+| Cmd+U / Cmd+Shift+U | quantize / quantize dialog |
+| Cmd+A / Cmd+Shift+A | select all / invert selection |
+| Cmd+C / X / V / D | copy, cut, paste, duplicate notes |
+| Cmd+E / Cmd+J | split a note at the cursor / join |
+| ← → / Shift+← → | move a note / change its length by one grid step |
+| ↑ ↓ / Shift+↑ ↓ | move by a semitone / an octave; Cmd+Shift+↑ ↓ by a scale degree |
+| Cmd+L | loop around the selection |
+| B | pencil |
+| Cmd+Alt+P / Cmd+Alt+K | project properties / on-screen keyboard |
 
-![Piano roll, тема «Неон»](media/piano-roll-neon.png)
-![Piano roll, тема «Студия»](media/piano-roll-studio.png)
-![Piano roll, тема «Бумага»](media/piano-roll-paper.png)
+![Piano roll, Neon theme](media/piano-roll-neon.png)
+![Piano roll, Studio theme](media/piano-roll-studio.png)
+![Piano roll, Paper theme](media/piano-roll-paper.png)
 
-## Запись, метроном и захват (этап 2, часть Б)
+## Recording, metronome and capture (stage 2, part B)
 
-![Запись в слот, тема «Призма»](media/record-prism.png)
+![Recording into a slot, Prism theme](media/record-prism.png)
 
-- **Метроном**: кнопка с маятником в верхней панели включает клик. Правая кнопка: громкость (0 … −24 дБ, без звука), «Только во время записи», отсчёт (нет, 1, 2 или 4 такта) и звук клика (классический или дерево). Сильная доля звучит выше, громкость мастера на клик не влияет.
-- **Отсчёт**: во время отсчёта позиция показывает обратный счёт (`−1. 3`), кнопка записи мигает, нота, взятая чуть раньше начала записи, всё равно попадает в начало клипа.
-- **Запись в слот**: у взведённой MIDI-дорожки (или у выбранной, если ни одна не взведена) в пустых слотах красные кружки. Щелчок по кружку начинает запись на ближайшей границе запуска, щелчок по записываемому слоту заканчивает её на ближайшем такте, и клип сразу играет по кругу. Пока идёт запись, слот красный, по нему растёт полоска длины и видны сыгранные ноты. Cmd+Z удаляет записанный клип целиком.
-- **Кнопка записи** (красный круг в верхней панели): запись в выбранную сцену на всех взведённых дорожках, повторный щелчок останавливает. Правая кнопка: фиксированная длина (1–16 тактов, запись сама закончится) и квантизация записи (1/4 … 1/32 с триолями).
-- **OVR** (overdub): запись на играющий клип добавляет ноты слоями поверх старых. Каждый круг это отдельная запись истории.
-- **Вечная запись и «Захватить»**: лента «10 мин» показывает всё, что сыграно за последние 10 минут, даже без записи и при остановленном транспорте (штрих цвета дорожки, высота по силе нажатия). «Захватить» или Cmd+Shift+C превращает последнюю фразу в клип на выбранной дорожке: длина округляется до тактов, а если проект пустой и транспорт стоял, темп проекта берётся из сыгранной фразы. Инфо-панель пишет, что получилось: «Захвачено 8 тактов, 112 нот → Arp, сцена 3».
-- **Контроллеры**: колесо модуляции, питч-бенд и сустейн записываются вместе с нотами. В piano roll рядом с velocity есть полоса контроллера (модуляция, питч-бенд, сустейн), значения рисуются мышью, весь мазок отменяется одним Cmd+Z.
-- **Источник записи**: в карточке дорожки переключатель «MIDI | Звук». Запись звука появится на этапе 5.
-- **Настройки → Запись**: автоматическая компенсация задержки (ноты сдвигаются на задержку выхода и полбуфера, как их слышит игрок) и ручная поправка в миллисекундах.
+- **Metronome**: the pendulum button in the top bar turns the click on. Right-click: volume (0 … −24 dB, silent), "Only while recording", count-in (none, 1, 2 or 4 bars) and click sound (classic or wood). The downbeat is higher, and the master volume does not affect the click.
+- **Count-in**: the position display counts down (`−1. 3`), the record button blinks, and a note played slightly before recording starts still lands at the start of the clip.
+- **Recording into a slot**: an armed MIDI track (or the selected one if none is armed) shows red circles in its empty slots. Clicking a circle starts recording at the next launch boundary, clicking the recording slot stops at the next bar, and the clip immediately plays in a loop. While recording, the slot is red, a length bar grows and the played notes are visible. Cmd+Z removes the recorded clip as a whole.
+- **Record button** (red circle in the top bar): records into the selected scene on all armed tracks; a second click stops. Right-click: fixed length (1–16 bars, recording stops by itself) and record quantization (1/4 … 1/32 with triplets).
+- **OVR** (overdub): recording onto a playing clip layers new notes over the old ones. Every loop pass is a separate history entry.
+- **Always-on recording and Capture**: the "10 min" strip shows everything played in the last 10 minutes, even without recording and with the transport stopped (a stroke in the track color, height by velocity). "Capture" («Захватить») or Cmd+Shift+C turns the last phrase into a clip on the selected track: the length is rounded to bars, and if the project is empty and the transport was stopped, the project tempo is taken from the played phrase. The info bar says what happened: "Captured 8 bars, 112 notes → Arp, scene 3".
+- **Controllers**: mod wheel, pitch bend and sustain are recorded together with notes. The piano roll has a controller lane next to velocity (mod wheel, pitch bend, sustain); values are drawn with the mouse, and a whole stroke is undone with one Cmd+Z.
+- **Record source**: the track card has a "MIDI | Audio" switch. Audio recording arrives in stage 5.
+- **Settings → Recording**: automatic latency compensation (notes are shifted by the output latency plus half a buffer, the way the player hears them) and a manual offset in milliseconds.
 
-| Клавиши | Действие |
+| Keys | Action |
 |---|---|
-| Cmd+Shift+C | захватить последнюю фразу |
-| Правая кнопка по метроному / записи | настройки метронома и отсчёта / длина и квантизация записи |
+| Cmd+Shift+C | capture the last phrase |
+| Right-click on metronome / record | metronome and count-in settings / record length and quantization |
 
-Запись в темах [Неон](media/record-neon.png), [Студия](media/record-studio.png), [Бумага](media/record-paper.png), отсчёт: [count-in.png](media/count-in.png).
+Recording in the [Neon](media/record-neon.png), [Studio](media/record-studio.png) and [Paper](media/record-paper.png) themes; count-in: [count-in.png](media/count-in.png).
 
-## Аранжировка (этап 3, часть интерфейса)
+## Arrangement (stage 3, UI part)
 
-Вкладка Arrangement показывает песню по времени: заголовки дорожек, полоса маркеров, скобка петли, линейка тактов, клипы, мини-карта и луч воспроизведения. Клипы двигаются, копируются (Alt), растягиваются за края, режутся (Cmd+E), склеиваются (Cmd+J), дублируются (Cmd+D); двойной щелчок по пустому месту рисует клип в такт. Клип из Session можно перетащить на вкладку Arrangement и дальше на дорожку. Оранжевая кнопка «Вернуть аранжировку» возвращает дорожки, которые играли сессию, к аранжировке.
+The Arrangement tab shows the song over time: track headers, a marker lane, the loop bracket, a bar ruler, clips, a minimap and the playhead. Clips can be moved, copied (Alt), resized by their edges, split (Cmd+E), joined (Cmd+J) and duplicated (Cmd+D); double-clicking empty space draws a one-bar clip. A Session clip can be dragged onto the Arrangement tab and then onto a track. The orange "Back to arrangement" («Вернуть аранжировку») button returns tracks that were playing Session clips to the arrangement.
 
-![Arrangement, тема prism](media/stage3-arrangement-prism.png)
+![Arrangement, Prism theme](media/stage3-arrangement-prism.png)
 
-### Запись на шкалу (этап 3, часть 2)
+### Recording to the timeline (stage 3, part 2)
 
-- **F9** или кнопка ● при открытом Arrangement (и при играющем транспорте) пишет на шкалу: на взведённых MIDI-дорожках растёт клип, отсчёт и метроном те же, что в этапе 2Б. Запись в слот сессии остаётся: ● в Session View при остановленном транспорте, кнопки ● в слотах и пункт меню «Записать в слот сессии» работают как раньше; пункт «Записать на шкалу» и F9 всегда пишут на шкалу.
-- **Петля = дубли.** С включённой петлёй каждый круг становится дублем: новый клип поверх старого, прежние круги лежат внутри клипа. Правая кнопка по клипу, «Дубли», выбирает дубль (одно действие отмены).
-- **OVR** добавляет ноты в клип под курсором вместо замены.
-- **IN / OUT** рядом с кнопкой петли: пока включены, запись идёт только внутри скобки петли.
-- **Session → Arrangement.** Запуски и остановки клипов Session во время записи на шкалу превращаются в клипы аранжировки с верной фазой, всё одной транзакцией отмены.
-- **Забрать дорожку…** в окне версий: выбранная дорожка старой версии (устройства, клипы Session и аранжировки) добавляется в проект как «Имя (vN)» с новыми id, одной транзакцией. Если у версии больше сцен, проекту добавляются сцены.
+- **F9** or the ● button with Arrangement open (and the transport playing) records to the timeline: a clip grows on armed MIDI tracks, with the same count-in and metronome as in stage 2B. Recording into Session slots still works: ● in Session View with the transport stopped, the ● buttons in slots and the "Record into session slot" menu item behave as before; the "Record to timeline" item and F9 always record to the timeline.
+- **Loop = takes.** With the loop on, every pass becomes a take: a new clip on top of the old one, with the earlier passes kept inside the clip. Right-click a clip → "Takes" picks a take (one undo step).
+- **OVR** adds notes to the clip under the playhead instead of replacing it.
+- **IN / OUT** next to the loop button: while on, recording happens only inside the loop bracket (punch-in / punch-out).
+- **Session → Arrangement.** Launching and stopping Session clips while recording to the timeline turns into arrangement clips with the correct phase, all in one undo transaction.
+- **Take a track from a version…** in the versions window: the chosen track of an older version (devices, Session and arrangement clips) is added to the project as "Name (vN)" with new ids, in one transaction. If the version has more scenes, scenes are added to the project.
 
-![Запись на шкалу, меню дублей, тема prism](media/stage3-recording-prism.png)
+![Recording to the timeline, takes menu, Prism theme](media/stage3-recording-prism.png)
 
-## Аудиодорожки (этап 5, часть 1: воспроизведение)
+## Audio tracks (stage 5, part 1: playback)
 
-- **Аудиодорожка**: «Создать → Новая аудиодорожка» (Cmd+Shift+T) или правая кнопка по заголовку дорожки. Громкость, панорама, mute и solo те же, что у MIDI.
-- **Звуки из браузера и Finder** (WAV, AIFF, FLAC, MP3, M4A, CAF): на пустое место — новая аудиодорожка, несколько файлов ложатся по сценам одной дорожки (с Cmd каждый на свою дорожку); на шкале — друг под другом на новых дорожках (с Cmd один за другим). На MIDI-дорожку звук не кладётся.
-- **Файлы проекта.** Сэмплы копируются в папку проекта `Samples/Imported` (выключается в настройках, вкладка «Библиотека»), одинаковые файлы не дублируются. Пропавший файл показан серым клипом «Файл не найден»; «Файл → Найти потерянные файлы…» ищет их в выбранной папке.
-- **Воспроизведение** в Session и Arrangement: клип играет по темпу проекта (растяжение без смены высоты придёт на этапе 7), частота файла пересчитывается под карту. Темп файла берётся из метаданных или имени («Loop 124 BPM»). Петля, старт и фейды без щелчков; если диск не успевает, в верхней панели на миг появляется значок дискеты.
-- **Редактор аудиоклипа** по двойному щелчку: волна с линейкой, маркер старта и скобка петли (прилипание к 1/16, Shift/Alt/Cmd выключают), громкость, транспонирование и подстройка (меняют высоту и скорость, как Re-Pitch), реверс, фейды.
-- **Предпрослушивание**: выбранный звук в браузере сразу играет, если включена кнопка «Предпрослушивание».
+- **Audio track**: Create → New audio track (Cmd+Shift+T) or right-click a track header. Volume, pan, mute and solo work the same as on MIDI tracks.
+- **Sounds from the browser and Finder** (WAV, AIFF, FLAC, MP3, M4A, CAF): dropped on empty space they make a new audio track, and several files go into the scenes of one track (with Cmd, each on its own track); on the timeline they stack on new tracks (with Cmd, one after another). Audio cannot be dropped on a MIDI track.
+- **Project files.** Samples are copied into the project folder `Samples/Imported` (can be turned off in Settings, Library tab), and identical files are not duplicated. A missing file shows as a grey "File not found" clip; File → Find missing files… searches a chosen folder.
+- **Playback** in Session and Arrangement: a clip plays at the project tempo (time-stretching without pitch change comes in stage 7), and the file's sample rate is converted to the device rate. The file tempo is read from metadata or the file name ("Loop 124 BPM"). Loop, start and fades are click-free; if the disk falls behind, a floppy-disk icon flashes in the top bar.
+- **Audio clip editor** on double-click: waveform with a ruler, start marker and loop bracket (snap to 1/16; Shift/Alt/Cmd disable it), gain, transpose and detune (change pitch and speed together, re-pitch style), reverse, fades.
+- **Preview**: the selected sound in the browser plays immediately when the "Preview" button is on.
 
-![Аудиоклипы в Session, тема prism](media/stage5-session-audio-prism.png)
+![Audio clips in Session, Prism theme](media/stage5-session-audio-prism.png)
 
-![Аудиоклип на шкале и редактор аудиоклипа, тема prism](media/stage5-arrangement-audio-prism.png)
+![Audio clip on the timeline and the audio clip editor, Prism theme](media/stage5-arrangement-audio-prism.png)
 
-## Что уже есть (фаза 0)
+## The foundation (phase 0)
 
-- **Приложение DAW**: Session View на 8 треков × 8 сцен, квантованный запуск клипов и сцен, остановка трека и всего сразу, транспорт с темпом, микшер (громкость, панорама, mute/solo/arm, индикаторы уровня), мастер-канал, экранная клавиатура с кнопками Oct −/+, игра с клавиатуры Mac как в Ableton (A W S E D F T G Y H U J K O L P ; — ноты, Z/X — октава, C/V — сила нажатия), пробел = play/stop.
-- **Хостинг плагинов**: сканирование и загрузка AU/VST3-инструментов любых производителей на трек, окно редактора плагина. Плагины получают темп и позицию.
-- **MIDI**: все подключённые MIDI-клавиатуры и контроллеры играют трек с включённым arm (колесо модуляции, питч-бенд, сустейн, aftertouch).
-- **Prisma**, встроенный wavetable-синт (тоже собирается как AU / VST3 / Standalone):
-  - 2 wavetable-осциллятора, 6 встроенных таблиц с морфингом, без алиасинга (mip-уровни по октавам)
-  - унисон до 16 голосов: detune, stereo spread, blend
-  - суб-осциллятор, шум
-  - SVF-фильтр: LP/HP 12 и 24 дБ, BP, Notch, drive, key tracking
-  - 3 ADSR-огибающие, 2 LFO (6 форм, синхронизация с темпом, retrigger)
-  - мод-матрица на 8 слотов (10 источников, 15 назначений)
-  - 32 голоса полифонии, моно/легато, глайд, питч-бенд
-  - 7 заводских пресетов: Init, Supersaw Lead, Reese Bass, Wobble Bass, Glass Pad, Pluck, Vox Sweep
+- **DAW app**: Session View with 8 tracks × 8 scenes, quantized clip and scene launching, stopping a track or everything at once, transport with tempo, mixer (volume, pan, mute/solo/arm, level meters), master channel, on-screen keyboard with Oct −/+ buttons, playing from the Mac keyboard (A W S E D F T G Y H U J K O L P ; are notes, Z/X octave, C/V velocity), Space = play/stop.
+- **Plugin hosting**: scanning and loading AU/VST3 instruments from any vendor onto a track, plugin editor window. Plugins receive tempo and position.
+- **MIDI**: every connected MIDI keyboard and controller plays the armed track (mod wheel, pitch bend, sustain, aftertouch).
+- **Prisma**, the built-in wavetable synth (also built as AU / VST3 / Standalone):
+  - 2 wavetable oscillators, 6 built-in tables with morphing, alias-free (per-octave mip levels)
+  - unison up to 16 voices: detune, stereo spread, blend
+  - sub oscillator, noise
+  - SVF filter: LP/HP 12 and 24 dB, BP, Notch, drive, key tracking
+  - 3 ADSR envelopes, 2 LFOs (6 shapes, tempo sync, retrigger)
+  - 8-slot mod matrix (10 sources, 15 destinations)
+  - 32-voice polyphony, mono/legato, glide, pitch bend
+  - 7 factory presets: Init, Supersaw Lead, Reese Bass, Wobble Bass, Glass Pad, Pluck, Vox Sweep
 
 ![Prisma](media/prisma.png)
 
-Демо, отрендеренное движком без участия человека: [media/prisma_demo.mp3](media/prisma_demo.mp3).
+A demo rendered by the engine with no human involved: [media/prisma_demo.mp3](media/prisma_demo.mp3).
 
-## Скачать для Mac
+## Roadmap
 
-Свежая сборка из ветки main: [DAW-macOS.dmg](https://github.com/Silver-Season/DAW/releases/download/nightly/DAW-macOS.dmg). Внутри DAW.app, плагин Prisma (AU, VST3, отдельное приложение) и инструкция по установке `INSTALL-ru.txt`. Программа пока не подписана сертификатом Apple, поэтому при первом запуске macOS попросит разрешение: Системные настройки → Конфиденциальность и безопасность → «Всё равно открыть».
+Stages are specified in [docs/spec](docs/spec/README.md); the current step is always in [docs/HANDOFF.md](docs/HANDOFF.md).
 
-## Сборка на Mac
+- **Stage 5, part 2**: audio recording (inputs, latency compensation, takes and comping, always-on audio capture).
+- **Stage 4**: export (offline render, WAV / AIFF / FLAC / MP3, stems, normalization).
+- **Stage 6**: effects, sends and returns, groups, plugin delay compensation, automation.
+- **Stage 7**: warp (time-stretching), audio editor, tempo track.
+- **Stages 8–10**: sampler and drum rack with a factory library; Prisma brought to release level; Alloy, a flagship multi-engine synth.
+- **English UI**: an English translation of the interface with a language switch in Settings, plus English screenshots in `media/`. A separate, later stage; all UI strings are already collected in `app/Source/Strings.h` for this.
+- Later ideas: stem separation, a DJ mode, vocal tools, mastering, an AI assistant, GPU rendering of the UI for large projects.
 
-Нужны Xcode (или Command Line Tools) и CMake:
+## Download for Mac
+
+Latest build from the main branch: [DAW-macOS.dmg](https://github.com/Silver-Season/DAW/releases/download/nightly/DAW-macOS.dmg). It contains DAW.app, the Prisma plugin (AU, VST3, standalone app) and installation notes `INSTALL-ru.txt` (in Russian). The app is not yet signed with an Apple certificate, so on first launch macOS asks for permission: System Settings → Privacy & Security → "Open Anyway".
+
+## Building on Mac
+
+You need Xcode (or the Command Line Tools) and CMake:
 
 ```bash
 brew install cmake ninja
 ./scripts/build-mac.sh
 ```
 
-Скрипт скачает JUCE 8, соберёт universal binary (Apple Silicon + Intel), прогонит тесты и установит плагин Prisma в `~/Library/Audio/Plug-Ins`. Приложение: `build/app/DAW_artefacts/Release/DAW.app`.
+The script downloads JUCE 8, builds a universal binary (Apple Silicon + Intel), runs the tests and installs the Prisma plugin into `~/Library/Audio/Plug-Ins`. The app ends up in `build/app/DAW_artefacts/Release/DAW.app`.
 
-Проект для Xcode: `cmake -S . -B build-xcode -G Xcode`.
+Xcode project: `cmake -S . -B build-xcode -G Xcode`.
 
-## Структура
+## Layout
 
-| Папка | Что внутри |
+| Folder | Contents |
 |---|---|
-| `core/` | Звук и логика времени на чистом C++20 без JUCE: wavetable, фильтры, огибающие, LFO, движок Prisma, клипы, транспорт |
-| `plugins/prisma/` | Prisma как плагин JUCE (процессор и интерфейс) |
-| `app/` | Приложение DAW: аудио-движок, хостинг плагинов, интерфейс, браузер, файлы проекта, настройки |
-| `tests/` | Сквозные тесты JUCE-слоя на виртуальном аудиоустройстве |
-| `tools/` | `prisma_render`: офлайн-рендер демо и замер производительности |
+| `core/` | Sound and timing logic in plain C++20 without JUCE: wavetables, filters, envelopes, LFOs, the Prisma engine, clips, transport |
+| `plugins/prisma/` | Prisma as a JUCE plugin (processor and UI) |
+| `app/` | The DAW app: audio engine, plugin hosting, UI, browser, project files, settings |
+| `tests/` | End-to-end tests of the JUCE layer on a virtual audio device |
+| `tools/` | `prisma_render`: offline demo render and performance measurement |
 
-## Тесты
+## Tests
 
 ```bash
 ctest --test-dir build --output-on-failure
 ```
 
-- `daw_core_tests`: 287 проверок (в том числе запись нот и контроллеров, захват фразы и угадывание темпа, запуск клипа с середины такта, прореживание версий, лады, квантизация со свингом, строй A4, петля и точка старта клипа) (отсутствие алиасинга в таблицах, высота тона, АЧХ фильтров, огибающие, голоса, пресеты, запуск клипов и отсутствие зависших нот).
-- `daw_engine_tests`: 1022 проверки (метроном и отсчёт с точностью до сэмпла, запись в слот, overdub, фиксированная длина, компенсация задержки, Cmd+Z после записи, захват, жест из 50 шагов это одна запись истории, транспонирование живых и клиповых нот, клавиши Z/X/C/V и их сообщения, папка из Finder в «Места», Prisma как AudioProcessor, запуск сцен, solo/mute, живой MIDI, файл проекта с побитово тем же звуком, схема и миграции, потерянный плагин, восстановление после сбоя, автосохранение и версии, поиск в браузере, все виды сброса из браузера, асинхронное оживление стороннего плагина, тестовый сигнал и предпрослушивание).
+- `daw_core_tests`: 287 checks (among them recording notes and controllers, phrase capture and tempo detection, launching a clip mid-bar, version thinning, scales, quantize with swing, A4 tuning, clip loop and start point, alias-free wavetables, pitch, filter frequency response, envelopes, voices, presets, clip launching and no stuck notes).
+- `daw_engine_tests`: 1022 checks (sample-accurate metronome and count-in, slot recording, overdub, fixed length, latency compensation, Cmd+Z after recording, capture, a 50-step gesture as one history entry, transposing live and clip notes, the Z/X/C/V keys and their messages, a Finder folder into "Places", Prisma as an AudioProcessor, scene launching, solo/mute, live MIDI, a project file that reproduces bit-identical audio, schema and migrations, a missing plugin, crash recovery, autosave and versions, browser search, every kind of browser drop, asynchronous revival of a third-party plugin, test tone and preview).
 
-## Лицензия
+## License
 
-[GNU AGPLv3](LICENSE). Проект открытый: пользоваться, изучать, изменять и распространять может кто угодно, если производные работы тоже остаются открытыми под AGPLv3. JUCE используется по своей лицензии AGPLv3.
+[GNU AGPLv3](LICENSE). The project is open: anyone may use, study, modify and distribute it, as long as derivative works stay open under AGPLv3 too. JUCE is used under its AGPLv3 license.
