@@ -5,6 +5,7 @@ add_library(daw_core STATIC
     src/PrismaParams.cpp
     src/PrismaSynth.cpp
     src/Clip.cpp
+    src/Scales.cpp
     src/DemoContent.cpp
     src/VersionHistory.cpp)
 

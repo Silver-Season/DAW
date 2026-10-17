@@ -18,13 +18,39 @@ struct Note
     int velocity = 100;
 };
 
+// A clip plays from `startOffset` to its end (`lengthBeats`). With `loop` on it then repeats the brace
+// [loopStart, lengthBeats) for as long as it is playing; with `loop` off it plays that one pass and stops.
+// Everything is in beats from the start of the clip's content.
 struct MidiClip
 {
     std::string name;
     uint32_t colour = 0xff5fa8d3;
-    double lengthBeats = 4.0; // loop length
+    double lengthBeats = 4.0; // the end of the clip, which is the end of the loop brace
+    double loopStart = 0.0;   // start of the loop brace
+    double startOffset = 0.0; // where playback begins when the clip is launched
+    bool loop = true;
     std::vector<Note> notes;
     int64_t id = 0; // model clip id (0 = none): lets the engine recognise "the same clip" in a new playback graph
+
+    // Sanitised copies of the three positions: 0 <= loopStart < end, loopStart <= ... , start < end.
+    double endBeat() const noexcept { return lengthBeats < kMinLength ? kMinLength : lengthBeats; }
+    double braceStart() const noexcept
+    {
+        const double e = endBeat();
+        return loopStart < 0.0 ? 0.0 : (loopStart > e - kMinLength ? e - kMinLength : loopStart);
+    }
+    double playStart() const noexcept
+    {
+        const double e = endBeat();
+        return startOffset < 0.0 ? 0.0 : (startOffset >= e ? braceStart() : startOffset);
+    }
+    // Beats from launch until the first pass reaches the end of the clip.
+    double firstPassBeats() const noexcept { return endBeat() - playStart(); }
+    double braceBeats() const noexcept { return endBeat() - braceStart(); }
+    // Position inside the content `elapsed` beats after the launch (looping clips wrap, others stay at the end).
+    double positionAfter (double elapsed) const noexcept;
+
+    static constexpr double kMinLength = 1.0 / 64.0;
 };
 
 // Renders a looping clip into MIDI events for one audio block.
