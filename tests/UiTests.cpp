@@ -10,6 +10,8 @@
 #include "../app/Source/ui/Chrome.h"
 #include "../app/Source/ui/ComputerKeys.h"
 #include "../app/Source/ui/Controls.h"
+#include "../app/Source/ui/TransportMenus.h"
+#include "../app/Source/model/ClipEdit.h"
 #include "../app/Source/ui/EditCommands.h"
 #include "../app/Source/ui/Theme.h"
 
@@ -567,11 +569,183 @@ void testComputerKeys()
     check (! press ('x') && messages.size() == 1 && messages[0] == K::keysOffHint, "off again: the hint returns");
     check (! pressRu ('Z', 0x44f) && messages.size() == 2, "off: the hint also appears with the Russian layout");
 }
+
+//==============================================================================
+// Finds an item of a popup menu by the texts of its path ("Отсчёт", "2 такта"); null if there is none.
+const juce::PopupMenu::Item* findMenuItem (const juce::PopupMenu& menu, std::initializer_list<juce::String> path, juce::PopupMenu& holder)
+{
+    holder = menu;
+    const juce::PopupMenu::Item* found = nullptr;
+    size_t depth = 0;
+    for (const auto& name : path)
+    {
+        found = nullptr;
+        juce::PopupMenu::MenuItemIterator it (holder, false);
+        while (it.next())
+            if (it.getItem().text == name)
+            {
+                found = &it.getItem();
+                if (++depth < path.size())
+                    holder = it.getItem().subMenu != nullptr ? *it.getItem().subMenu : juce::PopupMenu();
+                break;
+            }
+        if (found == nullptr)
+            return nullptr;
+    }
+    return found;
+}
+
+void testRecordingUi()
+{
+    std::printf ("[test ui-rec] count-in text, transport menus, record source, controller lane\n");
+    namespace R = Strings::recording;
+    const auto minus = juce::String::fromUTF8 ("\xe2\x88\x92");
+
+    // The position field: bar. beat. sixteenth, and "−bar. beat" during a count-in (one bar of 4/4 starts at -4)
+    check (ui::formatPosition (0.0, 4.0) == "1. 1. 1", "position 0 is 1. 1. 1");
+    check (ui::formatPosition (5.5, 4.0) == "2. 2. 3", "position 5.5 is 2. 2. 3");
+    check (ui::formatPosition (-4.0, 4.0) == minus + "1. 1", "count-in start: -1. 1 with a real minus sign");
+    check (ui::formatPosition (-2.0, 4.0) == minus + "1. 3", "two beats into the count-in: -1. 3");
+    check (ui::formatPosition (-0.25, 4.0) == minus + "1. 4", "the last sixteenth of the count-in still reads -1. 4");
+    check (ui::formatPosition (-5.0, 4.0) == minus + "2. 4", "two bars of count-in: the first bar is -2");
+    check (ui::formatPosition (-3.0, 3.0) == minus + "1. 1", "3/4 count-in: -1. 1 at -3 beats");
+    check (ui::formatPosition (-1.0, 3.0) == minus + "1. 3", "3/4 count-in: -1. 3 at -1 beat");
+    check (ui::formatPosition (-4.0, 4.0).startsWithChar (0x2212), "the minus is U+2212");
+
+    // The metronome menu writes the project's preferences
+    {
+        ProjectModel model = ProjectModel::createEmpty();
+        juce::PopupMenu holder;
+        const auto menu = ui::makeMetronomeMenu (model);
+        const auto call = [&] (std::initializer_list<juce::String> path) {
+            juce::PopupMenu h;
+            const auto* item = findMenuItem (menu, path, h);
+            check (item != nullptr && item->action != nullptr, "menu item exists: " + *(path.end() - 1));
+            if (item != nullptr && item->action != nullptr)
+                item->action();
+        };
+        check (std::abs (model.metronomeVolumeDb() - (-6.0)) < 1e-9, "default click volume is -6 dB");
+        {
+            juce::PopupMenu h;
+            const auto* item = findMenuItem (menu, { R::menuVolume, R::volumeDb (-6) }, h);
+            check (item != nullptr && item->isTicked, "volume submenu ticks the current value (-6 dB)");
+        }
+        call ({ R::menuVolume, R::volumeDb (-18) });
+        check (std::abs (model.metronomeVolumeDb() - (-18.0)) < 1e-9, "volume -18 dB");
+        call ({ R::menuVolume, R::volumeDb (-60) });
+        check (model.metronomeVolumeDb() <= ProjectModel::kMinMetronomeDb, "volume -inf");
+        call ({ R::menuVolume, R::volumeDb (0) });
+        check (std::abs (model.metronomeVolumeDb() - (0.0)) < 1e-9, "volume 0 dB");
+        call ({ R::menuOnlyRecording });
+        check (model.metronomeOnlyRecording(), "only while recording is switched on");
+        call ({ R::menuOnlyRecording });
+        check (! model.metronomeOnlyRecording(), "and off again");
+        for (const int bars : { 0, 2, 4, 1 })
+        {
+            call ({ R::menuCountIn, bars == 0 ? R::none : R::bars (bars) });
+            check (model.countInBars() == bars, "count-in " + juce::String (bars) + " bars");
+        }
+        call ({ R::menuClickSound, R::soundWood });
+        check (model.metronomeSound() == "wood", "wooden click");
+        call ({ R::menuClickSound, R::soundClassic });
+        check (model.metronomeSound() == "classic", "classic click");
+        check (! model.undo.canUndo(), "transport preferences are not undo steps");
+    }
+
+    // The record menu: fixed length and record quantisation
+    {
+        ProjectModel model = ProjectModel::createEmpty();
+        const auto menu = ui::makeRecordMenu (model);
+        const auto call = [&] (std::initializer_list<juce::String> path) {
+            juce::PopupMenu h;
+            const auto* item = findMenuItem (menu, path, h);
+            check (item != nullptr && item->action != nullptr, "menu item exists: " + *(path.end() - 1));
+            if (item != nullptr && item->action != nullptr)
+                item->action();
+        };
+        for (const int bars : { 1, 2, 4, 8, 16, 0 })
+        {
+            call ({ R::menuFixedLength, bars == 0 ? R::off : R::bars (bars) });
+            check (model.recordFixedBars() == bars, "fixed length " + juce::String (bars));
+        }
+        const std::pair<const char*, double> grids[] { { "1/4", 1.0 }, { "1/8", 0.5 }, { "1/8T", 1.0 / 3.0 }, { "1/16", 0.25 }, { "1/16T", 1.0 / 6.0 }, { "1/32", 0.125 } };
+        for (const auto& [name, beats] : grids)
+        {
+            call ({ R::menuRecordQuantise, name });
+            check (std::abs (model.recordQuantise() - beats) < 1e-9, juce::String ("record quantise ") + name);
+        }
+        call ({ R::menuRecordQuantise, R::off });
+        check (std::abs (model.recordQuantise()) < 1e-9, "record quantise off");
+    }
+
+    // The record source of a track: one transaction, audio is a value the model keeps
+    {
+        ActionFixture f;
+        const auto id = f.track0.id();
+        check (f.model.findTrack (id).recordSource() == "midi", "a new track records MIDI");
+        f.oneTransaction ("record source", [&] { f.actions.setTrackRecordSource (id, "audio"); });
+        check (f.model.findTrack (id).recordSource() == "audio", "the source is audio after the redo of the helper");
+        f.actions.setTrackRecordSource (id, "audio");
+        check (! f.model.undo.canUndo(), "choosing the current source is not an edit");
+    }
+
+    // The controller lane: a stroke redraws the events of its kind under it; the whole stroke is one transaction
+    {
+        ActionFixture f;
+        const auto clip = f.model.findTrack (f.track0.id()).clipAt (0);
+        const double length = clip.lengthBeats();
+        using clipedit::ControllerLane;
+        // an existing sustain event and a modwheel event after the stroke must survive
+        std::vector<daw::engine::ControllerEvent> start { clipedit::laneEvent (ControllerLane::sustain, 0.5, 1.0),
+                                                          clipedit::laneEvent (ControllerLane::modwheel, 3.5, 0.2) };
+        clip.setControllers (start, &f.model.undo);
+        f.model.undo.clearUndoHistory();
+        const auto before = f.model.root.toXmlString();
+
+        const auto original = clip.controllers();
+        std::vector<std::pair<double, double>> stroke;
+        f.model.undo.beginNewTransaction (Strings::recording::undoDrawController);
+        for (int i = 0; i <= 8; ++i) // a ramp over two beats, applied step by step as the mouse moves
+        {
+            stroke.emplace_back (1.0 + i * 0.25, i / 8.0);
+            clip.setControllers (clipedit::drawControllerStroke (original, ControllerLane::modwheel, stroke, length), &f.model.undo);
+        }
+        const auto drawn = clip.controllers();
+        int mod = 0, sustain = 0;
+        double lastTime = -1.0;
+        bool sorted = true;
+        for (const auto& e : drawn)
+        {
+            mod += clipedit::isLaneEvent (e, ControllerLane::modwheel) ? 1 : 0;
+            sustain += clipedit::isLaneEvent (e, ControllerLane::sustain) ? 1 : 0;
+            sorted = sorted && e.time >= lastTime;
+            lastTime = e.time;
+        }
+        check (mod == 10 && sustain == 1, "the ramp is nine events, the later modwheel event and the sustain event survive");
+        check (sorted, "controllers stay sorted by time");
+        check (f.model.undo.canUndo(), "the stroke is in the history");
+        f.model.undo.undo();
+        check (f.model.root.toXmlString() == before, "one undo takes back the whole stroke");
+        check (! f.model.undo.canUndo(), "and it was a single transaction");
+
+        // replacement semantics: a flat stroke over existing events removes them and writes one
+        const auto flat = clipedit::drawControllerStroke (original, ControllerLane::sustain, { { 0.0, 0.0 }, { 1.0, 0.0 }, { 2.0, 0.0 } }, length);
+        int sus = 0;
+        for (const auto& e : flat)
+            sus += clipedit::isLaneEvent (e, ControllerLane::sustain) ? 1 : 0;
+        check (sus == 1 && flat.size() == 2, "a flat sustain stroke replaces the old events with a single off event");
+        const auto bend = clipedit::laneEvent (ControllerLane::pitchBend, 0.0, 0.51);
+        check (((bend.data2 << 7) | bend.data1) == 8192, "pitch bend sticks to the centre");
+        check (clipedit::laneEvent (ControllerLane::pitchBend, 0.0, 1.0).data2 == 127, "pitch bend top is 16383");
+        check (! clipedit::isLaneEvent (clipedit::laneEvent (ControllerLane::sustain, 0.0, 1.0), ControllerLane::modwheel), "lanes do not mix");
+    }
+}
 } // namespace
 
 void tests::runUiTests()
 {
     testComputerKeys();
+    testRecordingUi();
     testThemes();
     testActionTransactions();
     testActionsWithEngine();
