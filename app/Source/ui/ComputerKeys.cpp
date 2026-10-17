@@ -59,7 +59,7 @@ bool ComputerKeys::keyPressed (const juce::KeyPress& key)
     // Off: only a bare Z or X says why nothing happened; every other key does nothing, as before.
     if (key.getModifiers().getRawFlags() == 0)
     {
-        const auto c = juce::CharacterFunctions::toLowerCase (key.getTextCharacter());
+        const auto c = prisma_ui::KeyboardPanel::keyLetter (key);
         if ((c == 'z' || c == 'x') && onMessage)
             onMessage (Strings::keyboardUi::keysOffHint);
     }

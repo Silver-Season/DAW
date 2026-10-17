@@ -229,8 +229,8 @@ KeyboardPanel::KeyboardPanel (juce::MidiKeyboardState& s)
     keyboard.setWantsKeyboardFocus (false); // keys are handled here, for any focused child of the owner
     addAndMakeVisible (keyboard);
 
-    octDown.onClick = [this] { shiftOctave (-1); };
-    octUp.onClick = [this] { shiftOctave (1); };
+    octDown.onClick = [this] { onOctaveButton ? onOctaveButton (-1) : shiftOctave (-1); };
+    octUp.onClick = [this] { onOctaveButton ? onOctaveButton (1) : shiftOctave (1); };
     octDown.setTooltip ("Octave down (Z)");
     octUp.setTooltip ("Octave up (X)");
     for (auto* b : { &octDown, &octUp })
@@ -272,6 +272,15 @@ void KeyboardPanel::shiftOctave (int delta)
         onChanged (false);
 }
 
+void KeyboardPanel::showState (int newBaseNote, int newVelocity)
+{
+    if (newBaseNote == baseNote && newVelocity == velocity)
+        return;
+    baseNote = newBaseNote;
+    velocity = newVelocity;
+    updateLabel();
+}
+
 void KeyboardPanel::releaseAll()
 {
     for (auto& n : heldNote)
@@ -298,11 +307,19 @@ int KeyboardPanel::whiteKeyDegree (int i)
     return i >= 0 && i < 17 ? degrees[i] : -1;
 }
 
+juce::juce_wchar KeyboardPanel::keyLetter (const juce::KeyPress& key)
+{
+    // The key code, not the typed character: with a Russian (or any non-Latin) layout the Z key types "я", but its
+    // key code is still 'Z'. The note keys are read by key code too (isKeyCurrentlyDown), so all of them agree.
+    const int code = key.getKeyCode();
+    return code > 0 && code < 128 ? juce::CharacterFunctions::toLowerCase ((juce::juce_wchar) code) : 0;
+}
+
 bool KeyboardPanel::handleKeyPressed (const juce::KeyPress& key)
 {
     if (key.getModifiers().isCommandDown() || key.getModifiers().isCtrlDown())
         return false;
-    const auto c = juce::CharacterFunctions::toLowerCase (key.getTextCharacter());
+    const auto c = keyLetter (key);
     switch (c)
     {
         case 'z': shiftOctave (-1); return true;

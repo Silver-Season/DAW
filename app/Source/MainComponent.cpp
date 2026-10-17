@@ -116,6 +116,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     computerKeys.onStateChanged = [this] {
         topBar->setComputerKeysOn (computerKeys.isOn());
         topBar->setKeysOctave (computerKeys.octaveText());
+        syncEditorKeyboards();
     };
     topBar->setKeysOctave (computerKeys.octaveText());
 
@@ -129,6 +130,8 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detailSplitter.setHelpText (Strings::help::splitterDetail);
     browserTab.setHelpText (Strings::help::splitterBrowser);
     detailTab.setHelpText (Strings::help::splitterDetail);
+    browserTab.setTooltips (Strings::tips::hideBrowser, Strings::tips::showBrowser);
+    detailTab.setTooltips (Strings::tips::hideDetail, Strings::tips::showDetail);
     browserSplitter.onDragStart = [this] { dragStartSize = browserWidth; };
     browserSplitter.onDrag = [this] (int delta) {
         browserWidth = juce::jlimit (ui::BrowserPanel::kMinWidth, ui::BrowserPanel::kMaxWidth, dragStartSize + delta);
@@ -1027,6 +1030,17 @@ void MainComponent::openInstrumentEditor (int64_t deviceId)
     });
     attachKeyListeners (*window);
     editorWindows[deviceId] = std::move (window);
+    if (auto* prisma = dynamic_cast<PrismaEditor*> (editor))
+        prisma->getKeyboardPanel().onOctaveButton = [this] (int delta) { computerKeys.panel().shiftOctave (delta); };
+    syncEditorKeyboards();
+}
+
+void MainComponent::syncEditorKeyboards()
+{
+    // A Prisma window shows the octave and velocity of the computer keyboard, which is what its keys play here.
+    for (auto& [id, window] : editorWindows)
+        if (auto* prisma = dynamic_cast<PrismaEditor*> (window->getContentComponent()))
+            prisma->getKeyboardPanel().showState (computerKeys.panel().getBaseNote(), computerKeys.panel().getVelocity());
 }
 
 void MainComponent::showSettings (ui::SettingsWindow::Tab tab)
