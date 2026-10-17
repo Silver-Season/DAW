@@ -51,6 +51,8 @@ bool AudioRecorder::begin (int64_t trackId, RecordStream::Mode mode)
         }
     }
 
+    if (engine.getProjectFolder() == juce::File() && ensureProjectFolder)
+        ensureProjectFolder();
     const int channels = track.isAudio() ? AudioInputSpec::parse (track.input()).numChannels() : 2;
     const double rate = engine.getSampleRate();
     const auto folder = recordingsFolder();

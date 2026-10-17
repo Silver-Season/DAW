@@ -51,6 +51,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::exportAudio);
             add (commands::showInFinder);
             add (commands::findMissingFiles);
+            add (commands::deleteUnusedRecordings);
             menu.addSeparator();
             add (commands::scanPlugins);
 #if ! JUCE_MAC

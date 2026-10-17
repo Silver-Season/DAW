@@ -60,6 +60,8 @@ public:
 
     // Where recordings go: Samples/Recorded in the project folder, else a folder in the user's music folder.
     juce::File recordingsFolder() const;
+    // Gives an unsaved project its folder before the first recording (the window sets it), so the file lands inside it.
+    std::function<juce::File()> ensureProjectFolder;
 
     // Tests: a writer that stands still (the disk does not keep up), and waiting until everything was written.
     void setWriterPausedForTesting (bool paused) { writerPaused = paused; }

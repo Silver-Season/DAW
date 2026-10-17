@@ -112,6 +112,7 @@ private:
     void doOpen (const juce::File&);
     bool hasMissingFiles() const;
     void findMissingFilesClicked();
+    void deleteUnusedRecordingsClicked();
     void documentChanged();
     juce::File projectsFolder() const;
 

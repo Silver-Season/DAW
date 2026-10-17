@@ -287,6 +287,14 @@ inline const juce::String rename = utf8 ("Переименовать");
 inline const juce::String newTrack = utf8 ("Новая MIDI-дорожка");
 inline const juce::String newAudioTrack = utf8 ("Новая аудиодорожка");
 inline const juce::String findMissing = utf8 ("Найти потерянные файлы…");
+inline const juce::String deleteUnusedRecordings = utf8 ("Удалить неиспользуемые записи…");
+inline const juce::String noUnusedRecordings = utf8 ("Неиспользуемых записей нет");
+inline const juce::String deleteButton = utf8 ("Удалить");
+inline juce::String deleteUnusedQuestion (int n)
+{
+    return utf8 ("Записей, которые не нужны ни одному клипу: ") + juce::String (n) + utf8 (". Файлы будут удалены с диска, история отмены очистится. Это нельзя отменить.");
+}
+inline juce::String deletedRecordings (int n) { return utf8 ("Удалено записей: ") + juce::String (n); }
 inline const juce::String newScene = utf8 ("Сцена");
 inline const juce::String captureScene = utf8 ("Сцена с играющими клипами");
 inline const juce::String newClip = utf8 ("Пустой MIDI-клип");
@@ -428,6 +436,24 @@ inline const juce::String monitorIn = utf8 ("Вкл");
 inline const juce::String monitorOff = utf8 ("Выкл");
 inline const juce::String showOtherParam = utf8 ("Показать другой параметр…");
 } // namespace detail
+
+// Settings, tab "Запись": recording of sound (docs/spec/05-audio-recording.md, task 5.4)
+namespace audioRec
+{
+inline const juce::String heading = utf8 ("Задержка записи звука");
+inline const juce::String driverLatency = utf8 ("Задержка по данным драйвера");
+inline const juce::String measure = utf8 ("Измерить задержку");
+inline const juce::String running = utf8 ("Слушаю щелчки…");
+inline const juce::String notFound = utf8 ("Щелчки не вернулись. Соедините кабелем выход 1 со входом и поднимите громкость.");
+inline juce::String measured (double roundTripMs, double correctionMs)
+{
+    return utf8 ("Петля ") + juce::String (roundTripMs, 1).replace (".", ",") + utf8 (" мс, поправка ") + juce::String (correctionMs, 1).replace (".", ",")
+           + utf8 (" мс сохранена");
+}
+inline const juce::String bitDepth = utf8 ("Разрядность записи");
+inline const juce::String float32 = utf8 ("32 (float)");
+inline const juce::String testNote = utf8 ("Записанный звук сдвигается раньше на задержку входа и выхода. Чтобы измерить её точно, соедините кабелем выход 1 карты с выбранным входом и нажмите «Измерить»: прозвучат 10 щелчков. Ползунок поправляет вручную.");
+} // namespace audioRec
 
 // Inputs and monitoring of a track (docs/spec/05-audio-recording.md, task 5.3)
 namespace audioInput

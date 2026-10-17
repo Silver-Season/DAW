@@ -84,8 +84,10 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar->onRecordToArrangement = [this] { recordArrangementClicked(); };
     topBar->onRecordToSlot = [this] { recordToSlotClicked(); };
     recorder.arrangement().onFinished = [this] (const ArrangementRecorder::Summary& s) {
-        infoBar->showMessage (Strings::arrRec::recorded (s.numClips, s.numTakes), 4000);
+        infoBar->showMessage (s.warning.isNotEmpty() ? s.warning : Strings::arrRec::recorded (s.numClips, s.numTakes), s.warning.isNotEmpty() ? 8000 : 4000);
     };
+    recorder.onWarning = [this] (const juce::String& text) { infoBar->showMessage (text, 8000); };
+    recorder.sound().ensureProjectFolder = [this] { return doc.ensureFolder(); };
     topBar->onCaptureClicked = [this] { captureClicked(); };
     topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
@@ -426,7 +428,7 @@ void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
     using namespace ui::commands;
     commands.addArray ({ splitClips, joinClips, loopSelection, removeTime, addMarker, toggleFollow, newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
-                         deleteItem,  renameItem,         newTrack,       newAudioTrack,  findMissingFiles, newScene,      captureScene,        newClip,        captureMidi,        recordArrangement, toggleBrowser, toggleDetail,
+                         deleteItem,  renameItem,         newTrack,       newAudioTrack,  findMissingFiles, deleteUnusedRecordings, newScene,      captureScene,        newClip,        captureMidi,        recordArrangement, toggleBrowser, toggleDetail,
                          toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
 }
 
@@ -460,6 +462,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case showInFinder: set (M::showInFinder, fileCategory, doc.folder() != juce::File() && doc.folder().exists()); break;
         case scanPlugins: set (M::scanPlugins, fileCategory, true); break;
         case findMissingFiles: set (M::findMissing, fileCategory, hasMissingFiles()); break;
+        case deleteUnusedRecordings: set (M::deleteUnusedRecordings, fileCategory, true); break;
         case quitApp: set (M::quit, fileCategory, true, key ('q', cmd)); break;
 
         case undo:
@@ -572,6 +575,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         case openSettings: showSettings (ui::SettingsWindow::sound); return true;
         case scanPlugins: showPluginScanner(); return true;
         case findMissingFiles: findMissingFilesClicked(); return true;
+        case deleteUnusedRecordings: deleteUnusedRecordingsClicked(); return true;
         case quitApp: juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
 
         case undo: model.undo.undo(); return true;
@@ -964,6 +968,35 @@ void MainComponent::findMissingFilesClicked()
                               safe->infoBar->showMessage (found > 0 ? Strings::sessionAudio::foundFiles (found) : Strings::sessionAudio::nothingFound, 3500);
                               safe->commandManager.commandStatusChanged();
                           });
+}
+
+// Recordings that no clip uses any more (undone takes) are deleted from Samples/Recorded and dropped from the pool. Files
+// elsewhere (imported sounds) are only dropped from the pool, never deleted. Not undoable: the dialog says so.
+void MainComponent::deleteUnusedRecordingsClicked()
+{
+    const auto unused = audioimport::unusedFiles (model);
+    juce::Array<juce::File> files;
+    const auto recorded = recorder.sound().recordingsFolder();
+    for (const auto id : unused)
+        if (const auto f = engine.resolveAudioFile (model.findAudioFile (id)); f.existsAsFile() && f.isAChildOf (recorded))
+            files.add (f);
+    if (files.isEmpty())
+    {
+        infoBar->showMessage (Strings::menu::noUnusedRecordings, 3000);
+        return;
+    }
+    ui::confirm (Strings::menu::deleteUnusedRecordings, Strings::menu::deleteUnusedQuestion (files.size()), Strings::menu::deleteButton,
+                 [safe = juce::Component::SafePointer<MainComponent> (this), files, unused] (bool ok) {
+                     if (safe == nullptr || ! ok)
+                         return;
+                     for (const auto& f : files)
+                         f.deleteFile();
+                     for (const auto id : unused)
+                         if (auto node = safe->model.findAudioFile (id); node.isValid())
+                             node.state.getParent().removeChild (node.state, nullptr);
+                     safe->model.undo.clearUndoHistory(); // undo could bring back clips whose files are gone
+                     safe->infoBar->showMessage (Strings::menu::deletedRecordings (files.size()), 3000);
+                 });
 }
 
 void MainComponent::doOpen (const juce::File& file)

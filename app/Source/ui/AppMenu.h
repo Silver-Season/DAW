@@ -20,6 +20,7 @@ enum : juce::CommandID
     showInFinder,
     scanPlugins,
     findMissingFiles,
+    deleteUnusedRecordings,
     quitApp,
 
     undo,
