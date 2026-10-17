@@ -154,7 +154,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
         const int tall = juce::jmax (ui::DetailPanel::kMinHeight, juce::roundToInt ((float) getHeight() * 0.6f));
         if (detail->isEditorShown())
         {
-            editorHeight = std::abs (editorHeight - tall) < 8 ? 340 : tall;
+            editorHeight = std::abs (editorHeight - tall) < 8 ? 360 : tall;
             settings.setEditorHeight (editorHeight);
         }
         else

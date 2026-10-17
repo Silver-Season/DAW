@@ -44,7 +44,7 @@ void Settings::setAnimations (bool on) { props->setValue ("animations", on); }
 int Settings::browserWidth() const { return juce::jlimit (180, 420, props->getIntValue ("browserWidth", 236)); }
 void Settings::setBrowserWidth (int w) { props->setValue ("browserWidth", juce::jlimit (180, 420, w)); }
 int Settings::detailHeight() const { return juce::jlimit (160, 480, props->getIntValue ("detailHeight", 232)); }
-int Settings::editorHeight() const { return juce::jlimit (160, 900, props->getIntValue ("editorHeight", 340)); }
+int Settings::editorHeight() const { return juce::jlimit (160, 900, props->getIntValue ("editorHeight", 360)); }
 void Settings::setEditorHeight (int h) { props->setValue ("editorHeight", juce::jlimit (160, 900, h)); }
 void Settings::setDetailHeight (int h) { props->setValue ("detailHeight", juce::jlimit (160, 480, h)); }
 bool Settings::browserVisible() const { return props->getBoolValue ("browserVisible", true); }

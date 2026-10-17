@@ -229,6 +229,9 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
     const auto scale = owner.scale();
     const int firstRow = juce::jmax (0, owner.yToRow (0)), lastRow = juce::jmin (owner.numRows() - 1, owner.yToRow (getHeight()));
     const auto accent = owner.clipColour();
+    const bool dark = t.background.getBrightness() < 0.5f;
+    const auto whiteKey = dark ? t.text.withAlpha (0.82f) : t.panel, blackKey = dark ? t.background : t.text.withAlpha (0.8f);
+    const auto keyInk = dark ? t.background : t.text;
     for (int row = firstRow; row <= lastRow; ++row)
     {
         const int pitch = owner.pitchOfRow (row), y = owner.rowToY (row);
@@ -241,15 +244,21 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
             g.setColour (accent);
             g.fillRect (0, y, getWidth(), v.rowHeight);
         }
-        else if (inScale && daw::music::pitchClass (pitch, scale.root) == 0)
+        else
         {
-            g.setColour (t.accent.withAlpha (0.28f));
+            // white keys light, black keys dark, whatever the skin: the lightness decides which way round
+            g.setColour (whiteKey);
             g.fillRect (0, y, getWidth(), v.rowHeight);
-        }
-        if (black && ! held)
-        {
-            g.setColour (t.text.withAlpha (0.78f));
-            g.fillRect (0, y + 1, getWidth() * 3 / 5, juce::jmax (1, v.rowHeight - 2));
+            if (black)
+            {
+                g.setColour (blackKey);
+                g.fillRect (0, y, getWidth() * 3 / 5, v.rowHeight);
+            }
+            if (inScale && daw::music::pitchClass (pitch, scale.root) == 0)
+            {
+                g.setColour (t.accent.withAlpha (0.45f));
+                g.fillRect (0, y, getWidth(), v.rowHeight);
+            }
         }
         g.setColour (t.line);
         g.fillRect (0, y + v.rowHeight - 1, getWidth(), 1);
@@ -257,7 +266,7 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
         const bool label = pitch % 12 == 0 || v.fold || (inScale && v.rowHeight >= 14);
         if (label && v.rowHeight >= 9)
         {
-            g.setColour (held ? t.clipInk : (pitch % 12 == 0 ? t.text : t.dimText));
+            g.setColour (held ? t.clipInk : keyInk.withAlpha (pitch % 12 == 0 ? 1.0f : 0.6f));
             g.setFont (t.numFont (juce::jmin (11.0f, (float) v.rowHeight - 3.0f), pitch % 12 == 0 ? 600 : 400));
             g.drawText (juce::MidiMessage::getMidiNoteName (pitch, true, true, 3), getLocalBounds().withY (y).withHeight (v.rowHeight).withTrimmedRight (4),
                         juce::Justification::centredRight, false);
@@ -358,7 +367,8 @@ void PianoRoll::VelocityLane::paint (juce::Graphics& g)
     g.saveState();
     g.reduceClipRegion (left, 1, getWidth() - left, getHeight() - 1);
     const int bottom = getHeight() - 2, top = 4;
-    const auto base = owner.clipColour();
+    // the text variant of the colour: pale clip colours of the light skins would vanish on the panel
+    const auto base = t.textPalette (owner.clip().colour());
     // the gridlines at 25 / 50 / 75 %
     for (int q = 1; q <= 3; ++q)
     {

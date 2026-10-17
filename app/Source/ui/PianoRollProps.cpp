@@ -8,7 +8,7 @@ namespace ui
 {
 namespace
 {
-constexpr int kMargin = 8, kRow = 24, kGap = 6;
+constexpr int kMargin = 8, kRow = 22, kGap = 4;
 }
 
 //==============================================================================
