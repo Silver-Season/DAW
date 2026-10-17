@@ -1,5 +1,7 @@
 #include "ModelRefs.h"
 
+#include <algorithm>
+
 namespace
 {
 // Strict ordering of notes in a clip: by start, then pitch.
@@ -31,6 +33,20 @@ daw::engine::Note ClipRef::readNote (const juce::ValueTree& n)
     out.pitch = (int) n.getProperty (ids::pitch, 60);
     out.velocity = (int) n.getProperty (ids::velocity, 100);
     return out;
+}
+
+daw::engine::MidiClip ClipRef::toMidiClip() const
+{
+    daw::engine::MidiClip c;
+    c.id = id();
+    c.name = name().toStdString();
+    c.lengthBeats = lengthBeats();
+    c.loopStart = loopStart();
+    c.startOffset = startOffset();
+    c.loop = loopEnabled();
+    c.notes = notes();
+    c.controllers = controllers();
+    return c;
 }
 
 daw::engine::Note ClipRef::note (int index) const
@@ -120,6 +136,16 @@ ClipRef TrackRef::clipAt (int scene) const
 {
     const auto slot = slotsNode().getChild (scene);
     return ClipRef (slot.isValid() ? slot.getChildWithName (ids::CLIP) : juce::ValueTree());
+}
+
+std::vector<ArrangementClipRef> TrackRef::arrangementClips() const
+{
+    std::vector<ArrangementClipRef> out;
+    for (const auto& c : arrangementNode())
+        if (c.hasType (ids::ACLIP))
+            out.emplace_back (c);
+    std::stable_sort (out.begin(), out.end(), [] (const auto& a, const auto& b) { return a.start() < b.start(); });
+    return out;
 }
 
 //==============================================================================

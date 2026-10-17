@@ -92,6 +92,9 @@ public:
     void updateNote (int index, const daw::engine::Note&, juce::UndoManager*) const; // re-sorts if needed
     void setNotes (const std::vector<daw::engine::Note>&, juce::UndoManager*) const;
 
+    // The clip as the core plays it (message thread; copies the notes).
+    daw::engine::MidiClip toMidiClip() const;
+
     // Recorded controller movements (modulation wheel, sustain, pitch bend, pressure), sorted by time.
     std::vector<daw::engine::ControllerEvent> controllers() const;
     void setControllers (const std::vector<daw::engine::ControllerEvent>&, juce::UndoManager*) const; // empty removes the node
@@ -102,6 +105,45 @@ public:
     bool hasNote (const juce::ValueTree& noteNode) const { return noteNode.isValid() && noteNode.getParent() == state; }
     void updateNote (const juce::ValueTree& noteNode, const daw::engine::Note&, juce::UndoManager*) const;
     void removeNote (const juce::ValueTree& noteNode, juce::UndoManager*) const;
+};
+
+//==============================================================================
+// A clip on the Arrangement timeline (docs/spec/03-arrangement.md, task 3.1): ACLIP with a CLIP child that is its own
+// copy of the content. It occupies the song beats [start, start + length). At `start` the content is entered at
+// `offset` (beats from the start of the content); with `loop` the loop brace of the content repeats for as long as
+// the clip lasts, otherwise the content plays once and the rest of the clip is silent.
+class ArrangementClipRef final : public NodeRef
+{
+public:
+    using NodeRef::NodeRef;
+
+    double start() const { return get<double> (ids::start, 0.0); }
+    double length() const { return get<double> (ids::length, 4.0); }
+    double end() const { return start() + length(); }
+    double offset() const { return get<double> (ids::offset, 0.0); }
+    bool loop() const { return get<bool> (ids::loop, true); }
+    // The content. Invalid only in a broken file.
+    ClipRef clip() const { return ClipRef (state.getChildWithName (ids::CLIP)); }
+
+    void setStart (double v, juce::UndoManager* um) const { set (ids::start, v, um); }
+    void setLength (double v, juce::UndoManager* um) const { set (ids::length, v, um); }
+    void setOffset (double v, juce::UndoManager* um) const { set (ids::offset, v, um); }
+    void setLoop (bool v, juce::UndoManager* um) const { set (ids::loop, v, um); }
+};
+
+// A named point on the timeline (MARKER in MARKERS). colour is a palette index, -1 = the default colour.
+class MarkerRef final : public NodeRef
+{
+public:
+    using NodeRef::NodeRef;
+
+    double beat() const { return get<double> (ids::beat, 0.0); }
+    juce::String name() const { return get<juce::String> (ids::name, {}); }
+    int colour() const { return get<int> (ids::colour, -1); }
+
+    void setBeat (double v, juce::UndoManager* um) const { set (ids::beat, v, um); }
+    void setName (const juce::String& v, juce::UndoManager* um) const { set (ids::name, v, um); }
+    void setColour (int v, juce::UndoManager* um) const { set (ids::colour, v, um); }
 };
 
 //==============================================================================
@@ -194,4 +236,10 @@ public:
     // The clip in the slot of scene `scene`, or an invalid ref for an empty slot.
     int numSlots() const { return slotsNode().getNumChildren(); }
     ClipRef clipAt (int scene) const;
+
+    // The clips of the Arrangement. Children of ARRANGEMENT in no particular order; arrangementClips() returns them
+    // sorted by start. They do not overlap (see ArrangementEdit.h).
+    juce::ValueTree arrangementNode() const { return state.getChildWithName (ids::ARRANGEMENT); }
+    int numArrangementClips() const { return arrangementNode().getNumChildren(); }
+    std::vector<ArrangementClipRef> arrangementClips() const;
 };

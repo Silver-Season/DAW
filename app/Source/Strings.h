@@ -19,6 +19,7 @@ inline const juce::String trackTypeGroup = utf8 ("Групповая дорож�
 inline juce::String defaultTrackName (int number) { return utf8 ("MIDI ") + juce::String (number); }
 inline juce::String defaultSceneName (int number) { return utf8 ("Сцена ") + juce::String (number); }
 inline const juce::String defaultClipName = utf8 ("Клип");
+inline juce::String defaultMarkerName (int number) { return utf8 ("Маркер ") + juce::String (number); }
 inline const juce::String masterName = utf8 ("Мастер");
 
 // Undo transaction names ("Отменить <имя>" in the Edit menu)
@@ -42,6 +43,26 @@ inline const juce::String undoTrackMute = utf8 ("Выключить дорожк
 inline const juce::String undoTrackSolo = utf8 ("Соло");
 inline const juce::String undoTempo = utf8 ("Темп");
 inline const juce::String undoMasterVolume = utf8 ("Громкость мастера");
+
+// Undo transaction names of the Arrangement (stage 3)
+inline const juce::String undoArrNewClip = utf8 ("Новый клип на шкале");
+inline const juce::String undoArrMoveClips = utf8 ("Переместить клипы");
+inline const juce::String undoArrCopyClips = utf8 ("Копировать клипы");
+inline const juce::String undoArrPasteClips = utf8 ("Вставить клипы");
+inline const juce::String undoArrDuplicate = utf8 ("Дублировать");
+inline const juce::String undoArrResizeClip = utf8 ("Изменить длину клипа");
+inline const juce::String undoArrSplit = utf8 ("Разрезать");
+inline const juce::String undoArrJoin = utf8 ("Склеить клипы");
+inline const juce::String undoArrDelete = utf8 ("Удалить на шкале");
+inline const juce::String undoArrInsertTime = utf8 ("Вставить время");
+inline const juce::String undoArrRemoveTime = utf8 ("Удалить время");
+inline const juce::String undoArrSendToSession = utf8 ("Отправить в сессию");
+inline const juce::String undoArrLoop = utf8 ("Петля аранжировки");
+inline const juce::String undoAddMarker = utf8 ("Новый маркер");
+inline const juce::String undoRenameMarker = utf8 ("Переименовать маркер");
+inline const juce::String undoMoveMarker = utf8 ("Переместить маркер");
+inline const juce::String undoMarkerColour = utf8 ("Цвет маркера");
+inline const juce::String undoDeleteMarker = utf8 ("Удалить маркер");
 
 // Menu items and labels used by the Session View
 inline const juce::String menuAddMidiTrack = utf8 ("Добавить MIDI-дорожку");

@@ -2,6 +2,8 @@
 
 #include "../Strings.h"
 
+#include <algorithm>
+
 namespace
 {
 // New tracks walk around the palette so that neighbours differ: 0, 2, 4, ... 14, then 1, 3, ... 15.
@@ -70,6 +72,8 @@ void ProjectModel::normalise (juce::ValueTree& p)
     {
         if (! track.getChildWithName (ids::DEVICES).isValid())
             track.appendChild (juce::ValueTree (ids::DEVICES), nullptr);
+        if (! track.getChildWithName (ids::ARRANGEMENT).isValid()) // files of schema 1 may lack it
+            track.appendChild (juce::ValueTree (ids::ARRANGEMENT), nullptr);
         auto slots = track.getChildWithName (ids::SLOTS);
         if (! slots.isValid())
         {
@@ -134,6 +138,23 @@ int64_t ProjectModel::newId()
     highWater = next + 1;
     root.setProperty (ids::nextId, (juce::int64) (next + 1), &undo);
     return next;
+}
+
+juce::ValueTree ProjectModel::copyWithNewIds (const juce::ValueTree& tree)
+{
+    auto copy = tree.createCopy();
+    reassignIds (copy);
+    return copy;
+}
+
+std::vector<MarkerRef> ProjectModel::markers() const
+{
+    std::vector<MarkerRef> out;
+    for (const auto& m : markersNode())
+        if (m.hasType (ids::MARKER))
+            out.emplace_back (m);
+    std::stable_sort (out.begin(), out.end(), [] (const auto& a, const auto& b) { return a.beat() < b.beat(); });
+    return out;
 }
 
 void ProjectModel::reassignIds (juce::ValueTree& v)
@@ -340,10 +361,17 @@ void ProjectModel::moveClip (int64_t fromTrack, int fromScene, int64_t toTrack, 
 ClipRef ProjectModel::findClip (int64_t id) const
 {
     for (const auto& t : tracksNode())
+    {
         for (const auto& slot : t.getChildWithName (ids::SLOTS))
             for (const auto& c : slot)
                 if ((int64_t) (juce::int64) c.getProperty (ids::id, -1) == id)
                     return ClipRef (c);
+        // the content of an arrangement clip is a clip, too (the piano roll opens it)
+        for (const auto& a : t.getChildWithName (ids::ARRANGEMENT))
+            for (const auto& c : a)
+                if (c.hasType (ids::CLIP) && (int64_t) (juce::int64) c.getProperty (ids::id, -1) == id)
+                    return ClipRef (c);
+    }
     return {};
 }
 
