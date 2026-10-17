@@ -105,7 +105,10 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detail->chain().onPresetMenu = [this] (int64_t deviceId, juce::Point<int> screenPosition) { showDeviceMenu (deviceId, screenPosition); };
     detail->chain().setBrowserActions (&browserActions);
     detail->chain().onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
-    arrangement = std::make_unique<ui::ArrangementView> (model);
+    arrangement = std::make_unique<ui::ArrangementView> (engine, model, actions, selection);
+    arrangement->onOpenClip = [this] (int64_t trackId, int64_t aclipId) { openArrangementClip (trackId, aclipId); };
+    arrangement->onMessage = [this] (const juce::String& text) { infoBar->showMessage (text, 3000); };
+    arrangement->lettersReserved = [this] { return computerKeys.isOn(); };
     session->onOpenClip = [this] (int64_t trackId, int scene) { openClipEditor (trackId, scene); };
     detail->onEditorShownChanged = [this] {
         resized();
@@ -342,6 +345,13 @@ void MainComponent::setArrangementShown (bool shown)
     arrangementShown = shown;
     topBar->setArrangementShown (shown);
     resized();
+    if (shown)
+    {
+        arrangement->tick();
+        arrangement->takeFocus(); // its shortcuts (Cmd+E, Cmd+D, Space ...) work at once
+    }
+    else
+        session->tick(); // it was not ticking while hidden
     commandManager.commandStatusChanged();
 }
 
@@ -358,6 +368,17 @@ void MainComponent::openClipEditor (int64_t trackId, int scene)
     if (arrangementShown)
         setArrangementShown (false);
     selection.selectSlot (trackId, scene);
+    if (! detailVisible)
+        setDetailVisible (true);
+    detail->setEditorMode (true);
+    commandManager.commandStatusChanged();
+}
+
+// Double-click on a clip of the Arrangement: the editor opens in the detail panel, the timeline stays.
+void MainComponent::openArrangementClip (int64_t trackId, int64_t aclipId)
+{
+    model.setSelectedTrack (trackId);
+    selection.selectArrangementClip (trackId, aclipId);
     if (! detailVisible)
         setDetailVisible (true);
     detail->setEditorMode (true);
@@ -392,7 +413,7 @@ void MainComponent::setUiScale (double scale)
 void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
 {
     using namespace ui::commands;
-    commands.addArray ({ newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
+    commands.addArray ({ splitClips, joinClips, loopSelection, removeTime, addMarker, toggleFollow, newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
                          deleteItem,  renameItem,         newTrack,       newScene,      captureScene,        newClip,        captureMidi,        toggleBrowser, toggleDetail,
                          toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
@@ -441,21 +462,34 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
             set (text.isEmpty() ? M::redo : M::redo + " " + text, editCategory, model.undo.canRedo(), key ('z', cmd | shift));
             break;
         }
-        case cut: set (M::cut, editCategory, editCommands.canCopy(), key ('x', cmd)); break;
-        case copy: set (M::copy, editCategory, editCommands.canCopy(), key ('c', cmd)); break;
-        case paste: set (M::paste, editCategory, editCommands.canPaste(), key ('v', cmd)); break;
-        case duplicate: set (M::duplicate, editCategory, editCommands.canDuplicate(), key ('d', cmd)); break;
+        case cut: set (M::cut, editCategory, arrangementShown ? ! arrangement->selectedClips().empty() : editCommands.canCopy(), key ('x', cmd)); break;
+        case copy: set (M::copy, editCategory, arrangementShown ? ! arrangement->selectedClips().empty() : editCommands.canCopy(), key ('c', cmd)); break;
+        case paste: set (M::paste, editCategory, arrangementShown ? arrangement->hasClipboard() : editCommands.canPaste(), key ('v', cmd)); break;
+        case duplicate: set (M::duplicate, editCategory, arrangementShown ? true : editCommands.canDuplicate(), key ('d', cmd)); break;
         case deleteItem:
-            set (M::remove, editCategory, editCommands.canDelete(), juce::KeyPress (juce::KeyPress::deleteKey));
+            set (M::remove, editCategory, arrangementShown ? true : editCommands.canDelete(), juce::KeyPress (juce::KeyPress::deleteKey));
             info.addDefaultKeypress (juce::KeyPress::backspaceKey, juce::ModifierKeys());
             break;
         case renameItem: set (M::rename, editCategory, editCommands.canRename(), key ('r', cmd)); break;
 
         case newTrack: set (M::newTrack, createCategory, true, key ('t', cmd)); break;
-        case newScene: set (M::newScene, createCategory, true, key ('i', cmd)); break;
+        case newScene: set (arrangementShown ? Strings::arrangement::insertTime : M::newScene, createCategory, true, key ('i', cmd)); break;
         case captureScene: set (M::captureScene, createCategory, true, key ('i', cmd | shift)); break;
         case newClip: set (M::newClip, createCategory, model.numTracks() > 0, key ('m', cmd | shift)); break;
         case captureMidi: set (M::captureMidi, createCategory, model.numTracks() > 0, key ('c', cmd | shift)); break;
+
+        case splitClips: set (Strings::arrangement::splitClip, editCategory, arrangementShown, key ('e', cmd)); break;
+        case joinClips: set (Strings::arrangement::joinClips, editCategory, arrangementShown, key ('j', cmd)); break;
+        case loopSelection: set (Strings::arrangement::loopSelection, editCategory, arrangementShown, key ('l', cmd)); break;
+        case removeTime:
+            set (Strings::arrangement::removeTime, editCategory, arrangementShown, juce::KeyPress (juce::KeyPress::backspaceKey, juce::ModifierKeys (cmd | shift), 0));
+            info.addDefaultKeypress (juce::KeyPress::deleteKey, juce::ModifierKeys (cmd | shift));
+            break;
+        case addMarker: set (Strings::arrangement::newMarker, createCategory, arrangementShown, key ('m', cmd)); break;
+        case toggleFollow:
+            set (Strings::arrangement::followPlayhead, viewCategory, true, key ('f', cmd | shift));
+            info.setTicked (model.followPlayhead());
+            break;
 
         case toggleBrowser:
             set (M::browser, viewCategory, true, key ('b', cmd | alt));
@@ -524,15 +558,52 @@ bool MainComponent::perform (const InvocationInfo& info)
 
         case undo: model.undo.undo(); return true;
         case redo: model.undo.redo(); return true;
-        case cut: editCommands.cutSelection(); return true;
-        case copy: editCommands.copySelection(); return true;
-        case paste: editCommands.pasteSelection(); return true;
-        case duplicate: editCommands.duplicateSelection(); return true;
-        case deleteItem: editCommands.deleteSelection(); return true;
-        case renameItem: session->startRename(); return true;
+        case cut:
+            if (arrangementShown)
+                return arrangement->copySelection (true);
+            editCommands.cutSelection();
+            return true;
+        case copy:
+            if (arrangementShown)
+                return arrangement->copySelection (false);
+            editCommands.copySelection();
+            return true;
+        case paste:
+            if (arrangementShown)
+                return arrangement->pasteAtCursor();
+            editCommands.pasteSelection();
+            return true;
+        case duplicate:
+            if (arrangementShown)
+                return arrangement->duplicateSelection();
+            editCommands.duplicateSelection();
+            return true;
+        case deleteItem:
+            if (arrangementShown)
+                return arrangement->deleteSelection();
+            editCommands.deleteSelection();
+            return true;
+        case renameItem:
+            if (arrangementShown)
+                return arrangement->renameSelection();
+            session->startRename();
+            return true;
+        case splitClips: return arrangementShown && arrangement->splitAtCursor();
+        case joinClips: return arrangementShown && arrangement->joinSelection();
+        case loopSelection: return arrangementShown && arrangement->loopSelection();
+        case removeTime: return arrangementShown && arrangement->removeTimeAtSelection();
+        case addMarker: return arrangementShown && arrangement->addMarkerAtCursor();
+        case toggleFollow:
+            arrangement->toggleFollow();
+            commandManager.commandStatusChanged();
+            return true;
 
         case newTrack: editCommands.newTrack(); return true;
-        case newScene: editCommands.newScene(); return true;
+        case newScene:
+            if (arrangementShown) // Cmd+I inserts time in the Arrangement and a scene in Session View
+                return arrangement->insertTimeAtSelection();
+            editCommands.newScene();
+            return true;
         case captureScene: editCommands.captureScene(); return true;
         case newClip: editCommands.newClip(); return true;
         case captureMidi: captureClicked(); return true;
@@ -610,6 +681,9 @@ void MainComponent::captureClicked()
 //==============================================================================
 bool MainComponent::keyPressed (const juce::KeyPress& key)
 {
+    // Keys that reach the window with nothing focused still drive the timeline
+    if (arrangementShown && arrangement->handleKey (key))
+        return true;
     return computerKeys.keyPressed (key);
 }
 
@@ -634,7 +708,10 @@ void MainComponent::timerCallback()
 
     topBar->tick();
     topBar->setVersionText (doc.versionButtonText());
-    session->tick();
+    if (arrangementShown)
+        arrangement->tick();
+    else
+        session->tick();
     if (detailVisible)
         detail->tick();
     const double target = stripWanted ? 1.0 : 0.0;

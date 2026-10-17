@@ -19,6 +19,7 @@ inline const juce::String trackTypeGroup = utf8 ("Групповая дорож�
 inline juce::String defaultTrackName (int number) { return utf8 ("MIDI ") + juce::String (number); }
 inline juce::String defaultSceneName (int number) { return utf8 ("Сцена ") + juce::String (number); }
 inline const juce::String defaultClipName = utf8 ("Клип");
+inline juce::String defaultMarkerName (int number) { return utf8 ("Маркер ") + juce::String (number); }
 inline const juce::String masterName = utf8 ("Мастер");
 
 // Undo transaction names ("Отменить <имя>" in the Edit menu)
@@ -42,6 +43,32 @@ inline const juce::String undoTrackMute = utf8 ("Выключить дорожк
 inline const juce::String undoTrackSolo = utf8 ("Соло");
 inline const juce::String undoTempo = utf8 ("Темп");
 inline const juce::String undoMasterVolume = utf8 ("Громкость мастера");
+
+// Undo transaction names of the Arrangement (stage 3)
+inline const juce::String undoArrNewClip = utf8 ("Новый клип на шкале");
+inline const juce::String undoArrMoveClips = utf8 ("Переместить клипы");
+inline const juce::String undoArrCopyClips = utf8 ("Копировать клипы");
+inline const juce::String undoArrPasteClips = utf8 ("Вставить клипы");
+inline const juce::String undoArrDuplicate = utf8 ("Дублировать");
+inline const juce::String undoArrResizeClip = utf8 ("Изменить длину клипа");
+inline const juce::String undoArrSplit = utf8 ("Разрезать");
+inline const juce::String undoArrJoin = utf8 ("Склеить клипы");
+inline const juce::String undoArrDelete = utf8 ("Удалить на шкале");
+inline const juce::String undoArrInsertTime = utf8 ("Вставить время");
+inline const juce::String undoArrRemoveTime = utf8 ("Удалить время");
+inline const juce::String undoArrSendToSession = utf8 ("Отправить в сессию");
+inline const juce::String undoArrLoop = utf8 ("Петля аранжировки");
+inline const juce::String undoArrMarkerAdd = utf8 ("Новый маркер");
+inline const juce::String undoArrMarkerMove = utf8 ("Переместить маркер");
+inline const juce::String undoArrMarkerRename = utf8 ("Переименовать маркер");
+inline const juce::String undoArrMarkerDelete = utf8 ("Удалить маркер");
+inline const juce::String undoArrMarkerColour = utf8 ("Цвет маркера");
+inline const juce::String undoArrTrackHeight = utf8 ("Высота дорожки");
+inline const juce::String undoAddMarker = utf8 ("Новый маркер");
+inline const juce::String undoRenameMarker = utf8 ("Переименовать маркер");
+inline const juce::String undoMoveMarker = utf8 ("Переместить маркер");
+inline const juce::String undoMarkerColour = utf8 ("Цвет маркера");
+inline const juce::String undoDeleteMarker = utf8 ("Удалить маркер");
 
 // Menu items and labels used by the Session View
 inline const juce::String menuAddMidiTrack = utf8 ("Добавить MIDI-дорожку");
@@ -493,8 +520,55 @@ inline const juce::String noScaleHint = utf8 ("Лад проекта выклю�
 
 namespace arrangement
 {
-inline const juce::String placeholder = utf8 ("Arrangement появится в следующем этапе");
-inline const juce::String hint = utf8 ("Здесь будет линейная шкала времени. Tab возвращает в Session.");
+inline const juce::String addMarker = utf8 ("+ Маркер");
+inline const juce::String noMarkers = utf8 ("Маркеров нет");
+inline const juce::String noTracks = utf8 ("Дорожек нет. Создайте дорожку клавишами Cmd+T.");
+inline const juce::String heightsUniform = utf8 ("Равная");
+inline const juce::String heightsByContent = utf8 ("По нотам");
+inline const juce::String heightsUniformMessage = utf8 ("Высота дорожек: одинаковая");
+inline const juce::String heightsByContentMessage = utf8 ("Высота дорожек: по нотам каждой");
+inline const juce::String snapOn = utf8 ("Прилипание к сетке включено");
+inline const juce::String snapOff = utf8 ("Прилипание к сетке выключено");
+inline const juce::String snapOffShort = utf8 ("без прилипания");
+inline const juce::String gridBar = utf8 ("1 такт");
+inline juce::String gridBars (int n)
+{
+    const bool few = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
+    return juce::String (n) + (few ? utf8 (" такта") : utf8 (" тактов"));
+}
+inline const juce::String gridBeat = utf8 ("доля");
+inline juce::String gridBeats (int n) { return juce::String (n) + utf8 (" доли"); }
+inline juce::String gridLabel (const juce::String& step, bool adaptive)
+{
+    return utf8 ("Сетка ") + step + (adaptive ? juce::String() : utf8 (" (фикс.)"));
+}
+inline const juce::String followOn = utf8 ("Следование за курсором включено");
+inline const juce::String followOff = utf8 ("Следование за курсором выключено");
+inline juce::String sentToSession (int scene) { return utf8 ("Клип отправлен в сцену ") + juce::String (scene); }
+
+// Context menus
+inline const juce::String menuOpen = utf8 ("Открыть в редакторе");
+inline const juce::String menuRename = utf8 ("Переименовать");
+inline const juce::String menuDuplicate = utf8 ("Дублировать");
+inline const juce::String menuSplit = utf8 ("Разрезать по курсору");
+inline const juce::String menuJoin = utf8 ("Склеить клипы");
+inline const juce::String menuLoopSelection = utf8 ("Петля по выделению");
+inline const juce::String menuSendToSession = utf8 ("Отправить в сессию");
+inline const juce::String menuNewClip = utf8 ("Создать клип на такт");
+inline const juce::String menuPaste = utf8 ("Вставить");
+inline const juce::String menuSelectAll = utf8 ("Выделить все клипы");
+inline const juce::String menuJumpToMarker = utf8 ("Перейти к маркеру");
+inline const juce::String menuRenameMarker = utf8 ("Переименовать маркер");
+
+// Menu bar items that work in the Arrangement
+inline const juce::String splitClip = utf8 ("Разрезать");
+inline const juce::String joinClips = utf8 ("Склеить");
+inline const juce::String loopSelection = utf8 ("Петля по выделению");
+inline const juce::String insertTime = utf8 ("Вставить время");
+inline const juce::String removeTime = utf8 ("Удалить время");
+inline const juce::String newMarker = utf8 ("Маркер в позиции курсора");
+inline const juce::String followPlayhead = utf8 ("Следовать за курсором");
+inline const juce::String backToArrangement = utf8 ("Вернуть аранжировку");
 } // namespace arrangement
 
 // Mixer
@@ -583,7 +657,9 @@ inline const juce::String stop = make (utf8 ("Стоп"), utf8 ("Останав�
 inline const juce::String record = make (utf8 ("Запись"), utf8 ("Запись в выбранную сцену на взведённых дорожках; повторный щелчок останавливает. Правая кнопка: фиксированная длина и квантизация записи."));
 inline const juce::String overdub = make (utf8 ("Overdub"), utf8 ("Включён: запись на играющий клип добавляет ноты слоями, старые не стираются. Каждый круг отменяется отдельно."));
 inline const juce::String position = make (utf8 ("Позиция"), utf8 ("Такты, доли и шестнадцатые от начала воспроизведения."));
-inline const juce::String loop = make (utf8 ("Петля"), soon3);
+inline const juce::String loop = make (utf8 ("Петля аранжировки"), utf8 ("Включает и выключает петлю на шкале Arrangement. Границы петли тянутся по скобке над линейкой, Cmd+L ставит петлю по выделению."));
+inline const juce::String followPlayhead = make (utf8 ("Следовать за курсором"), utf8 ("Когда горит, вид шкалы перелистывается вслед за курсором воспроизведения (Cmd+Shift+F)."));
+inline const juce::String backToArrangement = make (utf8 ("Вернуть аранжировку"), utf8 ("Горит, когда хотя бы одна дорожка играет клипы Session вместо шкалы. Нажатие останавливает клипы сессии на ближайшей границе квантизации и возвращает дорожки к аранжировке."));
 inline const juce::String ribbon = make (utf8 ("Лента «10 мин»"), utf8 ("Вечная запись: последние 10 минут игры. Нажмите “Захватить” или Cmd+Shift+C"));
 inline const juce::String recordSlot = make (utf8 ("Кружок записи"), utf8 ("Щелчок начинает запись в этот слот на ближайшей границе запуска. Нужна взведённая (или выбранная) MIDI-дорожка."));
 inline const juce::String recordingSlot = make (utf8 ("Идёт запись"), utf8 ("Щелчок заканчивает запись на ближайшем такте. Клип сразу играет по кругу. Cmd+Z удаляет записанный клип."));
@@ -592,7 +668,7 @@ inline const juce::String trackRecordAudio = make (utf8 ("Запись звук�
 inline const juce::String controllerLane = make (utf8 ("Полоса контроллера"), utf8 ("Тяните мышью, чтобы нарисовать значения: события этого типа под мазком заменяются. Весь мазок отменяется одним Cmd+Z."));
 inline const juce::String morph = make (utf8 ("Морф A ↔ B"), utf8 ("Плавный переход между снимками ручек. ") + soon6);
 inline const juce::String tabSession = make (utf8 ("Session"), utf8 ("Сетка клипов для живой игры. Tab переключает Session и Arrangement."));
-inline const juce::String tabArrangement = make (utf8 ("Arrangement"), utf8 ("Пока пустой вид: Arrangement появится на этапе 3. Tab переключает Session и Arrangement."));
+inline const juce::String tabArrangement = make (utf8 ("Arrangement"), utf8 ("Линейная шкала времени: клипы по тактам, маркеры, петля. Клип из Session можно перетащить сюда. Tab переключает Session и Arrangement."));
 inline const juce::String version = make (utf8 ("История версий"), utf8 ("Номер версии и время с последнего сохранения. Щелчок открывает список: метки, возврат к версии."));
 inline const juce::String cpu = make (utf8 ("Нагрузка процессора"), utf8 ("Щелчок открывает настройки звука."));
 inline const juce::String midiIn = make (utf8 ("MIDI-вход"), utf8 ("Мигает, когда приходят события с MIDI-устройств."));
@@ -663,7 +739,26 @@ inline const juce::String editorKeys = make (utf8 ("Клавиши"), utf8 ("Щ�
 inline const juce::String editorGridArea = make (utf8 ("Сетка нот"), utf8 ("Двойной щелчок рисует или удаляет ноту, рамка выделяет, правый край ноты меняет длину, Alt копирует, Cmd отключает прилипание. Cmd+колесо: масштаб, Alt+колесо: высота строк."));
 inline const juce::String editorVelocity = make (utf8 ("Сила нажатия"), utf8 ("Тяните столбик. Alt+тянуть по нескольким столбикам рисует рампу."));
 inline const juce::String editorControllers = make (utf8 ("Контроллеры"), utf8 ("Колесо модуляции, питч-бенд и сустейн. Полоса сворачивается."));
-inline const juce::String arrangementView = make (utf8 ("Arrangement"), utf8 ("Появится на этапе 3. Tab возвращает в Session."));
+inline const juce::String arrangementView = make (utf8 ("Arrangement"), utf8 ("Шкала времени проекта. Пробел играет с точки старта, Shift+Пробел продолжает с места остановки. Tab возвращает в Session."));
+inline const juce::String arrLanes = make (utf8 ("Дорожки"), utf8 ("Протяжка по пустому месту выделяет время, двойной щелчок рисует клип на такт. Cmd+колесо: масштаб, Alt+колесо: высота дорожки, Shift+колесо: прокрутка по времени."));
+inline const juce::String arrClip = make (utf8 ("Клип на шкале"), utf8 ("Тяните, чтобы переместить (Alt: копия, Cmd: без прилипания). Двойной щелчок открывает редактор нот, правая кнопка открывает меню. Cmd+E разрезает, Cmd+D дублирует."));
+inline const juce::String arrClipLeftEdge = make (utf8 ("Левый край клипа"), utf8 ("Тяните, чтобы обрезать начало: содержимое остаётся на месте."));
+inline const juce::String arrClipRightEdge = make (utf8 ("Правый край клипа"), utf8 ("Тяните, чтобы изменить длину: если клип длиннее петли, содержимое повторяется."));
+inline const juce::String arrRuler = make (utf8 ("Линейка тактов"), utf8 ("Щелчок ставит точку старта и перематывает (во время игры на границе квантизации, с Shift сразу). Протяжка выделяет время на всех дорожках."));
+inline const juce::String arrBrace = make (utf8 ("Скобка петли"), utf8 ("Щелчок включает и выключает петлю. Края и середину можно тянуть, Cmd+L ставит петлю по выделению."));
+inline const juce::String arrMarkerLane = make (utf8 ("Маркеры"), utf8 ("Cmd+M ставит маркер в позиции курсора. Щелчок по маркеру переходит к нему, двойной щелчок переименовывает, Delete удаляет."));
+inline const juce::String arrMarker = make (utf8 ("Маркер"), utf8 ("Щелчок переходит к маркеру, перетаскивание двигает, двойной щелчок переименовывает, правая кнопка открывает цвет и удаление."));
+inline const juce::String arrHeader = make (utf8 ("Заголовок дорожки"), utf8 ("Те же дорожки, что в Session. Щелчок выделяет, двойной щелчок по имени переименовывает. Нижний край тянется, меняя высоту дорожки."));
+inline const juce::String arrHeaderEdge = make (utf8 ("Высота дорожки"), utf8 ("Тяните вверх и вниз: от 24 до 240 пикселей. Клавиша H переключает «одинаковая высота» и «по нотам»."));
+inline const juce::String arrHeaderVolume = make (utf8 ("Громкость дорожки"), utf8 ("Тяните вверх и вниз, двойной щелчок вводит число в дБ. Shift: точнее."));
+inline const juce::String arrAddMarker = make (utf8 ("Новый маркер"), utf8 ("Ставит маркер в позиции курсора (Cmd+M)."));
+inline const juce::String arrPrevMarker = make (utf8 ("Предыдущий маркер"), utf8 ("Переходит к маркеру левее курсора."));
+inline const juce::String arrNextMarker = make (utf8 ("Следующий маркер"), utf8 ("Переходит к маркеру правее курсора."));
+inline const juce::String arrMarkerList = make (utf8 ("Список маркеров"), utf8 ("Быстрый переход к любому маркеру."));
+inline const juce::String arrHeightMode = make (utf8 ("Высота дорожек"), utf8 ("Одинаковая для всех или по нотам каждой дорожки. Клавиша H."));
+inline const juce::String arrGridLabel = make (utf8 ("Сетка"), utf8 ("Шаг сетки: сам по масштабу или фиксированный. Cmd+1 мельче, Cmd+2 крупнее, Cmd+3 триоли, Cmd+4 прилипание."));
+inline const juce::String arrCorner = make (utf8 ("Маркеры"), utf8 ("Кнопки ставят маркер и переходят между маркерами."));
+inline const juce::String arrMinimap = make (utf8 ("Обзор песни"), utf8 ("Вся песня мелко. Рамку можно тянуть, её края меняют масштаб, щелчок рядом переносит вид."));
 inline const juce::String keyboardStripHelp = make (utf8 ("Экранная клавиатура"), utf8 ("Играет на выбранной дорожке. Cmd+Alt+K прячет полосу."));
 inline const juce::String keyboardInScale = make (utf8 ("В ладу"), utf8 ("Клавиши A S D F G H J K L ; играют подряд ступени лада проекта. Внешней MIDI-клавиатуры это не касается."));
 inline const juce::String keyboardChords = make (utf8 ("Аккорды"), utf8 ("Одна клавиша играет трезвучие лада проекта (нужен включённый лад и режим «В ладу»)."));

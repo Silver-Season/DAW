@@ -4,6 +4,7 @@
 #include "../engine/AudioEngine.h"
 #include "../engine/SessionRecorder.h"
 #include "../Settings.h"
+#include "ArrangementView.h"
 #include "PaletteMenu.h"
 
 namespace ui
@@ -556,6 +557,30 @@ public:
             return;
         if (! dragging && e.getDistanceFromDragStart() < 5)
             return;
+        // A clip carried out of the grid (up to the transport) goes on as a drag-and-drop: dropped on the "Arrangement"
+        // tab it switches the view, and the timeline takes the drop.
+        if (! getLocalBounds().contains (e.getPosition()))
+            if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor (this))
+            {
+                const auto id = view.columnTrack[(size_t) pressColumn];
+                juce::Image ghost (juce::Image::ARGB, 150, 28, true);
+                {
+                    const auto& t = theme();
+                    juce::Graphics g (ghost);
+                    g.setColour (t.clipColour (track.clipAt (pressScene).colour(), true).withAlpha (0.92f));
+                    g.fillRoundedRectangle (0.0f, 0.0f, 150.0f, 28.0f, t.radius);
+                    g.setColour (t.clipInk);
+                    g.setFont (t.uiFont (12.0f, 500));
+                    g.drawText (track.clipAt (pressScene).name(), 10, 0, 130, 28, juce::Justification::centredLeft, true);
+                }
+                const int scene = pressScene;
+                dragging = false;
+                dragColumn = dragScene = dropColumn = dropScene = pressColumn = pressScene = -1;
+                setMouseCursor (juce::MouseCursor::NormalCursor);
+                repaint();
+                container->startDragging (ArrangementView::sessionClipDescription (id, scene), this, juce::ScaledImage (ghost), true);
+                return;
+            }
         dragging = true;
         dragColumn = pressColumn;
         dragScene = pressScene;
@@ -1666,6 +1691,7 @@ void SessionView::startRenameNow()
             break;
         case Selection::Kind::scene: scenes->beginRename (s.scene); break;
         case Selection::Kind::device:
+        case Selection::Kind::aclip:
         case Selection::Kind::none: break;
     }
 }

@@ -30,6 +30,7 @@ bool EditCommands::canDelete() const
         case Selection::Kind::clip: return model.findTrack (s.trackId).clipAt (s.scene).isValid();
         case Selection::Kind::scene: return model.numScenes() > 1 && s.scene >= 0 && s.scene < model.numScenes();
         case Selection::Kind::device: return model.findDevice (s.deviceId).isValid();
+        case Selection::Kind::aclip:
         case Selection::Kind::none: break;
     }
     return false;
@@ -44,6 +45,7 @@ bool EditCommands::canDuplicate() const
         case Selection::Kind::clip: return model.findTrack (s.trackId).clipAt (s.scene).isValid();
         case Selection::Kind::scene: return s.scene >= 0 && s.scene < model.numScenes();
         case Selection::Kind::device:
+        case Selection::Kind::aclip:
         case Selection::Kind::none: break;
     }
     return false;
@@ -94,6 +96,7 @@ void EditCommands::deleteSelection()
             actions.removeDevice (s.deviceId);
             selection.selectTrack (s.trackId);
             break;
+        case Selection::Kind::aclip:
         case Selection::Kind::none: break;
     }
 }
@@ -113,6 +116,7 @@ void EditCommands::duplicateSelection()
             selection.selectScene (s.scene + 1);
             break;
         case Selection::Kind::device:
+        case Selection::Kind::aclip:
         case Selection::Kind::none: break;
     }
 }

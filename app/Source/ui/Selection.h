@@ -16,17 +16,19 @@ struct Selection
         track,
         clip, // a slot (trackId, scene), empty or not
         scene,
-        device
+        device,
+        aclip // a clip of the Arrangement (trackId, aclipId)
     };
 
     Kind kind = Kind::none;
     int64_t trackId = -1;
     int scene = -1;
     int64_t deviceId = -1;
+    int64_t aclipId = -1;
 
     bool operator== (const Selection& o) const
     {
-        return kind == o.kind && trackId == o.trackId && scene == o.scene && deviceId == o.deviceId;
+        return kind == o.kind && trackId == o.trackId && scene == o.scene && deviceId == o.deviceId && aclipId == o.aclipId;
     }
 };
 
@@ -35,17 +37,18 @@ class SelectionState : public juce::ChangeBroadcaster
 public:
     const Selection& get() const { return selection; }
 
-    void selectTrack (int64_t trackId) { set ({ Selection::Kind::track, trackId, -1, -1 }); }
-    void selectSlot (int64_t trackId, int scene) { set ({ Selection::Kind::clip, trackId, scene, -1 }); }
-    void selectScene (int scene) { set ({ Selection::Kind::scene, -1, scene, -1 }); }
-    void selectDevice (int64_t trackId, int64_t deviceId) { set ({ Selection::Kind::device, trackId, -1, deviceId }); }
+    void selectTrack (int64_t trackId) { set ({ Selection::Kind::track, trackId, -1, -1, -1 }); }
+    void selectSlot (int64_t trackId, int scene) { set ({ Selection::Kind::clip, trackId, scene, -1, -1 }); }
+    void selectScene (int scene) { set ({ Selection::Kind::scene, -1, scene, -1, -1 }); }
+    void selectDevice (int64_t trackId, int64_t deviceId) { set ({ Selection::Kind::device, trackId, -1, deviceId, -1 }); }
+    void selectArrangementClip (int64_t trackId, int64_t aclipId) { set ({ Selection::Kind::aclip, trackId, -1, -1, aclipId }); }
     void clear() { set ({}); }
 
     // A scene was inserted or removed above `index`: keep a scene selection on the same scene.
     void setSceneIndex (int scene)
     {
         if (selection.kind == Selection::Kind::scene || selection.kind == Selection::Kind::clip)
-            set ({ selection.kind, selection.trackId, scene, -1 });
+            set ({ selection.kind, selection.trackId, scene, -1, -1 });
     }
 
 private:

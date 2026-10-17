@@ -10,7 +10,7 @@
 class ProjectModel
 {
 public:
-    static constexpr int kSchemaVersion = 1;
+    static constexpr int kSchemaVersion = 2; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3)
     static constexpr int kMaxUndoTransactions = 500;
 
     juce::ValueTree root;
@@ -36,6 +36,9 @@ public:
 
     ProjectModel (const ProjectModel&) = delete;
     ProjectModel& operator= (const ProjectModel&) = delete;
+
+    // A copy of `tree` in which every node that has an id gets a fresh one (for pasted or duplicated nodes).
+    juce::ValueTree copyWithNewIds (const juce::ValueTree& tree);
 
     // Ids are 64-bit, taken from the nextId property and never reused within a session, even after undo.
     int64_t newId();
@@ -105,6 +108,33 @@ public:
     int recordFixedBars() const { return juce::jlimit (0, 64, (int) root.getProperty (ids::recordFixedBars, 0)); }
     void setRecordFixedBars (int bars) { root.setProperty (ids::recordFixedBars, bars, nullptr); }
 
+    // The Arrangement (docs/spec/03-arrangement.md). The loop brace (in song beats) is an edit and goes through undo.
+    // The play start (where Space starts the song) and "follow the playhead" are view state and are written without undo.
+    static constexpr double kMinArrangementLoopBeats = 0.25;
+    double arrangementLoopStart() const { return juce::jmax (0.0, (double) root.getProperty (ids::arrangementLoopStart, 0.0)); }
+    double arrangementLoopEnd() const
+    {
+        return juce::jmax (arrangementLoopStart() + kMinArrangementLoopBeats, (double) root.getProperty (ids::arrangementLoopEnd, 16.0));
+    }
+    bool arrangementLoopOn() const { return (bool) root.getProperty (ids::arrangementLoopOn, false); }
+    // The end is kept at least kMinArrangementLoopBeats after the start.
+    void setArrangementLoop (double start, double end, bool on)
+    {
+        start = juce::jmax (0.0, start);
+        root.setProperty (ids::arrangementLoopStart, start, &undo);
+        root.setProperty (ids::arrangementLoopEnd, juce::jmax (start + kMinArrangementLoopBeats, end), &undo);
+        root.setProperty (ids::arrangementLoopOn, on, &undo);
+    }
+    void setArrangementLoopOn (bool on) { root.setProperty (ids::arrangementLoopOn, on, &undo); }
+    double arrangementPlayStart() const { return juce::jmax (0.0, (double) root.getProperty (ids::arrangementPlayStart, 0.0)); }
+    void setArrangementPlayStart (double beat) { root.setProperty (ids::arrangementPlayStart, juce::jmax (0.0, beat), nullptr); }
+    bool followPlayhead() const { return (bool) root.getProperty (ids::followPlayhead, true); }
+    void setFollowPlayhead (bool on) { root.setProperty (ids::followPlayhead, on, nullptr); }
+
+    juce::ValueTree markersNode() const { return root.getChildWithName (ids::MARKERS); }
+    // The markers sorted by beat.
+    std::vector<MarkerRef> markers() const;
+
     juce::String author() const { return root.getProperty (ids::author).toString(); }
     void setAuthor (const juce::String& v) { root.setProperty (ids::author, v, &undo); }
     juce::String projectNotes() const { return root.getProperty (ids::notes).toString(); }
@@ -164,6 +194,7 @@ public:
     void deleteClip (const TrackRef&, int scene);
     // Moves (or copies) a clip between slots; the destination is replaced.
     void moveClip (int64_t fromTrack, int fromScene, int64_t toTrack, int toScene, bool copy);
+    // Finds a clip of a slot or the content of an arrangement clip by its CLIP id.
     ClipRef findClip (int64_t id) const;
 
     //==========================================================================

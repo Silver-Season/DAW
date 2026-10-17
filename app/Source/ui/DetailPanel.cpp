@@ -906,6 +906,11 @@ void DetailPanel::updateEditor()
         if (const auto track = model.findTrack (selection.get().trackId); track.isValid())
             if (const auto clip = track.clipAt (selection.get().scene); clip.isValid())
                 clipId = clip.id();
+    // A clip of the Arrangement: the editor shows its own copy of the content.
+    if (editorOn && selection.get().kind == Selection::Kind::aclip)
+        for (const auto& a : model.findTrack (selection.get().trackId).arrangementClips())
+            if (a.id() == selection.get().aclipId && a.clip().isValid())
+                clipId = a.clip().id();
     // With the editor on but no clip selected the chain stays: the editor has nothing to show.
     const bool shown = clipId != 0;
     if (shown != editorShown)

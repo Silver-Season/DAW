@@ -102,12 +102,20 @@ public:
 
     //==========================================================================
     // Transport
+    // Play starts the song at the arrangement play start (model property arrangementPlayStart) and brings back the Session
+    // clips that were playing when the transport stopped.
     void play();
+    // Shift+Space: like play(), but the song continues where it stopped.
+    void playFromPosition();
     void stop();
     bool isPlaying() const { return playing.load(); }
     double getTempo() const { return tempo.load(); }
-    // Negative while a count-in plays (-4 .. 0 for one bar of 4/4).
+    // The monotonic clock of Session View: 0 at every start of the transport, never jumps (negative while a count-in
+    // plays, -4 .. 0 for one bar of 4/4). Clip launches, clip progress and session recording are measured on it.
     double getPositionBeats() const { return positionBeats.load(); }
+    // The position in the song, i.e. in the Arrangement: starts at the play start, moves with seek and loop jumps. While
+    // stopped it is where the song stopped. The transport display and the arrangement playhead follow this one.
+    double getSongPositionBeats() const { return songPositionBeats.load(); }
     bool isCountingIn() const { return playing.load() && positionBeats.load() < 0.0; }
     double getBeatsPerBar() const { return beatsPerBar.load(); }
 
@@ -116,6 +124,21 @@ public:
     bool launchScene (int scene);
     bool stopTrack (int64_t trackId);
     bool stopAllClips();
+
+    // Arrangement commands (docs/spec/03-arrangement.md, tasks 3.2 and 3.3), queued for the audio thread.
+    // seek: the song position jumps there at once, playing or not (while stopped it moves the point Shift+Space continues from).
+    bool seek (double songBeat);
+    // While playing the jump waits for the next launch-quantisation boundary and is exact to the sample; while stopped
+    // it is the same as seek.
+    bool seekQuantised (double songBeat);
+    // The song position goes to 0 (a second press of stop). The caller also sets the model's arrangementPlayStart if the
+    // play start should go back, too.
+    bool rewindSong();
+    // The orange "Back to arrangement" button: at the next launch-quantisation boundary the session clips stop and every
+    // track plays its arrangement again; notes under the position are chased. While stopped it happens at once.
+    bool backToArrangement();
+    // True when at least one track plays (or was stopped in) Session View instead of the arrangement: the button lights up.
+    bool anyTrackInSession() const { return anyInSession.load(); }
 
     // Recording (docs/spec/02, task 2.2). Normally called through SessionRecorder, which collects the notes.
     // startRecord: from a stopped transport it starts the transport (with the count-in of the project) and the
@@ -308,7 +331,11 @@ private:
     Metronome metronome; // audio thread
 
     std::atomic<bool> playing { false }, stopRequested { false };
-    std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };
+    std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, songPositionBeats { 0.0 }, quantise { 4.0 };
+    // The arrangement properties of the model, copied by applyProjectProperties
+    std::atomic<double> arrLoopStart { 0.0 }, arrLoopEnd { 16.0 }, arrPlayStart { 0.0 };
+    std::atomic<bool> arrLoopOn { false }, anyInSession { false };
+    bool continueSong = false; // audio thread: the next start of the transport continues where the song stopped
     std::atomic<float> masterGain { 1.0f };
     std::atomic<float> tuneA4 { 440.0f }; // project tuning, given to every Prisma
     std::atomic<int64_t> selectedTrackId { -1 };

@@ -31,14 +31,20 @@ enum : juce::CommandID
     renameItem,
     quantiseNotes,
     quantiseOptions,
+    splitClips,       // the commands below work in the Arrangement View
+    joinClips,
+    loopSelection,
+    removeTime,
 
     newTrack,
     newScene,
     captureScene,
     newClip,
     captureMidi,
+    addMarker,
 
     toggleBrowser,
+    toggleFollow,
     toggleDetail,
     toggleMixer,
     switchView,

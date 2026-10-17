@@ -75,14 +75,17 @@ int64_t PianoRoll::trackOfClip() const
     const auto c = clip();
     if (! c.isValid())
         return -1;
-    const auto slot = c.state.getParent(), slots = slot.getParent(), trackNode = slots.getParent();
+    // A slot clip sits in SLOT/SLOTS/TRACK, the content of an arrangement clip in ACLIP/ARRANGEMENT/TRACK.
+    const auto holder = c.state.getParent(), trackNode = holder.getParent().getParent();
     return (int64_t) (juce::int64) trackNode.getProperty (ids::id, -1);
 }
 
 int PianoRoll::sceneOfClip() const
 {
     const auto c = clip();
-    return c.isValid() ? c.state.getParent().getParent().indexOf (c.state.getParent()) : -1;
+    if (! c.isValid() || ! c.state.getParent().hasType (ids::SLOT))
+        return -1; // the content of an arrangement clip is in no slot
+    return c.state.getParent().getParent().indexOf (c.state.getParent());
 }
 
 juce::Colour PianoRoll::clipColour() const

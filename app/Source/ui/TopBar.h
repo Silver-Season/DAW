@@ -11,8 +11,8 @@ class SessionRecorder;
 namespace ui
 {
 // The 52 px bar on top of the window: logo, tempo, time signature, project scale, metronome, transport with record
-// and overdub, the "10 min" capture ribbon and its button, version, CPU. Elements that belong to later stages (loop,
-// morph) are drawn inactive so that the layout does not move when they arrive.
+// and overdub, the loop of the arrangement, follow-the-playhead and "Back to arrangement", the "10 min" capture ribbon
+// and its button, version, CPU. The morph slider belongs to a later stage and is drawn inactive.
 class TopBar final : public juce::Component
 {
 public:
@@ -59,13 +59,14 @@ private:
     ProjectModel& model;
 
     NumberField tempo;
-    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, capture, version, scaleButton;
+    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, follow, backToArrangement, capture, version, scaleButton;
     std::unique_ptr<FakeSlider> morph;
     std::unique_ptr<Tabs> tabs;
     std::unique_ptr<Lamp> midiLamp, keysLamp;
     std::unique_ptr<CpuMeter> cpu;
 
     juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea;
+    bool compact = false;
     void paintRibbon (juce::Graphics&);
     void updateRibbon();
     juce::String scaleText;

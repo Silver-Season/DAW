@@ -1,0 +1,681 @@
+#include "ArrangementLanes.h"
+
+#include "../Strings.h"
+#include "../engine/AudioEngine.h"
+#include "PaletteMenu.h"
+
+#include "daw/engine/Arrangement.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace ui
+{
+namespace
+{
+constexpr double kEpsilon = 1.0e-6;
+constexpr float kLanePad = 3.0f;
+
+juce::String shortcutText (juce::juce_wchar key, int modifiers = juce::ModifierKeys::commandModifier)
+{
+    return juce::KeyPress (key, modifiers, 0).getTextDescriptionWithIcons();
+}
+
+// A loop icon: a ring with an arrowhead, small enough for a clip corner.
+juce::Path loopMark (juce::Rectangle<float> a)
+{
+    return icons::loop (a);
+}
+} // namespace
+
+ArrangementLanes::ArrangementLanes (ArrangementView& v) : view (v)
+{
+    setOpaque (true);
+    setBufferedToImage (true); // the playhead repaints a thin strip over this; the clips are drawn only when they changed
+}
+
+//==============================================================================
+juce::Rectangle<float> ArrangementLanes::rectFor (int row, double start, double length) const
+{
+    const auto& r = view.layoutRows[(size_t) row];
+    const float x = (float) view.beatToX (start) + 0.5f;
+    const float w = juce::jmax (1.0f, (float) (length * view.v.pxPerBeat) - 1.5f);
+    return { x, (float) (r.y - view.v.scrollY) + kLanePad, w, (float) r.height - 2.0f * kLanePad };
+}
+
+juce::Rectangle<int> ArrangementLanes::clipBounds (int64_t aclipId) const
+{
+    const auto clip = arrangement::findClip (view.model, aclipId);
+    if (! clip.isValid())
+        return {};
+    const int row = view.rowIndexOfTrack (arrangement::trackOf (view.model, clip).id());
+    return row < 0 ? juce::Rectangle<int>() : rectFor (row, clip.start(), clip.length()).toNearestInt();
+}
+
+ArrangementLanes::Hit ArrangementLanes::clipHit (juce::Point<int> p) const
+{
+    Hit hit;
+    hit.row = view.rowAtY (p.y);
+    if (hit.row < 0)
+        return hit;
+    const auto track = view.model.findTrack (view.layoutRows[(size_t) hit.row].trackId);
+    for (const auto& c : track.arrangementClips())
+    {
+        const auto r = rectFor (hit.row, c.start(), c.length());
+        if (p.x < r.getX() - 1.0f || p.x > r.getRight() + 1.0f)
+            continue;
+        hit.clip = c;
+        const float edge = juce::jmin (6.0f, r.getWidth() / 3.0f);
+        hit.zone = p.x - r.getX() <= edge ? Zone::leftEdge : (r.getRight() - p.x <= edge ? Zone::rightEdge : Zone::body);
+        break;
+    }
+    return hit;
+}
+
+//==============================================================================
+void ArrangementLanes::paintGrid (juce::Graphics& g, juce::Rectangle<int> area) const
+{
+    const auto& t = theme();
+    const double px = view.v.pxPerBeat, bar = view.beatsPerBar();
+    const double from = view.xToBeat ((double) area.getX()), to = view.xToBeat ((double) area.getRight());
+    const double step = view.gridStep();
+    const int barStride = view.barLineStride();
+    const bool subdivisions = step * px >= 4.0;
+
+    const double first = std::floor (from / step) * step;
+    for (double beat = first; beat <= to + step; beat += step)
+    {
+        const double barPos = beat / bar;
+        const bool onBar = std::abs (barPos - std::round (barPos)) < 1.0e-6;
+        const bool onBeat = std::abs (beat - std::round (beat)) < 1.0e-6;
+        float alpha;
+        if (onBar)
+        {
+            if (((long long) std::llround (barPos)) % barStride != 0)
+                continue;
+            alpha = 0.95f;
+        }
+        else if (! subdivisions)
+            continue;
+        else
+            alpha = onBeat ? 0.5f : 0.22f;
+        const int x = juce::roundToInt (view.beatToX (beat));
+        g.setColour (t.line.withAlpha (alpha));
+        g.fillRect (x, area.getY(), 1, area.getHeight());
+    }
+}
+
+void ArrangementLanes::paintNotes (juce::Graphics& g, const ArrangementClipRef& c, juce::Rectangle<float> r, double clipStart, double clipLength,
+                                   double clipOffset, juce::Colour ink) const
+{
+    if (! c.clip().isValid() || r.getWidth() < 3.0f)
+        return;
+    const auto flat = daw::engine::flattenArrangementClip (c.clip().toMidiClip(), clipOffset, c.loop(), clipLength);
+    if (flat.notes.empty())
+        return;
+    int lowest = 127, highest = 0;
+    for (const auto& n : flat.notes)
+    {
+        lowest = std::min (lowest, n.pitch);
+        highest = std::max (highest, n.pitch);
+    }
+    const bool nameRow = r.getHeight() >= 34.0f;
+    const auto area = r.reduced (2.0f, 2.0f).withTrimmedTop (nameRow ? 15.0f : 1.0f);
+    const int span = std::max (highest - lowest, 7) + 1;
+    const float rowH = area.getHeight() / (float) span;
+    const float noteH = juce::jlimit (1.5f, 4.0f, rowH);
+    const bool narrow = r.getWidth() < 40.0f;
+    const auto clipBox = g.getClipBounds().toFloat();
+    g.setColour (ink.withAlpha (nameRow ? 0.6f : 0.45f));
+    const double px = view.v.pxPerBeat;
+    int drawn = 0;
+    (void) clipStart;
+    for (const auto& n : flat.notes)
+    {
+        const float x = r.getX() + 1.0f + (float) (n.start * px);
+        if (x > r.getRight() - 1.0f || x > clipBox.getRight())
+            break; // notes are sorted by start
+        const float w = juce::jmax (1.5f, (float) (n.length * px));
+        if (x + w < clipBox.getX())
+            continue;
+        const float xr = juce::jmin (x + w, r.getRight() - 1.0f);
+        const float y = area.getBottom() - ((float) (n.pitch - lowest) + 0.5f) * rowH - noteH * 0.5f;
+        if (narrow) // stripes: a clip this narrow only says "something plays here"
+            g.fillRect (x, area.getY(), 1.0f, area.getHeight());
+        else
+            g.fillRect (x, y, xr - x, noteH);
+        if (++drawn > 6000)
+            break;
+    }
+}
+
+void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c, juce::Rectangle<float> r, double clipStart, double clipLength,
+                                  double clipOffset, float alpha, bool selected, bool inSession, bool muted) const
+{
+    const auto& t = theme();
+    const float radius = juce::jmin (t.radius, 4.0f);
+    auto base = t.palette (c.clip().isValid() ? c.clip().colour() : 0);
+    if (inSession)
+        base = base.withMultipliedSaturation (0.15f).withMultipliedBrightness (0.8f);
+    const float a = alpha * (muted && ! inSession ? 0.55f : 1.0f);
+    g.setColour (base.withAlpha (a));
+    g.fillRoundedRectangle (r, radius);
+
+    {
+        juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (r.toNearestInt());
+        paintNotes (g, c, r, clipStart, clipLength, clipOffset, t.clipInk);
+
+        if (r.getWidth() > 26.0f)
+        {
+            g.setColour (t.clipInk.withAlpha (a));
+            g.setFont (t.uiFont (11.0f, 500));
+            const bool looping = c.loop() && c.clip().isValid() && clipLength > c.clip().lengthBeats() - c.clip().loopStart() + kEpsilon;
+            auto text = r.toNearestInt().withTrimmedLeft (6).withHeight (15).withTrimmedRight (looping ? 16 : 4);
+            g.drawText (c.clip().isValid() ? c.clip().name() : juce::String(), text, juce::Justification::centredLeft, true);
+            if (looping)
+            {
+                g.setColour (t.clipInk.withAlpha (0.8f * a));
+                g.fillPath (loopMark (juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ r.getRight() - 9.0f, r.getY() + 8.0f })));
+            }
+        }
+    }
+    if (selected)
+        strokeCell (g, r, t.text, 1.5f, 0.6f);
+}
+
+void ArrangementLanes::paint (juce::Graphics& g)
+{
+    const auto& t = theme();
+    const auto bounds = g.getClipBounds();
+    g.fillAll (t.background);
+
+    // lanes
+    for (size_t i = 0; i < view.layoutRows.size(); ++i)
+    {
+        const auto& row = view.layoutRows[i];
+        const int y = row.y - view.v.scrollY;
+        if (y + row.height < bounds.getY() || y > bounds.getBottom())
+            continue;
+        g.setColour (i % 2 == 0 ? t.panel : t.panel.interpolatedWith (t.background, 0.45f));
+        g.fillRect (0, y, getWidth(), row.height - 1);
+        g.setColour (t.line);
+        g.fillRect (0, y + row.height - 1, getWidth(), 1);
+    }
+    paintGrid (g, bounds);
+
+    // the loop of the arrangement tints the time under it
+    {
+        const auto& m = view.model;
+        const float x1 = (float) view.beatToX (m.arrangementLoopStart()), x2 = (float) view.beatToX (m.arrangementLoopEnd());
+        if (x2 >= (float) bounds.getX() && x1 <= (float) bounds.getRight())
+        {
+            const bool on = m.arrangementLoopOn();
+            g.setColour (t.accent.withAlpha (on ? 0.07f : 0.025f));
+            g.fillRect (x1, 0.0f, x2 - x1, (float) getHeight());
+            g.setColour (t.accent.withAlpha (on ? 0.5f : 0.18f));
+            g.fillRect (x1, 0.0f, 1.0f, (float) getHeight());
+            g.fillRect (x2 - 1.0f, 0.0f, 1.0f, (float) getHeight());
+        }
+    }
+
+    // time selection
+    if (! view.timeSel.isEmpty())
+    {
+        const float x1 = (float) view.beatToX (view.timeSel.start), x2 = (float) view.beatToX (view.timeSel.end);
+        for (const auto id : view.timeSel.tracks)
+        {
+            const int row = view.rowIndexOfTrack (id);
+            if (row < 0)
+                continue;
+            const auto& lane = view.layoutRows[(size_t) row];
+            const juce::Rectangle<float> sel (x1, (float) (lane.y - view.v.scrollY), x2 - x1, (float) lane.height - 1.0f);
+            g.setColour (t.accent.withAlpha (0.16f));
+            g.fillRect (sel);
+            g.setColour (t.accent.withAlpha (0.55f));
+            g.fillRect (sel.withWidth (1.0f));
+            g.fillRect (sel.withLeft (sel.getRight() - 1.0f));
+        }
+    }
+
+    // clips
+    const bool previewMove = gesture == Gesture::move && movedEnough;
+    for (size_t i = 0; i < view.layoutRows.size(); ++i)
+    {
+        const auto& lane = view.layoutRows[i];
+        const int y = lane.y - view.v.scrollY;
+        if (y + lane.height < bounds.getY() || y > bounds.getBottom())
+            continue;
+        const auto track = view.model.findTrack (lane.trackId);
+        auto* rt = view.engine.findRuntime (lane.trackId);
+        const bool inSession = rt != nullptr && rt->inSession.load();
+        for (const auto& c : track.arrangementClips())
+        {
+            double start = c.start(), length = c.length(), offset = c.offset();
+            // a stretch shows the new edges while the model still has the old ones
+            if (gesture == Gesture::resizeRight && c.id() == stretchClip)
+                length = juce::jmax (arrangement::kMinClipBeats, stretchValue - start);
+            else if (gesture == Gesture::resizeLeft && c.id() == stretchClip)
+            {
+                const double end = c.end();
+                offset += stretchValue - start;
+                start = stretchValue;
+                length = end - start;
+            }
+            const auto r = rectFor ((int) i, start, length);
+            if (r.getRight() < (float) bounds.getX() || r.getX() > (float) bounds.getRight())
+                continue;
+            const bool isDragged = previewMove && std::any_of (dragged.begin(), dragged.end(), [&] (const auto& d) { return d.clipId == c.id(); });
+            paintClip (g, c, r, start, length, offset, isDragged && ! copying ? 0.3f : 1.0f, view.isClipSelected (c.id()), inSession, track.mute());
+        }
+        if (inSession) // the grey bar over the lane: these clips do not sound until "Back to arrangement"
+        {
+            g.setColour (t.dimText.withAlpha (0.55f));
+            g.fillRect (0, y, getWidth(), 3);
+        }
+    }
+
+    // the clips being moved or copied, at their new place
+    if (previewMove)
+    {
+        for (const auto& d : dragged)
+        {
+            const auto c = arrangement::findClip (view.model, d.clipId);
+            const int row = view.rowIndexOfTrack (d.trackId) + deltaTracks;
+            if (! c.isValid() || row < 0 || row >= (int) view.layoutRows.size())
+                continue;
+            const auto r = rectFor (row, juce::jmax (0.0, d.start + deltaBeats), c.length());
+            paintClip (g, c, r, d.start + deltaBeats, c.length(), c.offset(), 0.78f, true, false, false);
+        }
+    }
+
+    // a session clip on its way in
+    if (view.drop.valid && view.drop.row >= 0 && view.drop.row < (int) view.layoutRows.size())
+    {
+        const auto r = rectFor (view.drop.row, view.drop.beat, juce::jmax (0.25, view.drop.length));
+        g.setColour (t.accent.withAlpha (0.25f));
+        g.fillRoundedRectangle (r, juce::jmin (t.radius, 4.0f));
+        strokeCell (g, r, t.accent, 1.5f, 0.6f);
+    }
+
+    if (view.layoutRows.empty())
+    {
+        g.setColour (t.dimText);
+        g.setFont (t.uiFont (13.0f));
+        g.drawText (Strings::arrangement::noTracks, getLocalBounds(), juce::Justification::centred, true);
+    }
+}
+
+//==============================================================================
+void ArrangementLanes::mouseMove (const juce::MouseEvent& e)
+{
+    const auto hit = clipHit (e.getPosition());
+    auto shape = juce::MouseCursor::NormalCursor;
+    if (hit.clip.isValid())
+        shape = hit.zone == Zone::body ? (e.mods.isAltDown() ? juce::MouseCursor::CopyingCursor : juce::MouseCursor::NormalCursor)
+                                        : juce::MouseCursor::LeftRightResizeCursor;
+    setMouseCursor (shape);
+}
+
+void ArrangementLanes::mouseDown (const juce::MouseEvent& e)
+{
+    view.takeFocus();
+    gesture = Gesture::none;
+    deltaBeats = 0.0;
+    deltaTracks = 0;
+    copying = false;
+    movedEnough = false;
+    pressedOnEmpty = false;
+    dragged.clear();
+
+    const auto hit = clipHit (e.getPosition());
+    if (e.mods.isPopupMenu())
+    {
+        if (hit.clip.isValid())
+        {
+            if (! view.isClipSelected (hit.clip.id()))
+                view.selectClip (hit.clip.id(), false);
+            showClipMenu (e.getScreenPosition());
+        }
+        else
+            showEmptyMenu (e.getScreenPosition(), view.snapBeat (view.xToBeat (e.x), false));
+        return;
+    }
+
+    if (hit.clip.isValid())
+    {
+        const auto id = hit.clip.id();
+        if (e.mods.isShiftDown())
+        {
+            view.selectClip (id, true);
+            return;
+        }
+        if (! view.isClipSelected (id))
+            view.selectClip (id, false);
+        else
+            view.selectionChanged(); // a click inside a selection keeps it and makes this clip the one the editor shows
+
+        const auto track = arrangement::trackOf (view.model, hit.clip);
+        switch (hit.zone)
+        {
+            case Zone::leftEdge:
+                gesture = Gesture::resizeLeft;
+                stretchClip = id;
+                stretchValue = hit.clip.start();
+                break;
+            case Zone::rightEdge:
+                gesture = Gesture::resizeRight;
+                stretchClip = id;
+                stretchValue = hit.clip.end();
+                break;
+            case Zone::none:
+            case Zone::body:
+                gesture = Gesture::move;
+                anchorClip = id;
+                anchorStart = hit.clip.start();
+                anchorRow = view.rowIndexOfTrack (track.id());
+                pointerBeatOffset = view.xToBeat (e.x) - hit.clip.start();
+                for (const auto& c : view.selectedClipRefs())
+                    dragged.push_back ({ c.id(), arrangement::trackOf (view.model, c).id(), c.start() });
+                break;
+        }
+        return;
+    }
+
+    // empty space: a drag selects time on the lanes it crosses; a click only moves the cursor
+    pressedOnEmpty = true;
+    gesture = Gesture::selectTime;
+    timeAnchor = view.snapBeat (view.xToBeat (e.x), e.mods.isCommandDown());
+    timeRowAnchor = hit.row;
+}
+
+void ArrangementLanes::updateMoveGesture (const juce::MouseEvent& e)
+{
+    const double wanted = view.xToBeat (e.x) - pointerBeatOffset;
+    double delta = view.snapBeat (wanted, e.mods.isCommandDown()) - anchorStart;
+    double earliest = dragged.front().start;
+    for (const auto& d : dragged)
+        earliest = std::min (earliest, d.start);
+    delta = juce::jmax (delta, -earliest);
+    deltaBeats = delta;
+
+    const int row = view.rowAtY (e.y);
+    if (row < 0)
+        return;
+    const int candidate = row - anchorRow;
+    bool ok = true;
+    for (const auto& d : dragged)
+    {
+        const int target = view.rowIndexOfTrack (d.trackId) + candidate;
+        if (target < 0 || target >= (int) view.layoutRows.size())
+        {
+            ok = false;
+            break;
+        }
+        const auto from = view.model.findTrack (d.trackId), to = view.model.findTrack (view.layoutRows[(size_t) target].trackId);
+        if (from.type() != to.type()) // a MIDI clip does not go to an audio lane
+            ok = false;
+    }
+    if (ok)
+        deltaTracks = candidate;
+}
+
+void ArrangementLanes::mouseDrag (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+        return;
+    switch (gesture)
+    {
+        case Gesture::move:
+            if (! movedEnough && e.getDistanceFromDragStart() < 4)
+                return;
+            movedEnough = true;
+            copying = e.mods.isAltDown();
+            updateMoveGesture (e);
+            setMouseCursor (copying ? juce::MouseCursor::CopyingCursor : juce::MouseCursor::DraggingHandCursor);
+            repaint();
+            break;
+        case Gesture::resizeRight:
+        case Gesture::resizeLeft:
+        {
+            if (! movedEnough && e.getDistanceFromDragStart() < 3)
+                return;
+            movedEnough = true;
+            const auto clip = arrangement::findClip (view.model, stretchClip);
+            if (! clip.isValid())
+                return;
+            const double beat = view.snapBeat (view.xToBeat (e.x), e.mods.isCommandDown());
+            stretchValue = gesture == Gesture::resizeRight ? juce::jmax (clip.start() + arrangement::kMinClipBeats, beat)
+                                                           : juce::jmin (clip.end() - arrangement::kMinClipBeats, beat);
+            repaint();
+            break;
+        }
+        case Gesture::selectTime:
+        {
+            if (! movedEnough && e.getDistanceFromDragStart() < 4)
+                return;
+            movedEnough = true;
+            if (timeRowAnchor < 0 || view.layoutRows.empty())
+                return;
+            int row = view.rowAtY (e.y);
+            if (row < 0)
+                row = e.y < 0 ? 0 : (int) view.layoutRows.size() - 1;
+            std::vector<int64_t> tracks;
+            for (int i = std::min (row, timeRowAnchor); i <= std::max (row, timeRowAnchor); ++i)
+                tracks.push_back (view.layoutRows[(size_t) i].trackId);
+            view.setTimeSelection (timeAnchor, view.snapBeat (view.xToBeat (e.x), e.mods.isCommandDown()), tracks);
+            break;
+        }
+        case Gesture::none: break;
+    }
+}
+
+void ArrangementLanes::mouseUp (const juce::MouseEvent& e)
+{
+    const auto finished = gesture;
+    gesture = Gesture::none;
+    setMouseCursor (juce::MouseCursor::NormalCursor);
+    if (e.mods.isPopupMenu())
+        return;
+    switch (finished)
+    {
+        case Gesture::move:
+            if (movedEnough)
+                view.commitMove (dragged, deltaBeats, deltaTracks, copying);
+            break;
+        case Gesture::resizeRight:
+            if (movedEnough)
+                view.commitResizeRight (stretchClip, stretchValue);
+            break;
+        case Gesture::resizeLeft:
+            if (movedEnough)
+                view.commitResizeLeft (stretchClip, stretchValue);
+            break;
+        case Gesture::selectTime:
+            if (! movedEnough)
+            {
+                view.clearSelection();
+                view.placeCursor (view.snapBeat (view.xToBeat (e.x), e.mods.isCommandDown()));
+            }
+            else if (! view.timeSel.isEmpty())
+                view.placeCursor (view.timeSel.start);
+            break;
+        case Gesture::none: break;
+    }
+    dragged.clear();
+    repaint();
+}
+
+void ArrangementLanes::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+        return;
+    const auto hit = clipHit (e.getPosition());
+    if (hit.clip.isValid())
+    {
+        if (view.onOpenClip)
+            view.onOpenClip (arrangement::trackOf (view.model, hit.clip).id(), hit.clip.id());
+        return;
+    }
+    if (hit.row >= 0)
+        view.drawClipAt (view.layoutRows[(size_t) hit.row].trackId, view.xToBeat (e.x));
+}
+
+void ArrangementLanes::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
+{
+    if (e.mods.isCommandDown())
+    {
+        view.zoomBy (w.deltaY > 0 ? 1.15 : 1.0 / 1.15, (double) e.x);
+        return;
+    }
+    if (e.mods.isAltDown())
+    {
+        const int row = view.rowAtY (e.y);
+        if (row >= 0)
+        {
+            const auto& lane = view.layoutRows[(size_t) row];
+            view.setTrackHeight (lane.trackId, lane.height + (w.deltaY > 0 ? 8 : -8), true);
+        }
+        return;
+    }
+    const bool horizontal = e.mods.isShiftDown() || std::abs (w.deltaX) > std::abs (w.deltaY);
+    const float d = horizontal ? (std::abs (w.deltaX) > 0.0f ? w.deltaX : w.deltaY) : w.deltaY;
+    if (horizontal)
+        view.setScrollBeats (view.v.scrollBeats - (double) d * 400.0 / view.v.pxPerBeat);
+    else
+        view.setScrollY (view.v.scrollY - juce::roundToInt (d * 300.0f));
+}
+
+void ArrangementLanes::mouseMagnify (const juce::MouseEvent& e, float scaleFactor)
+{
+    view.zoomBy ((double) scaleFactor, (double) e.x);
+}
+
+juce::String ArrangementLanes::helpAt (juce::Point<int> p) const
+{
+    const auto hit = clipHit (p);
+    if (hit.clip.isValid())
+        return hit.zone == Zone::body ? Strings::help::arrClip : (hit.zone == Zone::leftEdge ? Strings::help::arrClipLeftEdge : Strings::help::arrClipRightEdge);
+    return Strings::help::arrLanes;
+}
+
+//==============================================================================
+void ArrangementLanes::beginRenameClip (int64_t aclipId)
+{
+    const auto clip = arrangement::findClip (view.model, aclipId);
+    const auto bounds = clipBounds (aclipId);
+    if (! clip.isValid() || ! clip.clip().isValid() || bounds.isEmpty())
+        return;
+    renameEditor = std::make_unique<InlineEditor>();
+    renameEditor->setText (clip.clip().name(), false);
+    renameEditor->onCommit = [this, aclipId] (const juce::String& text) { finishRename (text, aclipId); };
+    renameEditor->onCancel = [this, aclipId] { finishRename ({}, aclipId); };
+    addAndMakeVisible (*renameEditor);
+    renameEditor->setBounds (bounds.withHeight (juce::jmin (22, bounds.getHeight())).withWidth (juce::jmax (120, bounds.getWidth())));
+    renameEditor->grabKeyboardFocus();
+    renameEditor->selectAll();
+}
+
+void ArrangementLanes::finishRename (const juce::String& text, int64_t aclipId)
+{
+    auto* dying = renameEditor.release();
+    removeChildComponent (dying);
+    juce::MessageManager::callAsync ([dying] { delete dying; });
+    if (text.isNotEmpty())
+        if (const auto clip = arrangement::findClip (view.model, aclipId); clip.isValid() && clip.clip().isValid())
+            view.actions.renameClipById (clip.clip().id(), text);
+    view.takeFocus();
+    repaint();
+}
+
+void ArrangementLanes::showClipMenu (juce::Point<int> screenPosition)
+{
+    namespace A = Strings::arrangement;
+    juce::PopupMenu menu;
+    const auto add = [&menu] (const juce::String& text, bool enabled, const juce::String& shortcut, std::function<void()> action) {
+        juce::PopupMenu::Item item (text);
+        item.setEnabled (enabled);
+        item.shortcutKeyDescription = shortcut;
+        item.action = std::move (action);
+        menu.addItem (std::move (item));
+    };
+    const auto selected = view.selectedClipRefs();
+    const bool one = selected.size() == 1;
+    const juce::Component::SafePointer<ArrangementLanes> safe (this);
+    add (A::menuOpen, one, {}, [safe] {
+        if (safe == nullptr || safe->view.selectedAClips.size() != 1)
+            return;
+        const auto c = arrangement::findClip (safe->view.model, safe->view.selectedAClips.front());
+        if (c.isValid() && safe->view.onOpenClip)
+            safe->view.onOpenClip (arrangement::trackOf (safe->view.model, c).id(), c.id());
+    });
+    add (A::menuRename, one, shortcutText ('r'), [safe] {
+        if (safe != nullptr)
+            safe->view.renameSelection();
+    });
+    const int current = one && selected.front().clip().isValid() ? selected.front().clip().colour() : -1;
+    menu.addSubMenu (Strings::menu::colour, makePaletteMenu (current, [safe] (int index) {
+        if (safe == nullptr)
+            return;
+        safe->view.model.undo.beginNewTransaction (Strings::undoClipColour);
+        for (const auto& c : safe->view.selectedClipRefs())
+            if (c.clip().isValid())
+                c.clip().setColour (juce::jlimit (0, 15, index), &safe->view.model.undo);
+    }));
+    menu.addSeparator();
+    add (A::menuDuplicate, true, shortcutText ('d'), [safe] {
+        if (safe != nullptr)
+            safe->view.duplicateSelection();
+    });
+    add (A::menuSplit, true, shortcutText ('e'), [safe] {
+        if (safe != nullptr)
+            safe->view.splitAtCursor();
+    });
+    add (A::menuJoin, selected.size() >= 2, shortcutText ('j'), [safe] {
+        if (safe != nullptr)
+            safe->view.joinSelection();
+    });
+    add (A::menuLoopSelection, true, shortcutText ('l'), [safe] {
+        if (safe != nullptr)
+            safe->view.loopSelection();
+    });
+    menu.addSeparator();
+    add (A::menuSendToSession, true, {}, [safe] {
+        if (safe != nullptr)
+            safe->view.sendSelectionToSession();
+    });
+    add (Strings::menu::remove, true, juce::KeyPress (juce::KeyPress::deleteKey).getTextDescriptionWithIcons(), [safe] {
+        if (safe != nullptr)
+            safe->view.deleteSelection();
+    });
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (juce::Rectangle<int> (screenPosition.x, screenPosition.y, 1, 1)));
+}
+
+void ArrangementLanes::showEmptyMenu (juce::Point<int> screenPosition, double beat)
+{
+    namespace A = Strings::arrangement;
+    juce::PopupMenu menu;
+    const juce::Component::SafePointer<ArrangementLanes> safe (this);
+    const int row = view.rowAtY (getLocalPoint (nullptr, screenPosition).y);
+    const auto trackId = row >= 0 ? view.layoutRows[(size_t) row].trackId : -1;
+    menu.addItem (A::menuNewClip, trackId >= 0, false, [safe, trackId, beat] {
+        if (safe != nullptr)
+            safe->view.drawClipAt (trackId, beat);
+    });
+    juce::PopupMenu::Item paste (A::menuPaste);
+    paste.setEnabled (view.hasClipboard());
+    paste.shortcutKeyDescription = shortcutText ('v');
+    paste.action = [safe, beat] {
+        if (safe == nullptr)
+            return;
+        safe->view.placeCursor (beat);
+        safe->view.pasteAtCursor();
+    };
+    menu.addItem (std::move (paste));
+    menu.addItem (A::menuSelectAll, true, false, [safe] {
+        if (safe != nullptr)
+            safe->view.selectAllClips();
+    });
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (juce::Rectangle<int> (screenPosition.x, screenPosition.y, 1, 1)));
+}
+} // namespace ui

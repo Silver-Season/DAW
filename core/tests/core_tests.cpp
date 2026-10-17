@@ -4,6 +4,7 @@
 #include "daw/dsp/Envelope.h"
 #include "daw/dsp/Wavetable.h"
 #include "daw/dsp/WavetableOscillator.h"
+#include "daw/engine/Arrangement.h"
 #include "daw/engine/Capture.h"
 #include "daw/engine/Clip.h"
 #include "daw/engine/Recording.h"
@@ -17,6 +18,7 @@
 #include <complex>
 #include <cstdio>
 #include <functional>
+#include <memory>
 #include <numbers>
 #include <set>
 #include <string>
@@ -833,6 +835,267 @@ int main()
             check (! capturePhrase (ev, 3, (int64_t) (11.0 * sr), sr, 4.0, 120.0).ok, "events that went to another track are not taken");
             check (capturePhrase (ev, 7, (int64_t) (11.0 * sr), sr, 4.0, 120.0).ok, "the target track's own events are");
         }
+    });
+
+
+    //==========================================================================
+    // Stage 3, tasks 3.1 and 3.2: arrangement playback and the song clock of the transport
+    test ("arrangement: a 1-bar clip in a 4-bar arrangement clip repeats four times; offset shifts the content", [] {
+        auto clip = std::make_shared<engine::MidiClip>();
+        clip->lengthBeats = 4;
+        clip->notes.push_back ({ 0.0, 1.0, 60, 100 });
+        clip->notes.push_back ({ 2.0, 1.0, 64, 100 });
+
+        engine::ArrangementClips clips;
+        clips.push_back ({ 8.0, 24.0, 0.0, true, clip }); // 4 bars at beat 8
+        const double spb = 24000.0;                       // 120 BPM at 48 kHz
+
+        std::vector<MidiEvent> all;
+        const auto renderRange = [&] (const engine::ArrangementClips& c, double from, double to) {
+            all.clear();
+            for (double a = from; a < to - 1e-9; a += 1.0) // blocks of one beat, offsets made absolute
+            {
+                std::vector<MidiEvent> out;
+                engine::renderArrangement (c, a, a + 1.0, spb, (int) spb, out);
+                for (auto e : out)
+                {
+                    e.sampleOffset += (int) std::llround ((a - from) * spb);
+                    all.push_back (e);
+                }
+            }
+        };
+        const auto countOns = [&] (int pitch) {
+            int n = 0;
+            for (auto& e : all)
+                n += (e.status & 0xF0) == 0x90 && e.data1 == pitch;
+            return n;
+        };
+        const auto firstOn = [&] (int pitch) {
+            for (auto& e : all)
+                if ((e.status & 0xF0) == 0x90 && e.data1 == pitch)
+                    return e.sampleOffset;
+            return -1;
+        };
+
+        renderRange (clips, 0.0, 40.0);
+        check (countOns (60) == 4 && countOns (64) == 4, "four repeats of the one-bar clip, got " + std::to_string (countOns (60)));
+        check (firstOn (60) == (int) (8.0 * spb), "the first note sounds at the start of the arrangement clip");
+        int offs = 0;
+        for (auto& e : all)
+            offs += (e.status & 0xF0) == 0x80;
+        check (offs == 8, "every note-on has a note-off");
+
+        clips[0].loop = false;
+        renderRange (clips, 0.0, 40.0);
+        check (countOns (60) == 1, "with the loop off the content plays once");
+
+        clips[0].loop = true;
+        clips[0].offsetBeats = 2.0; // the clip starts at its beat 2
+        renderRange (clips, 0.0, 40.0);
+        check (firstOn (64) == (int) (8.0 * spb), "offset 2: the note at beat 2 of the clip now sounds first");
+        check (firstOn (60) == (int) (10.0 * spb), "offset 2: the note at beat 0 comes after the clip wrapped");
+        check (countOns (64) == 4 && countOns (60) == 4, "offset 2: four of each in 16 beats (2 + 4 + 4 + 4 + 2)");
+
+        // The note that is still sounding when the arrangement clip ends is cut off exactly there.
+        clips[0].endBeat = 8.5;
+        clips[0].offsetBeats = 0.0;
+        renderRange (clips, 0.0, 12.0);
+        int lastOff = -1;
+        for (auto& e : all)
+            if ((e.status & 0xF0) == 0x80 && e.data1 == 60)
+                lastOff = e.sampleOffset;
+        check (countOns (60) == 1 && lastOff >= (int) (8.5 * spb) - 1 && lastOff <= (int) (8.5 * spb), "the note is closed at the end of the arrangement clip");
+
+        // Same, with the end exactly at a block boundary and with the end inside a block
+        for (double endBeat : { 9.0, 8.5, 8.25 })
+        {
+            clips[0].endBeat = endBeat;
+            renderRange (clips, 0.0, 12.0);
+            int ons = 0, off = 0;
+            for (auto& e : all)
+            {
+                ons += (e.status & 0xF0) == 0x90;
+                off += (e.status & 0xF0) == 0x80;
+            }
+            check (ons == off && ons == 1, "no hanging note for an end at beat " + std::to_string (endBeat));
+        }
+    });
+
+    test ("arrangement player: a jump releases the notes and chases the one under the new position", [] {
+        auto pad = std::make_shared<engine::MidiClip>();
+        pad->lengthBeats = 16;
+        pad->notes.push_back ({ 0.0, 16.0, 48, 90 }); // a four-bar pad
+        pad->notes.push_back ({ 8.0, 0.5, 72, 100 });
+
+        engine::ArrangementClips clips;
+        clips.push_back ({ 0.0, 16.0, 0.0, true, pad });
+        const double spb = 24000.0;
+        const int n = 512;
+
+        engine::ArrangementPlayer player;
+        std::vector<MidiEvent> out;
+        player.process (clips, 0.0, n / spb, spb, 0, n, out);
+        check (out.size() == 1 && (out[0].status & 0xF0) == 0x90 && out[0].data1 == 48 && out[0].sampleOffset == 0, "playing from the start: the pad starts at sample 0");
+        out.clear();
+        player.process (clips, n / spb, 2 * n / spb, spb, 0, n, out);
+        check (out.empty(), "the next block continues without events");
+
+        // seek into the middle of the pad
+        out.clear();
+        player.process (clips, 5.25, 5.25 + n / spb, spb, 0, n, out);
+        int ons = 0, offs = 0, offFirst = 0;
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            ons += (out[i].status & 0xF0) == 0x90 && out[i].data1 == 48 && out[i].sampleOffset == 0;
+            offs += (out[i].status & 0xF0) == 0x80 && out[i].data1 == 48;
+            offFirst += (out[i].status & 0xF0) == 0x80 && i == 0;
+        }
+        check (ons == 1, "after the seek the pad gets a note-on in the first block");
+        check (offs == 1 && offFirst == 1, "and the old note is released before it");
+        check (player.hasHeldNotes(), "the pad is tracked as held");
+
+        // A note that starts exactly at the new position sounds once
+        out.clear();
+        player.process (clips, 8.0, 8.0 + n / spb, spb, 0, n, out);
+        int sevenTwo = 0;
+        for (auto& e : out)
+            sevenTwo += (e.status & 0xF0) == 0x90 && e.data1 == 72;
+        check (sevenTwo == 1, "a note that begins at the seek position sounds once");
+
+        // Seek to a place that is past the end of the clip: nothing sounds, the pad is released
+        out.clear();
+        player.process (clips, 20.0, 20.0 + n / spb, spb, 0, n, out);
+        bool allOff = ! out.empty();
+        for (auto& e : out)
+            allOff = allOff && (e.status & 0xF0) == 0x80;
+        check (allOff && ! player.hasHeldNotes(), "a jump behind the last clip only releases");
+
+        // Running through the end of the clip closes the pad exactly there
+        player.invalidate();
+        out.clear();
+        player.process (clips, 15.99, 16.01, spb, 100, 960, out);
+        int padOff = -1;
+        for (auto& e : out)
+            if ((e.status & 0xF0) == 0x80 && e.data1 == 48)
+                padOff = e.sampleOffset;
+        check (padOff == 100 + 240 - 1 || padOff == 100 + 240, "the pad is closed at the end of the clip (offset " + std::to_string (padOff) + ")");
+        check (! player.hasHeldNotes(), "nothing is held afterwards");
+
+        // A note that ends exactly where the seek lands does not sound
+        auto shortNote = std::make_shared<engine::MidiClip>();
+        shortNote->lengthBeats = 4;
+        shortNote->notes.push_back ({ 0.0, 2.0, 60, 100 });
+        engine::ArrangementClips c2;
+        c2.push_back ({ 0.0, 4.0, 0.0, true, shortNote });
+        engine::ArrangementPlayer p2;
+        out.clear();
+        p2.process (c2, 2.0, 2.0 + n / spb, spb, 0, n, out);
+        bool anyOn = false;
+        for (auto& e : out)
+            anyOn = anyOn || (e.status & 0xF0) == 0x90;
+        check (! anyOn, "no chase for a note that ends at the position");
+    });
+
+    test ("transport: the song loop jumps at the exact sample and the windows add up to the block", [] {
+        engine::Transport t;
+        t.prepare (48000.0);
+        t.setTempo (120.0);
+        t.setLoop (0.0, 16.0, true); // 4 bars: the jump is at sample 384 000
+        t.play();
+
+        const int block = 1100; // 384 000 = 349 * 1100 + 100
+        int64_t blockStart = 0;
+        bool found = false;
+        for (int b = 0; b < 400; ++b)
+        {
+            const auto blk = t.advance (block);
+            int total = 0;
+            for (int w = 0; w < blk.numWindows; ++w)
+                total += blk.windows[w].numSamples;
+            check (total == block, "the windows add up to the block (block " + std::to_string (b) + ")");
+            if (blk.numWindows == 2)
+            {
+                found = true;
+                check (blockStart + blk.windows[1].sampleOffset == 384000, "the jump is at sample 384000, got " + std::to_string (blockStart + blk.windows[1].sampleOffset));
+                check (blk.windows[0].numSamples == 100 && blk.windows[1].sampleOffset == 100, "the first window is 100 samples long");
+                check (std::abs (blk.windows[0].endBeat - 16.0) < 1e-9 && blk.windows[1].startBeat == 0.0, "the song goes from 16 to 0");
+                check (blk.startBeat > 15.9 && blk.endBeat > 16.0, "the monotonic clock does not jump");
+                break;
+            }
+            blockStart += block;
+        }
+        check (found, "a block with two windows was found");
+
+        // The second lap jumps exactly one lap later, too
+        int64_t second = -1;
+        int64_t pos = blockStart + block;
+        for (int b = 0; b < 400 && second < 0; ++b, pos += block)
+        {
+            const auto blk = t.advance (block);
+            if (blk.numWindows == 2)
+                second = pos + blk.windows[1].sampleOffset;
+        }
+        check (second == 768000, "the next jump comes exactly 384000 samples later, got " + std::to_string (second));
+
+        // Loop off: the song just runs on
+        t.setLoop (0.0, 16.0, false);
+        const auto blk = t.advance (block);
+        check (blk.numWindows == 1 && blk.windows[0].numSamples == block, "without a loop there is one window");
+    });
+
+    test ("transport: song start, seek, scheduled seek, continue and stop", [] {
+        engine::Transport t;
+        t.prepare (48000.0);
+        t.setTempo (120.0);
+        t.setSongStart (8.0);
+        check (! t.isPlaying() && t.advance (480).numWindows == 0, "a stopped transport has no windows");
+        t.play();
+        auto b = t.advance (480);
+        check (b.numWindows == 1 && b.windows[0].startBeat == 8.0 && b.startBeat == 0.0, "the song starts at the song start, the monotonic clock at 0");
+        for (int i = 0; i < 49; ++i)
+            t.advance (480); // 50 blocks = 24000 samples = 1 beat
+        check (std::abs (t.getSongPositionBeats() - 9.0) < 1e-9 && std::abs (t.getPositionBeats() - 1.0) < 1e-9, "one beat later: song 9, monotonic 1");
+
+        t.seekSong (2.0);
+        b = t.advance (480);
+        check (b.windows[0].startBeat == 2.0 && std::abs (b.startBeat - 1.0) < 1e-9, "seek moves the song but not the monotonic clock");
+
+        // a seek at the monotonic beat 2.0 = sample 48000; the transport has played 24480 samples so far
+        t.scheduleSeek (2.0, 32.0);
+        int64_t at = -1;
+        int64_t pos = 24000 + 480;
+        for (int i = 0; i < 100 && at < 0; ++i, pos += 500)
+        {
+            const auto blk = t.advance (500);
+            if (blk.numWindows == 2)
+            {
+                at = pos + blk.windows[1].sampleOffset;
+                check (blk.windows[1].startBeat == 32.0, "the scheduled seek lands on its target");
+            }
+        }
+        check (at == 48000, "the scheduled seek happens at sample 48000 of the monotonic clock, got " + std::to_string (at));
+
+        const double where = t.getSongPositionBeats();
+        t.stop();
+        check (! t.isPlaying() && std::abs (t.getSongPositionBeats() - where) < 1e-9 && t.getPositionBeats() == 0.0, "stop keeps the song position, resets the monotonic clock");
+        t.play (true);
+        check (std::abs (t.advance (480).windows[0].startBeat - where) < 1e-9, "continue starts where the song stopped");
+        t.stop();
+        t.play();
+        check (t.advance (480).windows[0].startBeat == 8.0, "a normal start goes to the song start");
+
+        // count-in: the song runs from song start - count-in to the song start while the monotonic clock goes -4 .. 0
+        t.stop();
+        t.startAt (-4.0);
+        t.play();
+        b = t.advance (480);
+        check (b.startBeat == -4.0 && b.windows[0].startBeat == 4.0, "count-in: monotonic -4, song 4 (song start 8 minus 4)");
+        t.stop();
+        check (t.getSongPositionBeats() == 8.0, "stopping during the count-in leaves the song at the song start");
+
+        // a loop shorter than the minimum is ignored
+        t.setLoop (0.0, 0.1, true);
+        check (! t.isLoopOn(), "a loop shorter than a quarter beat is ignored");
     });
 
     std::printf ("\n%d checks, %d failures\n", checks, failures);

@@ -134,4 +134,6 @@ void runProjectTests();
 void runBrowserTests();
 void runEditorTests();
 void runRecordingTests();
+void runArrangementTests();
+void runArrangementUiTests();
 } // namespace tests

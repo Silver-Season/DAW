@@ -40,6 +40,9 @@ public:
     bool copyClip (int64_t trackId, int scene); // to the clipboard, not an edit
     bool cutClip (int64_t trackId, int scene);
     bool pasteClip (int64_t trackId, int scene);
+    // The same two for any clip found by id, also the content of an arrangement clip (the clip editor uses these).
+    void renameClipById (int64_t clipId, const juce::String& name);
+    void setClipColourById (int64_t clipId, int paletteIndex);
     bool hasClipboard() const { return clipboard.isValid(); }
 
     // Scenes

@@ -1,5 +1,7 @@
 #include "DemoProject.h"
 
+#include "model/ArrangementEdit.h"
+
 #include "../../plugins/prisma/Source/PrismaProcessor.h"
 
 #include "daw/engine/DemoContent.h"
@@ -86,6 +88,29 @@ void populateDemoProject (ProjectModel& model)
         if (juce::String (s.name) == "Lead")
             track.setArm (true, um); // like phase 0: the lead is armed for playing
     }
+
+    // The scenes laid out on the timeline as a short song (the Arrangement View has something to show): the clips of a
+    // scene play for the whole section, repeating their loop.
+    struct Section
+    {
+        int scene;
+        double startBeat, lengthBeats;
+        const char* marker;
+    };
+    const Section song[] { { 0, 0.0, 32.0, "Интро" }, { 1, 32.0, 32.0, "Дроп" }, { 2, 64.0, 16.0, "Брейк" }, { 1, 80.0, 32.0, "Финал" } };
+    for (const auto& section : song)
+    {
+        for (const auto& track : model.tracks())
+        {
+            const auto source = track.clipAt (section.scene);
+            if (! source.isValid())
+                continue;
+            auto a = arrangement::addSlotClip (model, track, source, section.startBeat);
+            arrangement::resizeRight (model, a, section.startBeat + section.lengthBeats);
+        }
+        arrangement::addMarker (model, section.startBeat, juce::String::fromUTF8 (section.marker));
+    }
+    model.setArrangementLoop (32.0, 64.0, false);
 
     model.setTempo (124.0);
     model.setSelectedTrack (model.trackAt (3).id());

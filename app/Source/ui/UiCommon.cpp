@@ -39,6 +39,24 @@ juce::Path loop (juce::Rectangle<float> a)
     return p;
 }
 
+juce::Path follow (juce::Rectangle<float> a)
+{
+    juce::Path p;
+    p.addRectangle (a.getX() + a.getWidth() * 0.62f, a.getY(), 1.8f, a.getHeight());
+    p.addTriangle (a.getX(), a.getY() + a.getHeight() * 0.2f, a.getX(), a.getBottom() - a.getHeight() * 0.2f, a.getX() + a.getWidth() * 0.5f, a.getCentreY());
+    return p;
+}
+
+juce::Path backToArrangement (juce::Rectangle<float> a)
+{
+    // a bar on the left, an arrow running back to it
+    juce::Path p;
+    p.addRectangle (a.getX(), a.getY(), 1.8f, a.getHeight());
+    p.addTriangle (a.getX() + 3.0f, a.getCentreY(), a.getX() + a.getWidth() * 0.5f, a.getY() + 1.0f, a.getX() + a.getWidth() * 0.5f, a.getBottom() - 1.0f);
+    p.addRectangle (a.getX() + a.getWidth() * 0.5f - 0.5f, a.getCentreY() - 1.0f, a.getWidth() * 0.5f + 0.5f, 2.0f);
+    return p;
+}
+
 juce::Path metronome (juce::Rectangle<float> a)
 {
     // A trapezoid body with a pendulum.

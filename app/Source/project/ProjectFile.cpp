@@ -8,9 +8,19 @@ using daw::project::VersionKind;
 
 const std::vector<Migration>& migrations()
 {
-    // migrateFrom1To2, migrateFrom2To3 ... are appended here when the schema changes. Existing files keep
-    // opening because the loader walks this list from the version stored in the file up to the current one.
-    static const std::vector<Migration> steps;
+    // Step N -> N+1 is appended here when the schema changes. Existing files keep opening because the loader walks this
+    // list from the version stored in the file up to the current one.
+    static const std::vector<Migration> steps {
+        // 1 -> 2 (stage 3): every track has an ARRANGEMENT and the project has MARKERS. The arrangement properties of the
+        // project have defaults, so a version 1 file needs nothing else.
+        [] (juce::ValueTree& tree) {
+            if (! tree.getChildWithName (ids::MARKERS).isValid())
+                tree.appendChild (juce::ValueTree (ids::MARKERS), nullptr);
+            for (auto track : tree.getChildWithName (ids::TRACKS))
+                if (! track.getChildWithName (ids::ARRANGEMENT).isValid())
+                    track.appendChild (juce::ValueTree (ids::ARRANGEMENT), nullptr);
+        }
+    };
     return steps;
 }
 

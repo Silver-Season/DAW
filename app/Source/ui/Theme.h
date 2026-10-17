@@ -14,6 +14,9 @@ struct Theme
 
     juce::String id, name;
     juce::Colour background, chrome, panel, panel2, line, text, dimText, accent, accent2, record, play, clipInk;
+    // Orange of "Back to arrangement" and other attention marks. Optional in a theme file: a user theme without it gets
+    // an orange taken from its own clip saturation and lightness.
+    juce::Colour warning;
     float clipSaturation = 0.78f; // 0..1
     float clipLightness = 0.62f;  // 0..1
     std::array<float, kPaletteSize> hues {}; // degrees

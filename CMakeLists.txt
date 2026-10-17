@@ -59,6 +59,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ClipEdit.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ArrangementEdit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectFile.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/RecoveryCheck.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectSession.cpp
@@ -74,6 +75,12 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/EditCommands.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ComputerKeys.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/TransportMenus.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementView.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementLanes.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementRuler.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementHeaders.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementMinimap.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementPlayhead.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioEngine.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/Metronome.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/SessionRecorder.cpp
@@ -98,6 +105,8 @@ if(DAW_BUILD_JUCE)
             tests/BrowserTests.cpp
             tests/EditorTests.cpp
             tests/RecordingTests.cpp
+            tests/ArrangementTests.cpp
+            tests/ArrangementUiTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0

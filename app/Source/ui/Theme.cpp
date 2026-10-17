@@ -124,6 +124,19 @@ bool Theme::fromJson (const juce::String& json, Theme& result, juce::String& err
         *colours[i] = juce::Colour (0xff000000u | (juce::uint32) text.getHexValue32());
     }
 
+    if (obj->hasProperty ("warning"))
+    {
+        const auto text = obj->getProperty ("warning").toString().trimCharactersAtStart ("#");
+        if (text.length() != 6 || ! text.containsOnly ("0123456789abcdefABCDEF"))
+        {
+            error = "bad colour in token warning: " + text;
+            return false;
+        }
+        t.warning = juce::Colour (0xff000000u | (juce::uint32) text.getHexValue32());
+    }
+    else
+        t.warning = juce::Colour::fromHSL (30.0f / 360.0f, 0.9f, juce::jlimit (0.5f, 0.62f, (float) (double) obj->getProperty ("clipLightness") / 100.0f), 1.0f);
+
     for (const char* key : { "clipSaturation", "clipLightness", "glow", "radius", "scanlines", "fontUi", "fontNum", "hues" })
         if (! need (key))
             return false;

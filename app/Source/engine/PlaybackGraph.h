@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "daw/engine/Arrangement.h"
 #include "daw/engine/Clip.h"
 
 #include <array>
@@ -53,6 +54,11 @@ struct TrackRuntime
     std::atomic<int> playingSlot { -1 }, queuedSlot { -1 };
     std::atomic<double> playingStartBeat { 0.0 }; // lets the UI draw the progress bar of the playing clip
 
+    // The track plays its Session View clips instead of its Arrangement: a session clip was launched or the track's stop
+    // button was pressed (docs/spec/03-arrangement.md, "Session against arrangement"). Its arrangement clips are silent
+    // until "Back to arrangement". Written by the audio thread only; the UI reads it (grey bar over the clips).
+    std::atomic<bool> inSession { false };
+
     // Recording (docs/spec/02, task 2.2). Written by the audio thread when it handles a record command and as the
     // transport passes the start and end beats; the recorder on the message thread reads them (and sets the state
     // back to idle once it has taken a finished recording). The state is stored last, so a reader that sees a state
@@ -72,6 +78,10 @@ struct TrackRuntime
 
     // audio thread only
     daw::engine::ClipPlayer player;
+    daw::engine::ArrangementPlayer arrangement;
+    uint64_t arrangementSignature = 0;  // of the arrangement the player has seen; a different one means the clips changed
+    bool backPending = false;           // "Back to arrangement" waits for its quantisation boundary
+    double backBeat = 0.0;              // that boundary, on the monotonic clock
     juce::AudioBuffer<float> buffer;
     juce::MidiBuffer midi, fxMidi;
     std::vector<daw::MidiEvent> events;
@@ -113,6 +123,8 @@ struct PlaybackGraph
         TrackRuntime* runtime = nullptr;
         std::vector<DeviceInstance*> chain;                              // first: instrument, then effects
         std::vector<std::shared_ptr<const daw::engine::MidiClip>> slots; // by scene, nullptr = empty
+        daw::engine::ArrangementClips arrangement; // sorted by start, not overlapping
+        uint64_t arrangementSignature = 0;          // identifies the clips and their content; 0 = no arrangement clips
     };
     std::vector<Track> tracks;
     std::vector<DeviceInstance*> masterChain;
@@ -137,7 +149,12 @@ struct EngineCommand
         stopAll,
         startRecord,   // trackId, sceneIndex: record into that slot
         stopRecord,    // trackId
-        launchAligned  // trackId, sceneIndex, beat: play the clip as if it had been launched at `beat`
+        launchAligned, // trackId, sceneIndex, beat: play the clip as if it had been launched at `beat`
+        resumeContinue, // like resume, but the song continues where it stopped instead of at the play start
+        seek,           // beat: the song position jumps there now
+        seekQuantised,  // beat: the song position jumps there at the next launch-quantisation boundary (now if stopped)
+        rewind,         // the song position goes to 0
+        backToArrangement // stops the session clips and gives every track back to the arrangement at the next boundary
     };
 
     Type type = Type::stopAll;
