@@ -249,6 +249,7 @@ private:
     std::atomic<bool> playing { false }, stopRequested { false };
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };
     std::atomic<float> masterGain { 1.0f };
+    std::atomic<float> tuneA4 { 440.0f }; // project tuning, given to every Prisma
     std::atomic<int64_t> selectedTrackId { -1 };
     std::atomic<uint32_t> hardwareMidiCount { 0 };
 

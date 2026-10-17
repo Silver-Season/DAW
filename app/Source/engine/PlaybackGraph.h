@@ -5,6 +5,7 @@
 
 #include "daw/engine/Clip.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -45,6 +46,7 @@ struct TrackRuntime
     std::atomic<float> volumeGain { 1.0f }, pan { 0.0f };
     std::atomic<bool> mute { false }, solo { false }, arm { false };
     std::atomic<int> inputMode { (int) TrackInputMode::allMidi };
+    std::atomic<int> transpose { 0 }; // semitones added to every note that reaches the instrument
 
     // written by the audio thread, read by the UI timer
     std::atomic<float> meterL { 0.0f }, meterR { 0.0f };
@@ -58,6 +60,10 @@ struct TrackRuntime
     std::vector<daw::MidiEvent> events;
     float lastGainL = 0.0f, lastGainR = 0.0f;
     int resumeSlot = -1; // the clip that played when the transport was stopped; Play starts it again
+    // The note a pitch was sounded as (transposed + 1, 0 = nothing, kDropped = out of range) so that its note-off
+    // finds it even if the transposition changed in between. One map for the clips, one for live playing.
+    static constexpr uint8_t kDropped = 255;
+    std::array<uint8_t, 128> clipSounding {}, liveSounding {};
 };
 
 // A plugin or Prisma. Survives graph rebuilds; only a change of the device itself replaces it.

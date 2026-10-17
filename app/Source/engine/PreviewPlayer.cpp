@@ -16,6 +16,7 @@ void PreviewPlayer::prepareVoice (Voice& v)
 {
     if (v.synth == nullptr)
         v.synth = std::make_unique<PrismaProcessor>();
+    v.synth->setTuneA4 (tuneHz);
     v.synth->setRateAndBufferSizeDetails (sampleRate, maxBlock);
     v.synth->prepareToPlay (sampleRate, maxBlock);
     v.buffer.setSize (2, maxBlock, false, true, false);
@@ -161,4 +162,12 @@ void PreviewPlayer::renderVoice (Voice& v, juce::AudioBuffer<float>& out, int nu
         if (v.tailLeft <= 0.0 || v.synth->getNumActiveVoices() == 0)
             v.running = false;
     }
+}
+
+void PreviewPlayer::setTuneA4 (float hz)
+{
+    tuneHz = hz;
+    for (auto& v : voices)
+        if (v.synth != nullptr)
+            v.synth->setTuneA4 (hz);
 }

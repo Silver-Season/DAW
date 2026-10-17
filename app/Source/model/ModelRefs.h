@@ -48,26 +48,51 @@ public:
 
     juce::String name() const { return get<juce::String> (ids::name, {}); }
     int colour() const { return get<int> (ids::colour, 0); }
+    // The end of the clip, which is also the end of its loop brace.
     double lengthBeats() const { return get<double> (ids::lengthBeats, 4.0); }
     double loopStart() const { return get<double> (ids::loopStart, 0.0); }
-    double loopEnd() const { return get<double> (ids::loopEnd, 4.0); }
+    double loopEnd() const { return lengthBeats(); }
     double startOffset() const { return get<double> (ids::startOffset, 0.0); }
+    bool loopEnabled() const { return get<bool> (ids::loop, true); }
+    // "Own scale": off = the clip shows the scale of the project and follows it; on = the clip's own scale below.
+    bool ownScale() const { return get<bool> (ids::ownScale, false); }
+    int scaleRoot() const { return get<int> (ids::scaleRoot, 0); }
+    juce::String scaleMode() const { return get<juce::String> (ids::scaleMode, {}); }
 
     void setName (const juce::String& v, juce::UndoManager* um) const { set (ids::name, v, um); }
     void setColour (int v, juce::UndoManager* um) const { set (ids::colour, v, um); }
-    void setLengthBeats (double v, juce::UndoManager* um) const { set (ids::lengthBeats, v, um); }
+    void setLengthBeats (double v, juce::UndoManager* um) const
+    {
+        set (ids::lengthBeats, v, um);
+        set (ids::loopEnd, v, um);
+    }
     void setLoopStart (double v, juce::UndoManager* um) const { set (ids::loopStart, v, um); }
-    void setLoopEnd (double v, juce::UndoManager* um) const { set (ids::loopEnd, v, um); }
+    void setLoopEnd (double v, juce::UndoManager* um) const { setLengthBeats (v, um); }
     void setStartOffset (double v, juce::UndoManager* um) const { set (ids::startOffset, v, um); }
+    void setLoopEnabled (bool v, juce::UndoManager* um) const { set (ids::loop, v, um); }
+    void setOwnScale (bool v, juce::UndoManager* um) const { set (ids::ownScale, v, um); }
+    void setScale (int root, const juce::String& mode, juce::UndoManager* um) const
+    {
+        set (ids::scaleRoot, root, um);
+        set (ids::scaleMode, mode, um);
+    }
 
     // Notes are kept sorted by start, then pitch. Callers never sort.
     int numNotes() const { return state.getNumChildren(); }
     daw::engine::Note note (int index) const;
     std::vector<daw::engine::Note> notes() const;
-    void addNote (const daw::engine::Note&, juce::UndoManager*) const;
+    // Returns the new NOTE node: a handle that stays valid while the note is moved, resized or re-sorted.
+    juce::ValueTree addNote (const daw::engine::Note&, juce::UndoManager*) const;
     void removeNote (int index, juce::UndoManager*) const;
     void updateNote (int index, const daw::engine::Note&, juce::UndoManager*) const; // re-sorts if needed
     void setNotes (const std::vector<daw::engine::Note>&, juce::UndoManager*) const;
+
+    // The same through NOTE nodes, which do not change identity when the note moves. A gesture that drags
+    // notes updates the nodes in place, so a selection (a list of nodes) survives the sorting.
+    static daw::engine::Note readNote (const juce::ValueTree& noteNode);
+    bool hasNote (const juce::ValueTree& noteNode) const { return noteNode.isValid() && noteNode.getParent() == state; }
+    void updateNote (const juce::ValueTree& noteNode, const daw::engine::Note&, juce::UndoManager*) const;
+    void removeNote (const juce::ValueTree& noteNode, juce::UndoManager*) const;
 };
 
 //==============================================================================
@@ -134,6 +159,8 @@ public:
     juce::String monitor() const { return get<juce::String> (ids::monitor, "auto"); }
     juce::String recordSource() const { return get<juce::String> (ids::recordSource, "midi"); }
     int width() const { return get<int> (ids::width, 120); }
+    // Semitones added to every note that reaches the instrument, live ones included (-48..+48).
+    int transpose() const { return get<int> (ids::transpose, 0); }
 
     void setName (const juce::String& v, juce::UndoManager* um) const { set (ids::name, v, um); }
     void setColour (int v, juce::UndoManager* um) const { set (ids::colour, v, um); }
@@ -146,6 +173,7 @@ public:
     void setMonitor (const juce::String& v, juce::UndoManager* um) const { set (ids::monitor, v, um); }
     void setRecordSource (const juce::String& v, juce::UndoManager* um) const { set (ids::recordSource, v, um); }
     void setWidth (int v, juce::UndoManager* um) const { set (ids::width, v, um); }
+    void setTranspose (int v, juce::UndoManager* um) const { set (ids::transpose, v, um); }
 
     juce::ValueTree devicesNode() const { return state.getChildWithName (ids::DEVICES); }
     juce::ValueTree slotsNode() const { return state.getChildWithName (ids::SLOTS); }

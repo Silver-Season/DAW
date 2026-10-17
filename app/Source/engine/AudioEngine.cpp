@@ -410,6 +410,54 @@ void processChain (const std::vector<DeviceInstance*>& chain, juce::AudioBuffer<
 }
 } // namespace
 
+namespace
+{
+// Adds a message to `dest`, moving notes by `semitones`. `sounding` remembers what each pitch was played as,
+// so a note-off ends the note that began even if the transposition was changed while it was held.
+void addTransposed (juce::MidiBuffer& dest, const uint8_t* data, int size, int offset, int semitones, std::array<uint8_t, 128>& sounding)
+{
+    if (size != 3)
+    {
+        dest.addEvent (data, size, offset);
+        return;
+    }
+    const int type = data[0] & 0xF0;
+    const int note = data[1] & 0x7F;
+    const bool noteOn = type == 0x90 && data[2] > 0;
+    const bool noteOff = type == 0x80 || (type == 0x90 && data[2] == 0);
+    if (! noteOn && ! noteOff && type != 0xA0)
+    {
+        dest.addEvent (data, size, offset);
+        return;
+    }
+
+    int target = note + semitones;
+    if (noteOn)
+    {
+        const bool inRange = target >= 0 && target <= 127;
+        sounding[(size_t) note] = inRange ? (uint8_t) (target + 1) : TrackRuntime::kDropped;
+        if (! inRange)
+            return;
+    }
+    else if (const uint8_t mapped = sounding[(size_t) note]; mapped != 0)
+    {
+        if (mapped == TrackRuntime::kDropped)
+        {
+            if (noteOff)
+                sounding[(size_t) note] = 0;
+            return;
+        }
+        target = mapped - 1;
+        if (noteOff)
+            sounding[(size_t) note] = 0;
+    }
+    if (target < 0 || target > 127)
+        return;
+    const uint8_t out[3] { data[0], (uint8_t) target, data[2] };
+    dest.addEvent (out, 3, offset);
+}
+} // namespace
+
 void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine::Transport::Block& block, double spb, int numSamples,
                                bool killNotes, bool anySolo, bool anyArmed)
 {
@@ -425,25 +473,34 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
 
     rt.midi.clear();
     if (killNotes)
+    {
         for (int ch = 1; ch <= 16; ++ch)
             rt.midi.addEvent (juce::MidiMessage::allNotesOff (ch), 0);
+        rt.clipSounding.fill (0);
+        rt.liveSounding.fill (0);
+    }
+    const int semitones = rt.transpose.load (std::memory_order_relaxed);
     for (const auto& e : rt.events)
     {
         const uint8_t bytes[3] { e.status, e.data1, e.data2 };
-        rt.midi.addEvent (bytes, 3, e.sampleOffset);
+        addTransposed (rt.midi, bytes, 3, e.sampleOffset, semitones, rt.clipSounding);
     }
 
     // Live MIDI goes to armed tracks; with no armed track the selected one is armed automatically.
     const bool armed = rt.arm.load() || (! anyArmed && rt.trackId == selectedTrackId.load());
+    const auto addLive = [&] (const juce::MidiBuffer& source) {
+        for (const auto meta : source)
+            addTransposed (rt.midi, meta.data, meta.numBytes, meta.samplePosition, semitones, rt.liveSounding);
+    };
     if (armed)
         switch ((TrackInputMode) rt.inputMode.load())
         {
             case TrackInputMode::allMidi:
-                rt.midi.addEvents (hardwareMidi, 0, numSamples, 0);
-                rt.midi.addEvents (keyboardMidi, 0, numSamples, 0);
+                addLive (hardwareMidi);
+                addLive (keyboardMidi);
                 break;
-            case TrackInputMode::keyboard: rt.midi.addEvents (keyboardMidi, 0, numSamples, 0); break;
-            case TrackInputMode::midiDevice: rt.midi.addEvents (hardwareMidi, 0, numSamples, 0); break;
+            case TrackInputMode::keyboard: addLive (keyboardMidi); break;
+            case TrackInputMode::midiDevice: addLive (hardwareMidi); break;
             case TrackInputMode::none: break;
         }
 

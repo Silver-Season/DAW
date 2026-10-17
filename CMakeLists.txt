@@ -58,6 +58,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ClipEdit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectFile.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/RecoveryCheck.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectSession.cpp
@@ -91,6 +92,7 @@ if(DAW_BUILD_JUCE)
             tests/UiTests.cpp
             tests/ProjectTests.cpp
             tests/BrowserTests.cpp
+            tests/EditorTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0

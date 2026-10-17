@@ -23,15 +23,19 @@ juce::ValueTree makeNoteNode (const daw::engine::Note& n)
 }
 } // namespace
 
-daw::engine::Note ClipRef::note (int index) const
+daw::engine::Note ClipRef::readNote (const juce::ValueTree& n)
 {
-    const auto n = state.getChild (index);
     daw::engine::Note out;
     out.start = (double) n.getProperty (ids::start, 0.0);
     out.length = (double) n.getProperty (ids::length, 1.0);
     out.pitch = (int) n.getProperty (ids::pitch, 60);
     out.velocity = (int) n.getProperty (ids::velocity, 100);
     return out;
+}
+
+daw::engine::Note ClipRef::note (int index) const
+{
+    return readNote (state.getChild (index));
 }
 
 std::vector<daw::engine::Note> ClipRef::notes() const
@@ -43,13 +47,46 @@ std::vector<daw::engine::Note> ClipRef::notes() const
     return out;
 }
 
-void ClipRef::addNote (const daw::engine::Note& n, juce::UndoManager* um) const
+juce::ValueTree ClipRef::addNote (const daw::engine::Note& n, juce::UndoManager* um) const
 {
     // After the last note that is not after `n`, so equal notes keep insertion order.
     int index = numNotes();
     while (index > 0 && noteBefore (n, note (index - 1)))
         --index;
-    state.addChild (makeNoteNode (n), index, um);
+    auto node = makeNoteNode (n);
+    state.addChild (node, index, um);
+    return node;
+}
+
+void ClipRef::updateNote (const juce::ValueTree& noteNode, const daw::engine::Note& n, juce::UndoManager* um) const
+{
+    if (! hasNote (noteNode))
+        return;
+    auto node = noteNode; // a handle to the same node
+    const auto old = readNote (node);
+    if (! juce::exactlyEqual (old.start, n.start))
+        node.setProperty (ids::start, n.start, um);
+    if (! juce::exactlyEqual (old.length, n.length))
+        node.setProperty (ids::length, n.length, um);
+    if (old.pitch != n.pitch)
+        node.setProperty (ids::pitch, n.pitch, um);
+    if (old.velocity != n.velocity)
+        node.setProperty (ids::velocity, n.velocity, um);
+
+    // The other notes are sorted, so the node belongs after every one of them that is not after it.
+    const int current = state.indexOf (node);
+    int target = 0;
+    for (int i = 0; i < numNotes(); ++i)
+        if (i != current && ! noteBefore (n, note (i)))
+            ++target;
+    if (target != current)
+        state.moveChild (current, target, um);
+}
+
+void ClipRef::removeNote (const juce::ValueTree& node, juce::UndoManager* um) const
+{
+    if (hasNote (node))
+        state.removeChild (node, um);
 }
 
 void ClipRef::removeNote (int index, juce::UndoManager* um) const

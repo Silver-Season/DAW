@@ -28,6 +28,8 @@ public:
     void playFactoryProgram (int program);
     void playState (const void* data, int size);
     void stop(); // fades whatever plays out
+    // The project's tuning, so that a preset sounds in the pitch it will have on a track.
+    void setTuneA4 (float hz);
     void setGainDb (float db) { gain.store (db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db)); }
 
     // Audio thread: adds the preview to `out` (2 channels).
@@ -65,6 +67,7 @@ private:
     double sampleRate = 44100.0;
     int maxBlock = 512;
     float lastUserGain = 0.0f;
+    float tuneHz = 440.0f;
 
     int idleVoice = 0;                  // message thread: the voice the next phrase goes to
     std::atomic<int> requestedVoice { -1 }; // -1: nothing / stop

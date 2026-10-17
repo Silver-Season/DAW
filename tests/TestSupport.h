@@ -132,4 +132,5 @@ void runHostingTests();
 void runUiTests();
 void runProjectTests();
 void runBrowserTests();
+void runEditorTests();
 } // namespace tests
