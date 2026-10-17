@@ -1,11 +1,13 @@
 // Tests for the sinc interpolator and the audio analysis helpers (loopback latency, phrase detection, peaks).
 #include "daw/dsp/SincInterpolator.h"
 #include "daw/engine/AudioAnalysis.h"
+#include "daw/engine/Clip.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <memory>
 #include <numbers>
 #include <random>
 #include <string>
@@ -185,6 +187,146 @@ int main()
                "min/max pairs including the partial block");
         engine::computePeaks (ramp.data(), 0, 4, out);
         check (out.empty(), "empty input");
+    });
+
+
+    //==========================================================================
+    // Audio clips (task 5.2)
+    const auto makeSource = [] (double rate, int64_t frames, const std::function<float (int64_t)>& fn, int64_t publishUpTo = -1) {
+        auto src = std::make_shared<engine::AudioSource> (1, frames, rate);
+        for (int64_t i = 0; i < frames; ++i)
+            src->left[(size_t) i] = fn (i);
+        src->publish (publishUpTo < 0 ? frames : publishUpTo);
+        return src;
+    };
+    const auto makeClip = [] (std::shared_ptr<engine::AudioSource> src, double lengthBeats) {
+        engine::MidiClip clip;
+        clip.lengthBeats = lengthBeats;
+        clip.loop = true;
+        auto part = std::make_shared<engine::AudioPart>();
+        part->source = std::move (src);
+        clip.audio = part;
+        return clip;
+    };
+    // Renders like the engine does in Session View: block after block, the elapsed beats counted from the launch.
+    const auto renderBlocks = [] (const engine::MidiClip& clip, double entry, double spb, double rate, int total, int block,
+                                  engine::AudioRenderStats& stats) {
+        std::vector<float> l ((size_t) total, 0.0f), r ((size_t) total, 0.0f);
+        for (int pos = 0; pos < total; pos += block)
+        {
+            const int n = std::min (block, total - pos);
+            engine::renderAudioClip (clip, entry, clip.loop, (double) pos / spb, spb, rate, {}, l.data() + pos, r.data() + pos, n, stats);
+        }
+        return l;
+    };
+    const auto maxStep = [] (const std::vector<float>& x, size_t from, size_t to) {
+        float m = 0.0f;
+        for (size_t i = std::max<size_t> (from, 1); i < std::min (to, x.size()); ++i)
+            m = std::max (m, std::abs (x[i] - x[i - 1]));
+        return m;
+    };
+    const auto zeroCrossings = [] (const std::vector<float>& x, size_t from, size_t to) {
+        int n = 0;
+        for (size_t i = from + 1; i < to; ++i)
+            if ((x[i - 1] < 0.0f) != (x[i] < 0.0f))
+                ++n;
+        return n;
+    };
+
+    test ("audio clip: a one-bar sine loops eight times without a click at the seam", [&] {
+        const double rate = 48000.0, spb = rate * 60.0 / 120.0; // 120 BPM: a bar is 96000 frames, 2000 periods of 1 kHz
+        auto src = makeSource (rate, 96000, [rate] (int64_t i) { return 0.5f * (float) std::sin (2.0 * std::numbers::pi * 1000.0 * (double) i / rate); });
+        const auto clip = makeClip (src, 4.0);
+        engine::AudioRenderStats stats;
+        const auto out = renderBlocks (clip, 0.0, spb, rate, 8 * 96000, 512, stats);
+        const float inside = maxStep (out, 1000, 90000);
+        float seams = 0.0f;
+        for (int k = 1; k < 8; ++k)
+            seams = std::max (seams, maxStep (out, (size_t) (k * 96000 - 200), (size_t) (k * 96000 + 200)));
+        check (inside > 0.01f && seams <= inside * 1.5f, "seam step " + std::to_string (seams) + " vs inside " + std::to_string (inside));
+        check (std::abs (out[(size_t) (7 * 96000 + 200)] - src->left[200]) < 1.0e-6f, "the eighth pass plays the file exactly");
+        check (stats.missedFrames == 0, "no misses");
+    });
+
+    test ("audio clip: a loop that does not fit the period is crossfaded", [&] {
+        const double rate = 48000.0, spb = rate * 60.0 / 120.0;
+        // 441 Hz over half a bar: the seam lands in the middle of a period; audio before the brace start exists
+        auto src = makeSource (rate, 96000, [rate] (int64_t i) { return 0.5f * (float) std::sin (2.0 * std::numbers::pi * 441.0 * (double) i / rate); });
+        auto clip = makeClip (src, 4.0);
+        clip.loopStart = 2.0;
+        engine::AudioRenderStats stats;
+        const auto out = renderBlocks (clip, 0.0, spb, rate, 4 * 96000, 480, stats);
+        const float inside = maxStep (out, 1000, 90000);
+        float seams = 0.0f;
+        for (int k = 1; k < 7; ++k)
+            seams = std::max (seams, maxStep (out, (size_t) (96000 + k * 48000 - 200), (size_t) (96000 + k * 48000 + 200)));
+        check (seams <= inside * 1.5f, "crossfaded seam " + std::to_string (seams) + " vs inside " + std::to_string (inside));
+    });
+
+    test ("audio clip: without audio before the brace the seam fades out and in", [&] {
+        const double rate = 48000.0, spb = rate * 60.0 / 120.0;
+        auto src = makeSource (rate, 48000, [] (int64_t) { return 0.5f; });
+        const auto clip = makeClip (src, 2.0);
+        engine::AudioRenderStats stats;
+        const auto out = renderBlocks (clip, 0.0, spb, rate, 3 * 48000, 512, stats);
+        check (maxStep (out, 47000, 49000) < 0.05f, "no jump at the seam");
+        check (std::abs (out[48000 + 2000] - 0.5f) < 1.0e-6f, "full level after the fade in");
+    });
+
+    test ("audio clip: sample rate and transposition by resampling", [&] {
+        const double fileRate = 44100.0, rate = 48000.0, spb = rate * 60.0 / 120.0;
+        auto src = makeSource (fileRate, 88200, [fileRate] (int64_t i) { return 0.5f * (float) std::sin (2.0 * std::numbers::pi * 1000.0 * (double) i / fileRate); });
+        auto clip = makeClip (src, 4.0);
+        clip.loop = false;
+        engine::AudioRenderStats stats;
+        auto out = renderBlocks (clip, 0.0, spb, rate, 48000, 512, stats);
+        const int zc = zeroCrossings (out, 0, 48000); // one second: 2000 crossings at 1 kHz
+        check (std::abs (zc - 2000) <= 2, "a 44.1 kHz file plays at its pitch at 48 kHz: " + std::to_string (zc));
+
+        auto part = std::make_shared<engine::AudioPart> (*clip.audio);
+        part->pitchRatio = 2.0;
+        clip.audio = part;
+        out = renderBlocks (clip, 0.0, spb, rate, 24000, 512, stats);
+        const int zc2 = zeroCrossings (out, 0, 24000);
+        check (std::abs (zc2 - 2000) <= 2, "+12 semitones doubles the frequency: " + std::to_string (zc2));
+    });
+
+    test ("audio clip: one-shot ends, misses are counted, reverse and fades", [&] {
+        const double rate = 48000.0, spb = rate * 60.0 / 120.0;
+        auto src = makeSource (rate, 48000, [] (int64_t i) { return (float) i / 48000.0f; }, 24000);
+        auto clip = makeClip (src, 2.0);
+        clip.loop = false;
+        engine::AudioRenderStats stats;
+        auto out = renderBlocks (clip, 0.0, spb, rate, 60000, 512, stats);
+        check (stats.missedFrames == 24000, "frames not loaded yet are counted: " + std::to_string (stats.missedFrames));
+        check (out[30000] == 0.0f && out[50000] == 0.0f, "unloaded frames and the end of a one-shot are silent");
+        check (std::abs (out[1000] - 1000.0f / 48000.0f) < 1.0e-6f, "loaded frames play");
+
+        src->publish (48000);
+        auto part = std::make_shared<engine::AudioPart> (*clip.audio);
+        part->reverse = true;
+        clip.audio = part;
+        out = renderBlocks (clip, 0.0, spb, rate, 48000, 512, stats);
+        check (out[100] > 0.99f && out[47000] < 0.03f, "reverse plays from the end");
+
+        part = std::make_shared<engine::AudioPart> (*clip.audio);
+        part->reverse = false;
+        clip.audio = part;
+        std::vector<float> l (48000, 0.0f), r (48000, 0.0f);
+        engine::AudioFades fades;
+        fades.fadeIn = 0.5;
+        fades.fadeOut = 0.5;
+        fades.length = 2.0;
+        engine::renderAudioClip (clip, 0.0, false, 0.0, spb, rate, fades, l.data(), r.data(), 48000, stats);
+        check (l[0] == 0.0f && l[47999] < 0.01f && std::abs (l[24000] - 0.5f) < 1.0e-6f, "fades in and out");
+    });
+
+    test ("tempo in file names", [] {
+        check (engine::tempoFromFileName ("Drums_124bpm.wav") == 124.0, "_124bpm");
+        check (engine::tempoFromFileName ("loop 90 BPM.aif") == 90.0, "90 BPM");
+        check (engine::tempoFromFileName ("bass-128-bpm-Am.wav") == 128.0, "-128-bpm");
+        check (engine::tempoFromFileName ("kick.wav") == 0.0, "none");
+        check (engine::tempoFromFileName ("take2bpm.wav") == 0.0, "not part of a word / out of range");
     });
 
     std::printf ("\n%d checks, %d failures\n", checks, failures);

@@ -10,7 +10,7 @@
 class ProjectModel
 {
 public:
-    static constexpr int kSchemaVersion = 2; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3)
+    static constexpr int kSchemaVersion = 3; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3); 3: AUDIOFILES (stage 5)
     static constexpr int kMaxUndoTransactions = 500;
 
     juce::ValueTree root;
@@ -202,6 +202,25 @@ public:
     void moveClip (int64_t fromTrack, int fromScene, int64_t toTrack, int toScene, bool copy);
     // Finds a clip of a slot or the content of an arrangement clip by its CLIP id.
     ClipRef findClip (int64_t id) const;
+
+    //==========================================================================
+    // Audio (docs/spec/05-audio-recording.md, task 5.1). The pool of sound files and the audio clips that play them.
+    juce::ValueTree audioFilesNode() const { return root.getChildWithName (ids::AUDIOFILES); }
+    AudioFileRef findAudioFile (int64_t id) const;
+    AudioFileRef findAudioFileByHash (const juce::String& hash) const;
+    struct AudioFileInfo
+    {
+        juce::String path, absPath, name, hash;
+        double sampleRate = 44100.0, tempo = 0.0;
+        int channels = 2;
+        juce::int64 lengthSamples = 0;
+    };
+    // Adds a FILE to the pool (undoable, in the caller's transaction) and returns it.
+    AudioFileRef addAudioFile (const AudioFileInfo&);
+    // A new audio clip in a slot, replacing what is there: it plays the whole file from its start, looped, `lengthBeats` long.
+    ClipRef createAudioClip (const TrackRef&, int scene, int64_t fileId, double lengthBeats, const juce::String& name);
+    // The CLIP node of a new audio clip, not yet in the tree (for arrangement clips and recordings).
+    juce::ValueTree makeAudioClipNode (const TrackRef&, int64_t fileId, double lengthBeats, const juce::String& name);
 
     //==========================================================================
     // Devices. The first device of a track is its instrument, the rest are effects.

@@ -45,6 +45,7 @@ juce::ValueTree ProjectModel::createEmptyTree()
     p.appendChild (juce::ValueTree (ids::SCENES), nullptr);
     p.appendChild (juce::ValueTree (ids::MARKERS), nullptr);
     p.appendChild (juce::ValueTree (ids::SNAPSHOTS), nullptr);
+    p.appendChild (juce::ValueTree (ids::AUDIOFILES), nullptr);
     return p;
 }
 
@@ -66,6 +67,7 @@ void ProjectModel::normalise (juce::ValueTree& p)
     auto scenes = ensure (ids::SCENES);
     ensure (ids::MARKERS);
     ensure (ids::SNAPSHOTS);
+    ensure (ids::AUDIOFILES);
 
     const int numScenes = scenes.getNumChildren();
     for (auto track : p.getChildWithName (ids::TRACKS))
@@ -211,9 +213,10 @@ TrackRef ProjectModel::addTrack (const juce::String& type, int insertIndex)
     t.setProperty (ids::mute, false, nullptr);
     t.setProperty (ids::solo, false, nullptr);
     t.setProperty (ids::arm, false, nullptr);
-    t.setProperty (ids::input, "all-midi", nullptr);
+    const bool audio = type == "audio";
+    t.setProperty (ids::input, audio ? "audio:0-1" : "all-midi", nullptr);
     t.setProperty (ids::monitor, "auto", nullptr);
-    t.setProperty (ids::recordSource, "midi", nullptr);
+    t.setProperty (ids::recordSource, audio ? "audio" : "midi", nullptr);
     t.setProperty (ids::width, 120, nullptr);
 
     t.appendChild (juce::ValueTree (ids::DEVICES), nullptr);
@@ -314,6 +317,77 @@ ClipRef ProjectModel::createClip (const TrackRef& track, int scene, double lengt
     slot.removeAllChildren (&undo);
     slot.appendChild (c, &undo);
     return ClipRef (c);
+}
+
+juce::ValueTree ProjectModel::makeAudioClipNode (const TrackRef& track, int64_t fileId, double lengthBeats, const juce::String& name)
+{
+    juce::ValueTree c (ids::CLIP);
+    c.setProperty (ids::id, (juce::int64) newId(), nullptr);
+    c.setProperty (ids::name, name.isEmpty() ? Strings::defaultClipName : name, nullptr);
+    c.setProperty (ids::colour, track.colour(), nullptr);
+    c.setProperty (ids::lengthBeats, lengthBeats, nullptr);
+    c.setProperty (ids::loopStart, 0.0, nullptr);
+    c.setProperty (ids::loopEnd, lengthBeats, nullptr);
+    c.setProperty (ids::startOffset, 0.0, nullptr);
+    c.setProperty (ids::loop, true, nullptr);
+    c.setProperty (ids::file, (juce::int64) fileId, nullptr);
+    c.setProperty (ids::sampleStart, 0.0, nullptr);
+    c.setProperty (ids::gainDb, 0.0, nullptr);
+    c.setProperty (ids::transpose, 0, nullptr);
+    c.setProperty (ids::warp, false, nullptr); // stage 7
+    return c;
+}
+
+ClipRef ProjectModel::createAudioClip (const TrackRef& track, int scene, int64_t fileId, double lengthBeats, const juce::String& name)
+{
+    auto slot = track.slotsNode().getChild (scene);
+    jassert (slot.isValid());
+    if (! slot.isValid())
+        return {};
+    auto c = makeAudioClipNode (track, fileId, lengthBeats, name);
+    slot.removeAllChildren (&undo);
+    slot.appendChild (c, &undo);
+    return ClipRef (c);
+}
+
+AudioFileRef ProjectModel::findAudioFile (int64_t id) const
+{
+    for (const auto& f : audioFilesNode())
+        if ((int64_t) (juce::int64) f.getProperty (ids::id, -1) == id)
+            return AudioFileRef (f);
+    return {};
+}
+
+AudioFileRef ProjectModel::findAudioFileByHash (const juce::String& hash) const
+{
+    if (hash.isNotEmpty())
+        for (const auto& f : audioFilesNode())
+            if (f.getProperty (ids::hash).toString() == hash)
+                return AudioFileRef (f);
+    return {};
+}
+
+AudioFileRef ProjectModel::addAudioFile (const AudioFileInfo& info)
+{
+    juce::ValueTree f (ids::FILE);
+    f.setProperty (ids::id, (juce::int64) newId(), nullptr);
+    f.setProperty (ids::name, info.name, nullptr);
+    f.setProperty (ids::path, info.path, nullptr);
+    f.setProperty (ids::absPath, info.absPath, nullptr);
+    f.setProperty (ids::sampleRate, info.sampleRate, nullptr);
+    f.setProperty (ids::channels, info.channels, nullptr);
+    f.setProperty (ids::lengthSamples, info.lengthSamples, nullptr);
+    f.setProperty (ids::hash, info.hash, nullptr);
+    if (info.tempo > 0.0)
+        f.setProperty (ids::tempo, info.tempo, nullptr);
+    auto pool = audioFilesNode();
+    if (! pool.isValid())
+    {
+        pool = juce::ValueTree (ids::AUDIOFILES);
+        root.appendChild (pool, &undo);
+    }
+    pool.appendChild (f, &undo);
+    return AudioFileRef (f);
 }
 
 ClipRef ProjectModel::setClip (const TrackRef& track, int scene, const ClipRef& source)

@@ -91,6 +91,8 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/EngineGraph.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RtCheck.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PreviewPlayer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioFilePool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/AudioImport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaEditor.cpp)
 
@@ -112,9 +114,10 @@ if(DAW_BUILD_JUCE)
             tests/ArrangementTests.cpp
             tests/ArrangementUiTests.cpp
             tests/ArrangementRecordingTests.cpp
+            tests/AudioTests.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
-            JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+            JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1
             DAW_RT_CHECKS=1 JUCE_MODAL_LOOPS_PERMITTED=1
             # the VST3 built from plugins/prisma in this same build, hosted by the hosting test
             DAW_TEST_VST3_DIR="${CMAKE_BINARY_DIR}/plugins/prisma/Prisma_artefacts/$<CONFIG>/VST3")

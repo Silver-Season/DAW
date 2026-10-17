@@ -52,6 +52,17 @@ uint64_t hashClip (const ClipRef& clip)
         h.add (c.data1);
         h.add (c.data2);
     }
+    if (clip.isAudio())
+    {
+        h.add (clip.fileId());
+        h.add (clip.sampleStart());
+        h.add (clip.gainDb());
+        h.add (clip.transpose());
+        h.add (clip.detune());
+        h.add (clip.reverse());
+        h.add (clip.fadeIn());
+        h.add (clip.fadeOut());
+    }
     return h.h;
 }
 
@@ -245,8 +256,41 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
             applyProjectProperties();
         }
     }
+    else if (type == ids::FILE)
+        graphDirty = true; // a lost file was found again: its clips get the new source
     else if (type == ids::ACLIP || type == ids::CLIP || type == ids::NOTE || type == ids::CC || type == ids::BEND || type == ids::PRESSURE)
         graphDirty = true;
+}
+
+//==============================================================================
+void AudioEngine::setProjectFolder (const juce::File& folder)
+{
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    if (folder == projectFolder)
+        return;
+    projectFolder = folder;
+    graphDirty = true; // relative paths may point elsewhere now
+}
+
+juce::File AudioEngine::resolveAudioFile (const AudioFileRef& f) const
+{
+    if (! f.isValid())
+        return {};
+    if (f.path().isNotEmpty() && projectFolder != juce::File())
+        if (const auto inside = projectFolder.getChildFile (f.path()); inside.existsAsFile())
+            return inside;
+    if (f.absPath().isNotEmpty() && juce::File::isAbsolutePath (f.absPath()))
+        return juce::File (f.absPath());
+    return projectFolder != juce::File() && f.path().isNotEmpty() ? projectFolder.getChildFile (f.path()) : juce::File();
+}
+
+std::shared_ptr<daw::engine::AudioSource> AudioEngine::audioSourceFor (int64_t fileId)
+{
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    if (model == nullptr)
+        return nullptr;
+    const auto file = resolveAudioFile (model->findAudioFile (fileId));
+    return file != juce::File() ? audioPool.acquire (file) : nullptr;
 }
 
 //==============================================================================
@@ -414,7 +458,14 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
 {
     const auto id = clip.id();
     used.insert (id);
-    const auto hash = hashClip (clip);
+    auto hash = hashClip (clip);
+    std::shared_ptr<daw::engine::AudioSource> source;
+    if (clip.isAudio())
+    {
+        source = audioSourceFor (clip.fileId());
+        const auto p = reinterpret_cast<uintptr_t> (source.get());
+        hash ^= (uint64_t) p * 0x9E3779B97F4A7C15ULL; // a relinked or reloaded file is another clip
+    }
 
     auto& entry = clipCache[id];
     if (entry.clip == nullptr || entry.hash != hash)
@@ -429,6 +480,20 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
         c->loop = clip.loopEnabled();
         c->notes = clip.notes();
         c->controllers = clip.controllers();
+        if (clip.isAudio())
+        {
+            auto part = std::make_shared<daw::engine::AudioPart>();
+            part->source = source;
+            part->sampleStart = clip.sampleStart();
+            part->gain = clip.gainDb() <= -70.0 ? 0.0f : juce::Decibels::decibelsToGain ((float) clip.gainDb());
+            part->pitchRatio = clip.pitchRatio();
+            part->reverse = clip.reverse();
+            part->fadeIn = clip.fadeIn();
+            part->fadeOut = clip.fadeOut();
+            c->audio = std::move (part);
+            c->notes.clear(); // an audio clip has no notes, whatever a hand-edited file says
+            c->controllers.clear();
+        }
         entry.clip = std::move (c);
         entry.hash = hash;
     }
@@ -469,6 +534,7 @@ void AudioEngine::rebuildGraph()
 
         PlaybackGraph::Track gt;
         gt.runtime = slot.get();
+        gt.audio = track.isAudio();
         for (const auto& device : track.devices())
             gt.chain.push_back (acquireDevice (device, usedDevices)); // nullptr keeps the position of a device without an instance
         for (int scene = 0; scene < track.numSlots(); ++scene)

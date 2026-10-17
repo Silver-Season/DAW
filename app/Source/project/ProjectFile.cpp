@@ -19,6 +19,11 @@ const std::vector<Migration>& migrations()
             for (auto track : tree.getChildWithName (ids::TRACKS))
                 if (! track.getChildWithName (ids::ARRANGEMENT).isValid())
                     track.appendChild (juce::ValueTree (ids::ARRANGEMENT), nullptr);
+        },
+        // 2 -> 3 (stage 5): the pool of sound files. MIDI projects simply get an empty one.
+        [] (juce::ValueTree& tree) {
+            if (! tree.getChildWithName (ids::AUDIOFILES).isValid())
+                tree.appendChild (juce::ValueTree (ids::AUDIOFILES), nullptr);
         }
     };
     return steps;
