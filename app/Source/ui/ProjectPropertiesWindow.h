@@ -6,7 +6,7 @@
 
 namespace ui
 {
-// "Свойства проекта" (Cmd+Alt+P): tempo, time signature, scale, the tuning of the built-in instruments, author
+// "Project Properties" (Cmd+Alt+P): tempo, time signature, scale, the tuning of the built-in instruments, author
 // and notes. Every change is one undo step of the project.
 class ProjectPropertiesWindow final : public juce::DocumentWindow
 {

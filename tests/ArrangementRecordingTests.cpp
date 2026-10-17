@@ -1169,7 +1169,7 @@ void testTransportBar()
 
 void testTakesInTheView()
 {
-    std::printf ("[arrangement test] the view: Дубли menu switches takes in one undo step; the clip shows its take; a growing clip is drawn while recording\n");
+    std::printf ("[arrangement test] the view: Takes menu switches takes in one undo step; the clip shows its take; a growing clip is drawn while recording\n");
     ThemeManager::get().reload();
     Rig r (true, 2);
     ProjectActions actions (r.f.model, &r.f.engine);

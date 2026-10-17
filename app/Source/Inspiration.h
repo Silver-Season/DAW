@@ -6,7 +6,7 @@
 
 class AudioEngine;
 
-// "Вдохновение": parts and sounds made up by the generators of core (daw::gen) in the scale and metre of the project.
+// "Inspiration": parts and sounds made up by the generators of core (daw::gen) in the scale and metre of the project.
 // Every action is one undo step and puts its result into the next empty slot, so nothing that exists is overwritten.
 namespace inspiration
 {

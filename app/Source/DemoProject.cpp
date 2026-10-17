@@ -130,9 +130,10 @@ void populateDemoProject (ProjectModel& model)
     {
         int scene;
         double startBeat, lengthBeats;
-        const char* marker;
+        juce::String marker;
     };
-    const Section song[] { { 0, 0.0, 32.0, "Интро" }, { 1, 32.0, 32.0, "Дроп" }, { 2, 64.0, 16.0, "Брейк" }, { 1, 80.0, 32.0, "Финал" } };
+    const Section song[] { { 0, 0.0, 32.0, Strings::tr ("Intro", "Интро") }, { 1, 32.0, 32.0, Strings::tr ("Drop", "Дроп") },
+                           { 2, 64.0, 16.0, Strings::tr ("Break", "Брейк") }, { 1, 80.0, 32.0, Strings::tr ("Outro", "Финал") } };
     for (const auto& section : song)
     {
         for (const auto& track : model.tracks())
@@ -143,7 +144,7 @@ void populateDemoProject (ProjectModel& model)
             auto a = arrangement::addSlotClip (model, track, source, section.startBeat);
             arrangement::resizeRight (model, a, section.startBeat + section.lengthBeats);
         }
-        arrangement::addMarker (model, section.startBeat, juce::String::fromUTF8 (section.marker));
+        arrangement::addMarker (model, section.startBeat, section.marker);
     }
     model.setArrangementLoop (32.0, 64.0, false);
 

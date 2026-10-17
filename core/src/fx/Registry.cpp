@@ -18,7 +18,7 @@ std::unique_ptr<Effect> makeAutoPan();
 const std::vector<EffectType>& effectTypes()
 {
     static const std::vector<EffectType> types {
-        { "eq8", "EQ Eight", "eq" },
+        { "eq8", "EQ", "eq" },
         { "comp", "Compressor", "dynamics" },
         { "gate", "Gate", "dynamics" },
         { "limiter", "Limiter", "dynamics" },

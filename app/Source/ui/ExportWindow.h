@@ -7,8 +7,8 @@
 
 namespace ui
 {
-// "Экспорт…" (Cmd+Shift+R, docs/spec/04-export.md, task 4.2 in part): what range, which format and bit depth, peak
-// normalisation, the tail; then a progress bar and the result (length, peak, "Показать в Finder").
+// "Export…" (Cmd+Shift+R, docs/spec/04-export.md, task 4.2 in part): what range, which format and bit depth, peak
+// normalisation, the tail; then a progress bar and the result (length, peak, "Show in Finder").
 class ExportWindow final : public juce::DocumentWindow
 {
 public:

@@ -43,9 +43,9 @@ const juce::String& categoryName (browser::Category c)
 
 const juce::String& labelName (int label)
 {
-    static const juce::String names[kNumLabels] { Strings::utf8 ("Красная"), Strings::utf8 ("Оранжевая"), Strings::utf8 ("Жёлтая"),
-                                                  Strings::utf8 ("Зелёная"), Strings::utf8 ("Синяя"),    Strings::utf8 ("Фиолетовая"),
-                                                  Strings::utf8 ("Серая") };
+    static const juce::String names[kNumLabels] { Strings::tr ("Red", "Красная"),   Strings::tr ("Orange", "Оранжевая"), Strings::tr ("Yellow", "Жёлтая"),
+                                                  Strings::tr ("Green", "Зелёная"), Strings::tr ("Blue", "Синяя"),        Strings::tr ("Purple", "Фиолетовая"),
+                                                  Strings::tr ("Gray", "Серая") };
     return names[juce::jlimit (0, kNumLabels - 1, label)];
 }
 

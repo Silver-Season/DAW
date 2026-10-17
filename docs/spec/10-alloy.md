@@ -1,415 +1,415 @@
-# 10. Alloy: флагманский синт в духе Alchemy
+# 10. Alloy: the flagship multi-engine synth
 
-## Цель
+## Goal
 
-Сделать Alloy, второй встроенный синт и главный инструмент проекта. Образец — Alchemy из Logic Pro, а именно его главное качество: можно листать пресеты один за другим, и каждый сразу звучит законченно, а под ним лежит глубокий редактор, в котором можно дойти до каждого параметра. Alloy строится на DSP Prisma (wavetable, фильтры, огибающие, LFO) и общих эффектах `daw::fx` и добавляет то, чего у Prisma нет: четыре источника A–D с разными движками (VA/wavetable, сэмплер, гранулярный, аддитивный и спектральный ресинтез), морфинг между источниками, Transform Pad с восемью снимками всех параметров, исполнительские ручки, MSEG, большую мод-матрицу, арпеджиатор и библиотеку пресетов с атрибутами.
+Build Alloy, the second built-in synth and the project's main instrument. Its defining quality: you can step through presets one after another and each one immediately sounds finished, while underneath sits a deep editor that reaches every parameter. Alloy is built on the Prisma DSP (wavetable, filters, envelopes, LFOs) and the shared `daw::fx` effects, and adds what Prisma lacks: four sources A–D with different engines (VA/wavetable, sampler, granular, additive and spectral resynthesis), morphing between sources, the Transform Pad with eight snapshots of all parameters, performance knobs, MSEG, a large mod matrix, an arpeggiator and a preset library with attributes.
 
-В конце этапа 10C пользователь может: открыть Alloy в DAW или в Logic как AU, во вкладке «Обзор» отфильтровать пресеты по категории и тембру, листать их стрелками во время игры, водить точку по Transform Pad и слышать плавный переход между восемью вариантами звука, крутить 8 ручек, а во вкладке «Подробно» загрузить свой WAV, разложить его на партиалы и сыграть его по клавиатуре.
+At the end of stage 10C the user can: open Alloy in the DAW or as an AU in a third-party host, filter presets by category and timbre in the "Browse" tab, step through them with the arrow keys while playing, drag the point around the Transform Pad and hear a smooth transition between eight variations of the sound, turn the 8 knobs, and in the "Detail" tab load their own WAV, decompose it into partials and play it across the keyboard.
 
-## Границы
+## Scope
 
-Этап большой, поэтому делится на три подэтапа. Каждый подэтап — отдельная ветка (`stage-10a-alloy-engine`, `stage-10b-alloy-resynth`, `stage-10c-alloy-library`), отдельный отчёт и полностью рабочий синт на выходе.
+The stage is large, so it is split into three sub-stages. Each sub-stage is a separate branch (`stage-10a-alloy-engine`, `stage-10b-alloy-resynth`, `stage-10c-alloy-library`), a separate report, and a fully working synth at the end.
 
-| Подэтап | Задачи | Что получается |
+| Sub-stage | Tasks | Result |
 |---|---|---|
-| 10A | 10.1–10.15 | Движок с 4 источниками (VA/wavetable, сэмплер, гранулярный), фильтры, морф источников (кроссфейд), модуляция, Transform Pad, исполнительские контролы, эффекты, формат пресетов, вкладки «Обзор», «Игра», «Подробно», устройство в DAW, AU/VST3/Standalone. Не меньше 60 заводских пресетов |
-| 10B | 10.16–10.20 | Аддитивный ресинтез (партиалы), спектральный ресинтез (фазовый вокодер), спектральный морф источников, редакторы партиалов и спектра. Не меньше 150 пресетов |
-| 10C | 10.21–10.24 | Арпеджиатор, шаговый секвенсор, библиотека 300+ пресетов с тегами, инструмент проверки библиотеки |
+| 10A | 10.1–10.15 | Engine with 4 sources (VA/wavetable, sampler, granular), filters, source morph (crossfade), modulation, Transform Pad, performance controls, effects, preset format, "Browse", "Play" and "Detail" tabs, DAW device, AU/VST3/Standalone. At least 60 factory presets |
+| 10B | 10.16–10.20 | Additive resynthesis (partials), spectral resynthesis (phase vocoder), spectral source morph, partial and spectrum editors. At least 150 presets |
+| 10C | 10.21–10.24 | Arpeggiator, step sequencer, library of 300+ tagged presets, library lint tool |
 
-Входит: всё из таблицы. Не входит: формантный и «pitch»-элементы Alchemy, импорт пресетов Alchemy и Camel Audio (закрытый формат), MPE (фаза 3), рисование спектра кистью (только импорт картинки), сетевой обмен пресетами, многопоточный рендер голосов.
+In scope: everything in the table. Out of scope: formant and pitch-shifting source elements, importing third-party preset formats (closed formats), MPE (phase 3), painting the spectrum with a brush (image import only), network preset sharing, multithreaded voice rendering.
 
-Правило 00 §9 «не трогать Prisma DSP» действует: Alloy переиспользует заголовки `daw::dsp` как есть. Если общему коду нужна правка (например, новая форма LFO), она делается добавлением, а рендер Prisma через `tools/prisma_render` до и после правки совпадает посэмплово.
+Rule 00 §9 "do not touch Prisma DSP" applies: Alloy reuses the `daw::dsp` headers as is. If shared code needs a change (for example, a new LFO shape), it is done by addition, and a Prisma render through `tools/prisma_render` before and after the change matches sample for sample.
 
-### Что взято из Alchemy
+### Concept map
 
-Сведения об Alchemy ниже — по документации Logic и общему знакомству с инструментом. Пункты с пометкой «по описанию, проверить» исполнитель сверяет с Logic Pro на Mac, если он доступен, и пишет в отчёте, что подтвердилось. Расхождение с Alchemy не ошибка, если поведение описано в этом ТЗ.
+The main concepts of Alloy and the tasks that implement them. Items marked "verify by ear" are design choices of this spec whose feel the implementer checks by listening and reports on.
 
-| Понятие Alchemy | Как в Alloy |
+| Concept | Where in Alloy |
 |---|---|
-| Вид Browse: столбцы атрибутов (категория, подкатегория, жанр, тембр), поиск, листание стрелками | Вкладка «Обзор», задача 10.12. Точный набор столбцов в Logic — по описанию, проверить |
-| Простой вид (Simple): Transform Pad и исполнительские контролы | Вкладка «Игра», задача 10.13 |
-| Transform Pad: 8 снимков параметров, точка морфит между ними, путь точки записывается и автоматизируется, есть время морфа | Задача 10.8. Закон интерполяции в Alchemy не документирован, у нас свой (IDW), по описанию, проверить ощущение |
-| 8 исполнительских ручек и 2 XY-пэда | Задача 10.9 |
-| Расширенный вид: источники A–D, у источника элементы Additive, Spectral, Granular, Sampler, VA | Вкладка «Подробно», задачи 10.3, 10.16–10.19 |
-| Морф источников: режимы кроссфейда и морфа, XY-морф A–D | Задачи 10.6 и 10.20 |
-| MSEG, LFO, AHDSR, мод-матрица, назначение модуляции правой кнопкой по ручке | Задача 10.7. Число слотов в Alchemy — по описанию, проверить; у нас 32 |
-| Арпеджиатор с шагами, секвенсор | Задачи 10.21, 10.22 |
-| Эффекты внутри синта | Задача 10.10, через `daw::fx` |
+| Browse view: attribute columns (category, subcategory, genre, timbre), search, stepping with arrow keys | "Browse" tab, task 10.12 |
+| Simple view: Transform Pad and performance controls | "Play" tab, task 10.13 |
+| Transform Pad: 8 parameter snapshots, a point morphs between them, the point's path is recorded and automated, there is a morph time | Task 10.8. Our own interpolation law (IDW), verify by ear |
+| 8 performance knobs and 2 XY pads | Task 10.9 |
+| Advanced view: sources A–D, each source has an Additive, Spectral, Granular, Sampler or VA element | "Detail" tab, tasks 10.3, 10.16–10.19 |
+| Source morph: crossfade and morph modes, XY morph A–D | Tasks 10.6 and 10.20 |
+| MSEG, LFO, AHDSR, mod matrix, assigning modulation by right-clicking a knob | Task 10.7, 32 slots |
+| Step arpeggiator, sequencer | Tasks 10.21, 10.22 |
+| Effects inside the synth | Task 10.10, through `daw::fx` |
 
 ---
 
-## Задача 10.1. Каркас: ядро, плагин, параметры
+## Task 10.1. Skeleton: core, plugin, parameters
 
-- Ядро в `core/include/daw/synth/alloy/` и `core/src/alloy/`, пространство имён `daw::synth::alloy`. Без JUCE, как Prisma. Цели CMake: исходники добавляются в `daw_core`, тесты в `core/tests/alloy_tests.cpp` (отдельный исполняемый `daw_alloy_tests`, чтобы `daw_core_tests` не разрастался).
-- Плагин `plugins/alloy/` по образцу `plugins/prisma/`: `AlloyProcessor`, `AlloyEditor`, `PluginEntry.cpp`. `PRODUCT_NAME "Alloy"`, `BUNDLE_ID "com.dawproject.alloy"`, `PLUGIN_MANUFACTURER_CODE Dawp`, `PLUGIN_CODE Aloy`, форматы AU (только macOS), VST3, Standalone, `IS_SYNTH TRUE`, `AU_MAIN_TYPE kAudioUnitType_MusicDevice`.
-- Офлайн-рендер `tools/alloy_render` по образцу `prisma_render`: пресет + MIDI-файл → WAV и время рендера. Нужен для тестов и бюджетов CPU.
+- Core in `core/include/daw/synth/alloy/` and `core/src/alloy/`, namespace `daw::synth::alloy`. No JUCE, like Prisma. CMake targets: sources are added to `daw_core`, tests go in `core/tests/alloy_tests.cpp` (a separate `daw_alloy_tests` executable, so `daw_core_tests` does not keep growing).
+- Plugin `plugins/alloy/` modeled on `plugins/prisma/`: `AlloyProcessor`, `AlloyEditor`, `PluginEntry.cpp`. `PRODUCT_NAME "Alloy"`, `BUNDLE_ID "com.dawproject.alloy"`, `PLUGIN_MANUFACTURER_CODE Dawp`, `PLUGIN_CODE Aloy`, formats AU (macOS only), VST3, Standalone, `IS_SYNTH TRUE`, `AU_MAIN_TYPE kAudioUnitType_MusicDevice`.
+- Offline renderer `tools/alloy_render` modeled on `prisma_render`: preset + MIDI file → WAV and render time. Needed for tests and CPU budgets.
 
-### Параметры
+### Parameters
 
-Как у Prisma, единая таблица дескрипторов — единственный источник id, диапазонов и значений по умолчанию:
+As in Prisma, a single descriptor table is the only source of ids, ranges and default values:
 
 ```cpp
-struct AlloyParamDescriptor          // по образцу daw::synth::ParamDescriptor
+struct AlloyParamDescriptor          // modeled on daw::synth::ParamDescriptor
 {
-    std::string id, name, group;     // id стабилен навсегда: "a.va.wtPos", "flt1.cutoff", "mod.07.amount"
+    std::string id, name, group;     // id is stable forever: "a.va.wtPos", "flt1.cutoff", "mod.07.amount"
     Kind kind;                       // Float | Int | Bool | Choice
     float min, max, def, skewCentre;
     std::string unit;
     std::vector<std::string> choices;
-    uint32_t flags;                  // kNoMorph, kNoAutomation, kGlobal (см. 10.8)
-    int offset;                      // индекс в AlloyParams::values
-    float toNormalised (float v) const;   // с учётом skewCentre, как у ручки
+    uint32_t flags;                  // kNoMorph, kNoAutomation, kGlobal (see 10.8)
+    int offset;                      // index into AlloyParams::values
+    float toNormalised (float v) const;   // takes skewCentre into account, like the knob
     float fromNormalised (float n) const;
 };
 
 struct AlloyParams
 {
     static constexpr int kMaxParams = 1024;
-    std::array<float, kMaxParams> values;   // плоский массив: снимки и морф работают с ним целиком
+    std::array<float, kMaxParams> values;   // flat array: snapshots and morph work on it as a whole
 };
 const std::vector<AlloyParamDescriptor>& alloyParameterDescriptors();
 ```
 
-- Плоский массив вместо вложенных структур выбран ради Transform Pad: морф — это цикл по индексам, без указателей на члены. Для читаемости DSP-кода есть типизированные обёртки (`SourceView src = params.source (0)`), которые считают смещения из таблицы один раз.
-- Ожидаемое число параметров ~550 (источник ~70 × 4, фильтры, 4 LFO, 6 огибающих, 32 слота модуляции × 4 поля, исполнительские контролы, эффекты). Все параметры, кроме помеченных `kNoAutomation`, видны хосту под своими id; порядок в хосте фиксирован по `offset`, новые параметры добавляются только в конец.
-- Данные, которые не являются числами (точки MSEG, сэмплы, модели ресинтеза, путь Transform Pad, шаги арпеджиатора), хранятся вне `AlloyParams` в `AlloyPatchData` (10.11) и не морфятся.
+- A flat array instead of nested structs was chosen for the Transform Pad: morphing is a loop over indices, with no pointers to members. For readable DSP code there are typed wrappers (`SourceView src = params.source (0)`) that compute offsets from the table once.
+- The expected parameter count is ~550 (source ~70 × 4, filters, 4 LFOs, 6 envelopes, 32 modulation slots × 4 fields, performance controls, effects). All parameters except those marked `kNoAutomation` are visible to the host under their ids; the host order is fixed by `offset`, and new parameters are only appended at the end.
+- Non-numeric data (MSEG points, samples, resynthesis models, the Transform Pad path, arpeggiator steps) is stored outside `AlloyParams` in `AlloyPatchData` (10.11) and is not morphed.
 
-## Задача 10.2. Голоса
+## Task 10.2. Voices
 
-- `AlloyVoice` содержит 4 `SourceSlot` (A–D), по фильтру на источник, 2 глобальных фильтра, 6 огибающих, 4 голосовых LFO, 4 MSEG. Глобальные (не голосовые) LFO — 2 штуки, в `AlloySynth`.
-- Выделение голосов: новый общий класс `daw::synth::VoiceAllocator` (`core/include/daw/synth/VoiceAllocator.h`): стек нот для моно, legato, glide, кража самого старого отпущенного, затем самого старого звучащего, сустейн-педаль. Логику взять из `PrismaSynth` (`findVoiceToUse`, `monoStack`). Перевод Prisma на этот класс — по желанию и только при посэмпловом совпадении рендера Prisma; если не совпадает, Prisma остаётся как есть, и это пишется в отчёте.
-- Полифония параметром 1–32 (по умолчанию 16), `kMaxVoices = 32`. Украденный голос гаснет за 3 мс, а не обрывается.
-- Модуляция и морф считаются на контрольной частоте, блок `kControlBlock = 16` сэмплов, как в `PrismaVoice`. Всё, что попадает в громкость, панораму, срез и позицию wavetable, сглаживается внутри блока (линейно или однополюсником 2–5 мс), чтобы не было ступенек.
-- Голос пропускает выключенные источники целиком (ноль затрат), и голос, у которого все огибающие громкости закончились, освобождается.
+- `AlloyVoice` holds 4 `SourceSlot`s (A–D), one filter per source, 2 global filters, 6 envelopes, 4 per-voice LFOs, 4 MSEGs. Global (non-voice) LFOs: 2, in `AlloySynth`.
+- Voice allocation: a new shared class `daw::synth::VoiceAllocator` (`core/include/daw/synth/VoiceAllocator.h`): note stack for mono, legato, glide, stealing the oldest released voice, then the oldest sounding one, sustain pedal. Take the logic from `PrismaSynth` (`findVoiceToUse`, `monoStack`). Moving Prisma to this class is optional and only if the Prisma render matches sample for sample; if it does not, Prisma stays as is, and this is noted in the report.
+- Polyphony is a parameter, 1–32 (default 16), `kMaxVoices = 32`. A stolen voice fades out over 3 ms instead of being cut.
+- Modulation and morph are computed at control rate, block `kControlBlock = 16` samples, as in `PrismaVoice`. Everything that feeds volume, pan, cutoff and wavetable position is smoothed within the block (linearly or with a one-pole of 2–5 ms) so there is no stepping.
+- A voice skips disabled sources entirely (zero cost), and a voice whose amplitude envelopes have all finished is freed.
 
-## Задача 10.3. Источники и элементы
+## Task 10.3. Sources and elements
 
-У каждого источника A–D: `on`, `element` (Choice: VA, Sampler, Granular; в 10B добавляются Additive и Spectral), `level`, `pan`, `octave`, `semi`, `fine`, `keyTrack`, `velSens`, отправка в глобальные фильтры (`route`: Filter1, Filter2, оба, мимо), свой фильтр (10.5) и свой усилитель с огибающей. Внутри каждого элемента свои параметры. Параметры всех элементов существуют одновременно (смена элемента не теряет настроек), активен только выбранный.
+Each source A–D has: `on`, `element` (Choice: VA, Sampler, Granular; Additive and Spectral are added in 10B), `level`, `pan`, `octave`, `semi`, `fine`, `keyTrack`, `velSens`, a send to the global filters (`route`: Filter1, Filter2, both, bypass), its own filter (10.5) and its own amp with an envelope. Each element has its own parameters. The parameters of all elements exist at the same time (switching the element does not lose settings); only the selected one is active.
 
 ### VA / wavetable
 
-- Два осциллятора `dsp::WavetableOscillator` (все таблицы `dsp::factory` и пользовательские таблицы того же формата 2048 × N кадров), суб-осциллятор, шум. Параметры как у осциллятора Prisma (`OscParams`): позиция, унисон до 16, detune, spread, blend, фаза.
-- Режимы смешения двух осцилляторов: сумма, ring mod, жёсткая синхронизация (B к A). Синхронизация реализуется сбросом фазы с полиBLEP-коррекцией разрыва; без коррекции алиасинг заметен в тесте 4.
-- Форма VA (пила, квадрат с PWM, треугольник, синус) делается wavetable-таблицами, которые строятся `Wavetable::fromFrames` (PWM — 64 кадра с разной скважностью), а не отдельным алгоритмом.
+- Two `dsp::WavetableOscillator` oscillators (all `dsp::factory` tables and user tables of the same 2048 × N frames format), a sub-oscillator, noise. Parameters as in the Prisma oscillator (`OscParams`): position, unison up to 16, detune, spread, blend, phase.
+- Mix modes of the two oscillators: sum, ring mod, hard sync (B to A). Sync is implemented by a phase reset with polyBLEP correction of the discontinuity; without the correction, aliasing is noticeable in test 4.
+- VA shapes (saw, square with PWM, triangle, sine) are made as wavetables built with `Wavetable::fromFrames` (PWM is 64 frames with different duty cycles), not as a separate algorithm.
 
-### Сэмплер
+### Sampler
 
-- До 32 зон на источник: `SampleZone { sampleRef, rootNote, lowKey, highKey, lowVel, highVel, tune, gain, start, end, loopStart, loopEnd, loopMode (Off | Forward | PingPong), loopXfade }`. Карта зон — данные, не параметры.
-- Интерполяция: окно-синк на 16 точек с предвычисленной полифазной таблицей (256 фаз). При транспонировании вверх больше чем на октаву выбирается заранее посчитанная копия сэмпла с половинной частотой (mip, как у wavetable), иначе алиасинг.
-- Параметры источника: `start` (модулируемый), `loopOn`, `reverse`. Нарезки на слайсы нет.
+- Up to 32 zones per source: `SampleZone { sampleRef, rootNote, lowKey, highKey, lowVel, highVel, tune, gain, start, end, loopStart, loopEnd, loopMode (Off | Forward | PingPong), loopXfade }`. The zone map is data, not parameters.
+- Interpolation: 16-point windowed sinc with a precomputed polyphase table (256 phases). When transposing up by more than an octave, a precomputed half-rate copy of the sample is used (a mip, as with wavetables); otherwise there is aliasing.
+- Source parameters: `start` (modulatable), `loopOn`, `reverse`. No slicing.
 
-### Гранулярный
+### Granular
 
-- Облако зёрен по сэмплу источника (первая зона). Параметры: `position` (0–1), `posSpeed` (−2…2, 0 — стоп-кадр), `spray` (случайный разброс позиции, мс), `grainSize` (5–500 мс), `density` (зёрен/с, 1–200), `pitchRand` (центы), `panRand`, `window` (Hann | Tukey | Exp), `reverse` (вероятность 0–1).
-- До 64 одновременных зёрен на голос, пул фиксирован, при переполнении новое зерно пропускается. Расписание зёрен — счётчик сэмплов с периодом `sr / density` и случайным сдвигом ±10 %; генератор случайных чисел детерминированный (LCG как в `dsp::LFO`), зерно-сид от номера голоса.
-- Громкость нормируется на ожидаемое перекрытие `grainSize × density`, чтобы плотность не меняла уровень больше чем на 3 дБ.
+- A cloud of grains over the source sample (the first zone). Parameters: `position` (0–1), `posSpeed` (−2…2, 0 is a freeze frame), `spray` (random position scatter, ms), `grainSize` (5–500 ms), `density` (grains/s, 1–200), `pitchRand` (cents), `panRand`, `window` (Hann | Tukey | Exp), `reverse` (probability 0–1).
+- Up to 64 simultaneous grains per voice, the pool is fixed, and on overflow a new grain is skipped. Grain scheduling is a sample counter with period `sr / density` and a random offset of ±10 %; the random number generator is deterministic (LCG as in `dsp::LFO`), with the seed derived from the voice number.
+- Volume is normalized by the expected overlap `grainSize × density`, so density does not change the level by more than 3 dB.
 
-## Задача 10.4. Импорт сэмплов
+## Task 10.4. Sample import
 
-- Форматы WAV, AIFF, FLAC, 16/24/32-бит и float, моно и стерео, любые частоты. Чтение — `juce::AudioFormatManager` в слое плагина; ядро получает `SampleData { std::vector<float> l, r; double sampleRate; int rootNote; loop points из метаданных (smpl/inst), если есть; std::string hash }`.
-- Загрузка и подготовка (конверсия в float, mip-копии, анализ ресинтеза в 10B) — в фоновом потоке (`juce::ThreadPool`). Готовый `std::shared_ptr<const SampleData>` публикуется атомарной заменой, старый освобождается на message thread (00 §2). Пока сэмпл грузится, источник молчит, интерфейс показывает прогресс.
-- Ограничения: до 10 минут на сэмпл и 1 ГБ на экземпляр; превышение — понятная ошибка в интерфейсе, не падение.
-- Корневая нота: из метаданных, иначе определяется YIN-детектором высоты (тот же, что в 10.16), иначе C3. Пользователь правит её в редакторе зоны.
-- Ссылка в пресете: путь относительно библиотеки (`Factory Library/Samples/...` или `User Library/Samples/...`) плюс `hash` (SHA-1 содержимого). При открытии ищется по пути, затем по hash в папках библиотеки; не найден — источник помечается «Сэмпл не найден: имя», пресет загружается. Опция «Встроить сэмплы в пресет» (FLAC внутри файла) для обмена пресетами.
-- Перетаскивание файла из Finder или браузера DAW на источник — загрузка в этот источник.
+- Formats WAV, AIFF, FLAC, 16/24/32-bit and float, mono and stereo, any sample rate. Reading is done with `juce::AudioFormatManager` in the plugin layer; the core receives `SampleData { std::vector<float> l, r; double sampleRate; int rootNote; loop points from metadata (smpl/inst), if any; std::string hash }`.
+- Loading and preparation (conversion to float, mip copies, resynthesis analysis in 10B) happen on a background thread (`juce::ThreadPool`). The finished `std::shared_ptr<const SampleData>` is published by atomic swap, and the old one is freed on the message thread (00 §2). While the sample loads, the source is silent and the UI shows progress.
+- Limits: up to 10 minutes per sample and 1 GB per instance; exceeding them gives a clear error in the UI, not a crash.
+- Root note: from metadata, otherwise detected by the YIN pitch detector (the same one as in 10.16), otherwise C3. The user edits it in the zone editor.
+- Reference in the preset: a path relative to the library (`Factory Library/Samples/...` or `User Library/Samples/...`) plus `hash` (SHA-1 of the content). On open it is looked up by path, then by hash in the library folders; if not found, the source is marked "Sample not found: name" and the preset still loads. An "Embed samples in preset" option (FLAC inside the file) for sharing presets.
+- Dragging a file from Finder or the DAW browser onto a source loads it into that source.
 
-## Задача 10.5. Фильтры
+## Task 10.5. Filters
 
-- У каждого источника один фильтр `dsp::SynthFilter` (все типы `FilterType`), с параметрами `type`, `cutoff`, `resonance`, `drive`, `keyTrack`, `envAmount` и своей огибающей.
-- Два глобальных фильтра на голос с маршрутом `filterRouting` (Serial | Parallel) и балансом `filterBalance`.
-- Новые типы (comb, formant) не делаются. Если исполнителю нужно, он пишет предложение в отчёте.
+- Each source has one `dsp::SynthFilter` (all `FilterType` types), with parameters `type`, `cutoff`, `resonance`, `drive`, `keyTrack`, `envAmount` and its own envelope.
+- Two global filters per voice with routing `filterRouting` (Serial | Parallel) and balance `filterBalance`.
+- New types (comb, formant) are not made. If the implementer needs them, they write a proposal in the report.
 
-## Задача 10.6. Смешение и морф источников
+## Task 10.6. Source mixing and morph
 
-- `sourceMixMode` (Choice): `Mix` (обычная сумма с уровнями), `Crossfade`, `Morph` (появляется в 10B, задача 10.20).
-- `Crossfade`: XY-морф `morphX`, `morphY` в [0, 1], источники стоят в углах A (0,0), B (1,0), C (0,1), D (1,1). Веса билинейные: `wA = (1−x)(1−y)`, `wB = x(1−y)`, `wC = (1−x)y`, `wD = xy`; громкость источника `sqrt (w)` (равная мощность). Есть и одномерный режим `morphLinear` (A→B→C→D по одной ручке, переключатель `morphAxis` = XY | Linear).
-- `morphX`, `morphY`, `morphLinear` — обычные модулируемые параметры: их можно вести LFO, MSEG и исполнительскими ручками.
-- Источник с весом ниже −90 дБ не рендерится, но его огибающие продолжают идти, чтобы при возврате веса звук не начинался с атаки.
+- `sourceMixMode` (Choice): `Mix` (plain sum with levels), `Crossfade`, `Morph` (appears in 10B, task 10.20).
+- `Crossfade`: XY morph `morphX`, `morphY` in [0, 1], with sources at the corners A (0,0), B (1,0), C (0,1), D (1,1). Weights are bilinear: `wA = (1−x)(1−y)`, `wB = x(1−y)`, `wC = (1−x)y`, `wD = xy`; source gain is `sqrt (w)` (equal power). There is also a one-dimensional mode `morphLinear` (A→B→C→D on one knob, switch `morphAxis` = XY | Linear).
+- `morphX`, `morphY`, `morphLinear` are ordinary modulatable parameters: they can be driven by LFOs, MSEGs and performance knobs.
+- A source with weight below −90 dB is not rendered, but its envelopes keep running, so that when the weight comes back the sound does not restart from the attack.
 
-## Задача 10.7. Модуляция
+## Task 10.7. Modulation
 
-- **Огибающие:** 6 на голос (AHDSR с кривизной каждого участка, −1…1). Env1 — громкость голоса, остальные свободны.
-- **LFO:** 4 голосовых и 2 глобальных. Формы `dsp::LfoShape` плюс `Custom` (форма из MSEG); синхронизация с темпом (`syncDivisionNames()` Prisma), retrig, фаза, задержка и нарастание (`delay`, `fadeIn`), однополярный режим.
-- **MSEG:** 4 на голос. `Mseg { std::vector<MsegPoint> points; int loopStart, loopEnd; bool sync; float lengthBeats; }`, `MsegPoint { float time, value, curve; }`, до 64 точек. Режимы: огибающая (один проход, петля пока нота держится, release-участок после loopEnd) и LFO (бесконечная петля). На аудиопотоке MSEG читается из неизменяемого снимка; правка точек публикует новый.
-- **Мод-матрица:** 32 слота `ModSlot { source, via, dest, amount, curve }`. `via` — второй источник, который масштабирует глубину (например, колесо модуляции). `curve` — Linear | Exp | Log | S. Источники: огибающие, LFO, MSEG, скорость нажатия, колесо, aftertouch, питч-бенд, key track, случайное на ноту, 8 исполнительских ручек, оси 2 XY-пэдов, шаговый секвенсор (10C), CC 1–127 через MIDI Learn. Назначение — любой параметр с флагом модулируемости (почти все Float).
-- Глубина считается в нормированных единицах параметра: `n = clamp (n0 + Σ amount_i · s_i, 0, 1)`, затем `fromNormalised`. Так глубина 0,1 на срезе означает «десятую часть ручки», что совпадает с тем, что видит пользователь.
-- В интерфейсе: правая кнопка по ручке → «Модулировать → источник», перетаскивание иконки источника на ручку; вокруг ручки рисуется дуга глубины цветом `accent2`.
+- **Envelopes:** 6 per voice (AHDSR with curvature for each segment, −1…1). Env1 is the voice amplitude, the rest are free.
+- **LFO:** 4 per voice and 2 global. Shapes from `dsp::LfoShape` plus `Custom` (shape from an MSEG); tempo sync (Prisma's `syncDivisionNames()`), retrig, phase, delay and fade-in (`delay`, `fadeIn`), unipolar mode.
+- **MSEG:** 4 per voice. `Mseg { std::vector<MsegPoint> points; int loopStart, loopEnd; bool sync; float lengthBeats; }`, `MsegPoint { float time, value, curve; }`, up to 64 points. Modes: envelope (one pass, loop while the note is held, release segment after loopEnd) and LFO (infinite loop). On the audio thread the MSEG is read from an immutable snapshot; editing the points publishes a new one.
+- **Mod matrix:** 32 slots `ModSlot { source, via, dest, amount, curve }`. `via` is a second source that scales the depth (for example, the mod wheel). `curve` is Linear | Exp | Log | S. Sources: envelopes, LFOs, MSEGs, velocity, mod wheel, aftertouch, pitch bend, key track, per-note random, the 8 performance knobs, the axes of the 2 XY pads, the step sequencer (10C), CC 1–127 via MIDI Learn. Destination: any parameter with the modulatable flag (almost all Floats).
+- Depth is computed in the parameter's normalized units: `n = clamp (n0 + Σ amount_i · s_i, 0, 1)`, then `fromNormalised`. So a depth of 0.1 on the cutoff means "a tenth of the knob", which matches what the user sees.
+- In the UI: right-click a knob → "Modulate → source", or drag a source icon onto a knob; a depth arc is drawn around the knob in the `accent2` color.
 
-## Задача 10.8. Transform Pad
+## Task 10.8. Transform Pad
 
-Главная функция этапа. Восемь снимков всех морфируемых параметров вокруг XY-пэда; положение точки определяет смесь.
+The main feature of the stage. Eight snapshots of all morphable parameters around an XY pad; the position of the point determines the blend.
 
-### Данные
+### Data
 
 ```cpp
 struct TransformSnapshot
 {
     bool used = false;
-    std::array<float, AlloyParams::kMaxParams> norm;   // нормированные значения 0..1
-    std::string name;                                  // «Тёмный», «Открытый»...
+    std::array<float, AlloyParams::kMaxParams> norm;   // normalized values 0..1
+    std::string name;                                  // "Dark", "Open"...
 };
 
 struct TransformPad
 {
     std::array<TransformSnapshot, 8> snapshots;
-    std::array<Point, 8> positions;   // по умолчанию на окружности r = 0.42 вокруг (0.5, 0.5), шаг 45°, первый слева вверху
-    float morphTimeSec = 0.0f;        // время, за которое точка едет к выбранному снимку
-    TransformPath path;               // записанный путь, см. ниже
+    std::array<Point, 8> positions;   // default: on a circle r = 0.42 around (0.5, 0.5), 45° step, first at top left
+    float morphTimeSec = 0.0f;        // time for the point to travel to the selected snapshot
+    TransformPath path;               // recorded path, see below
 };
 ```
 
-- Параметры `transform.x`, `transform.y` (Float, автоматизируются хостом), `transform.on` (Bool).
-- Флаги дескриптора: `kNoMorph` — параметр никогда не морфится (полифония, bend range, выбор MIDI-канала, мастер-громкость по умолчанию). `kGlobal` — то же, но параметр показывается в отдельном списке. Пользовательское исключение — `std::bitset<kMaxParams> morphExclude` в данных пресета: правая кнопка по ручке → «Не морфить». Исключённые параметры берут значение из «текущего» состояния редактора.
+- Parameters `transform.x`, `transform.y` (Float, automatable by the host), `transform.on` (Bool).
+- Descriptor flags: `kNoMorph` means the parameter is never morphed (polyphony, bend range, MIDI channel selection, master volume by default). `kGlobal` is the same, but the parameter is shown in a separate list. User exclusion is `std::bitset<kMaxParams> morphExclude` in the preset data: right-click a knob → "Don't morph". Excluded parameters take their value from the editor's "current" state.
 
-### Математика морфа
+### Morph math
 
-Для точки `p` и использованных снимков `i` с позициями `q_i`:
+For point `p` and the used snapshots `i` with positions `q_i`:
 
-1. Расстояния `d_i = |p − q_i|`. Если `d_i < 0.06` для какого-то `i`, точка «в снимке»: `w_i = 1`, остальные 0.
-2. Иначе веса обратных расстояний: `w_i = 1 / d_i²`, нормированные на сумму. (Alchemy, по описанию, тоже даёт полный снимок в его ячейке и плавную смесь между ними; точный закон не опубликован, проверить на слух.)
-3. Float: `n = Σ w_i · norm_i`, значение `fromNormalised (n)`. Интерполяция в нормированных единицах выбрана намеренно: для частоты среза со скосом это даёт перцептивно ровный переход, а не скачок в верхних килогерцах.
-4. Int: то же, затем округление.
-5. Choice и Bool: для каждого варианта `c` сумма весов снимков, где выбран `c`; побеждает максимальная (при равенстве — меньший индекс снимка). Для двух снимков это ровно «переключение на 50 %». Гистерезис 0,02: вариант меняется, только если новая сумма больше текущей на 0,02, чтобы автоматизация около порога не дребезжала.
-6. Смена Choice внутри источника (элемент, тип фильтра, таблица wavetable) делает кроссфейд 5 мс между старой и новой конфигурацией внутри голоса, без щелчка. Для этого `SourceSlot` держит два состояния на время перехода.
-7. Неиспользованные снимки не участвуют. Если используется 0 снимков, пэд неактивен; если 1 — его значения применяются целиком.
+1. Distances `d_i = |p − q_i|`. If `d_i < 0.06` for some `i`, the point is "in the snapshot": `w_i = 1`, all others 0.
+2. Otherwise inverse-distance weights: `w_i = 1 / d_i²`, normalized by their sum. (This gives the full snapshot inside its cell and a smooth blend between cells; verify by ear.)
+3. Float: `n = Σ w_i · norm_i`, value `fromNormalised (n)`. Interpolating in normalized units is deliberate: for a skewed cutoff frequency it gives a perceptually even transition instead of a jump in the upper kilohertz.
+4. Int: the same, then rounding.
+5. Choice and Bool: for each option `c`, the sum of the weights of the snapshots where `c` is selected; the maximum wins (on a tie, the lower snapshot index). For two snapshots this is exactly "switch at 50 %". Hysteresis 0.02: the option changes only if the new sum exceeds the current one by 0.02, so automation near the threshold does not chatter.
+6. A Choice change inside a source (element, filter type, wavetable) crossfades for 5 ms between the old and new configuration inside the voice, with no click. For this, `SourceSlot` holds two states during the transition.
+7. Unused snapshots do not take part. If 0 snapshots are used, the pad is inactive; if 1, its values are applied in full.
 
-Морф считается на аудиопотоке раз в контрольный блок (16 сэмплов) по массивам снимков из неизменяемого снимка `TransformPadState` (публикуется атомарно при правке снимка). Стоимость: ~550 × 8 умножений-сложений на блок, пренебрежимо. Результат — базовые значения параметров, поверх которых работает мод-матрица (10.7). Сглаживание из 10.2 убирает зиппер-шум.
+The morph is computed on the audio thread once per control block (16 samples) from the snapshot arrays of the immutable `TransformPadState` (published atomically when a snapshot is edited). Cost: ~550 × 8 multiply-adds per block, negligible. The result is the base parameter values, on top of which the mod matrix (10.7) works. The smoothing from 10.2 removes zipper noise.
 
-### Снимки и время морфа
+### Snapshots and morph time
 
-- Щелчок по ячейке снимка: точка едет в его позицию за `morphTimeSec` (0–10 с, по прямой, с плавным разгоном и торможением `smoothstep`). При 0 — мгновенно, но значения всё равно проходят сглаживание 10.2.
-- «Сохранить снимок» в ячейку: копирует текущие нормированные значения. «Скопировать», «Вставить», «Очистить», «Переименовать» — в меню ячейки. Каждая операция — одна транзакция отмены редактора (у Alloy свой `juce::UndoManager` в процессоре, в DAW — общий через `DeviceRef`).
-- Перетаскивание точки мышью: интерфейс пишет `transform.x/y` через `setValueNotifyingHost` с `beginChangeGesture`/`endChangeGesture` на весь жест, поэтому хост записывает автоматизацию.
-- Что редактирует пользователь, когда точка между снимками: правка ручки меняет «текущее» значение; при включённом пэде в заголовке пэда горит «Правки не сохранены в снимок», кнопка «В ближайший снимок» записывает их.
+- Clicking a snapshot cell: the point travels to its position over `morphTimeSec` (0–10 s, in a straight line, with `smoothstep` ease-in and ease-out). At 0 it is instant, but the values still pass through the 10.2 smoothing.
+- "Save snapshot" into a cell copies the current normalized values. "Copy", "Paste", "Clear", "Rename" are in the cell menu. Each operation is one undo transaction of the editor (Alloy has its own `juce::UndoManager` in the processor; in the DAW, the shared one via `DeviceRef`).
+- Dragging the point with the mouse: the UI writes `transform.x/y` via `setValueNotifyingHost` with `beginChangeGesture`/`endChangeGesture` around the whole gesture, so the host records automation.
+- What the user edits when the point is between snapshots: editing a knob changes the "current" value; when the pad is on, the pad header shows "Edits not saved to snapshot", and the "To nearest snapshot" button writes them.
 
-### Путь
+### Path
 
 ```cpp
 struct TransformPath
 {
-    std::vector<PathPoint> points;     // { float t; float x, y; }, t в долях такта или секундах
-    bool sync = true;                  // t в долях (темп хоста) или секундах
+    std::vector<PathPoint> points;     // { float t; float x, y; }, t in beats or seconds
+    bool sync = true;                  // t in beats (host tempo) or seconds
     float lengthBeats = 4.0f;
     enum class Mode { Off, OneShot, Loop, PingPong } mode = Mode::Off;
     bool retrigOnNote = true;
 };
 ```
 
-- Кнопка «Запись пути»: пока она нажата, движения точки пишутся с прореживанием (не чаще 100 точек/с, затем упрощение Рамера — Дугласа — Пекера с допуском 0,005). Путь показывается на пэде линией `accent2`, его точки можно двигать.
-- При воспроизведении пути точка идёт по нему (линейная интерполяция между точками), `transform.x/y` при этом не меняются хостом, а показываются в интерфейсе. Путь до 512 точек.
-- Параметр `transform.pathPos` (0–1, автоматизируется) позволяет вести точку по пути вручную или из DAW — именно его использует интеграция в 10.15.
+- "Record path" button: while it is on, point movements are recorded with thinning (no more than 100 points/s, then Ramer–Douglas–Peucker simplification with tolerance 0.005). The path is shown on the pad as an `accent2` line, and its points can be moved.
+- When the path plays, the point follows it (linear interpolation between points); `transform.x/y` are not changed by the host meanwhile but are shown in the UI. Paths have up to 512 points.
+- Parameter `transform.pathPos` (0–1, automatable) lets you drive the point along the path manually or from the DAW; this is what the integration in 10.15 uses.
 
-### Миниатюры снимков
+### Snapshot thumbnails
 
-У ячейки снимка — миниатюра 48×48: условный «отпечаток» звука из 5 полос (срез, резонанс, морф источников, уровни A–D, атака), нарисованный цветами палитры темы. Рисуется в кэшированное изображение, перерисовывается при сохранении снимка. Миниатюра служит для узнавания снимков, а не для точного чтения значений.
+Each snapshot cell has a 48×48 thumbnail: a schematic "fingerprint" of the sound made of 5 bars (cutoff, resonance, source morph, levels A–D, attack), drawn in the theme palette colors. It is drawn into a cached image and redrawn when the snapshot is saved. The thumbnail is for recognizing snapshots, not for reading exact values.
 
-## Задача 10.9. Исполнительские контролы
+## Task 10.9. Performance controls
 
-- 8 ручек `perf.1` … `perf.8` (0–1) и 2 XY-пэда `perf.xy1.x/y`, `perf.xy2.x/y`. Каждый — источник модуляции в матрице; дополнительно у каждой ручки до 8 «быстрых назначений» `PerfTarget { paramIndex, min, max, curve }` (как macro в Ableton), которые настраиваются перетаскиванием ручки на параметр в «Подробно» с зажатым `Cmd`.
-- Имена ручек и пэдов хранятся в пресете («Яркость», «Движение»), показываются во всех видах и в DAW.
-- Ручки исполнения по умолчанию `kNoMorph`, чтобы движение пэда не крутило ручки под пальцами; пресет может снять флаг.
-- MIDI Learn для всех восьми ручек и двух пэдов (правая кнопка → «Назначить MIDI»), назначения хранятся в состоянии экземпляра, не в пресете.
+- 8 knobs `perf.1` … `perf.8` (0–1) and 2 XY pads `perf.xy1.x/y`, `perf.xy2.x/y`. Each is a modulation source in the matrix; in addition, each knob has up to 8 "quick assignments" `PerfTarget { paramIndex, min, max, curve }` (like macro knobs), set up by dragging the knob onto a parameter in "Detail" while holding `Cmd`.
+- Knob and pad names are stored in the preset ("Brightness", "Motion") and shown in all views and in the DAW.
+- Performance knobs are `kNoMorph` by default, so moving the pad does not turn the knobs under your fingers; a preset may clear the flag.
+- MIDI Learn for all eight knobs and both pads (right-click → "Assign MIDI"); assignments are stored in the instance state, not in the preset.
 
-## Задача 10.10. Эффекты
+## Task 10.10. Effects
 
-- DSP эффектов живёт в `core/` в пространстве `daw::fx` и общий для DAW-устройств этапа 06, Prisma (если ей добавят эффекты) и Alloy. Alloy не пишет свои эффекты. Если к началу 10A эффекты 06 лежат в `app/` с зависимостью от JUCE, первая задача 10A — вынести их чистый DSP в `core/include/daw/fx/` без изменения звука (тесты 06 остаются зелёными).
-- Стойка эффектов Alloy: 8 слотов после суммы голосов, порядок меняется перетаскиванием. Доступны все эффекты `daw::fx` (по 06: EQ, компрессор, ревербератор, дилей, хорус, дисторшн; что добавит 09 — тоже). Параметры эффектов — обычные параметры Alloy (`fx.3.mix`), морфятся и модулируются глобальными источниками.
-- Смена типа эффекта в слоте — Choice с кроссфейдом 20 мс; память под все эффекты стойки выделяется в `prepare`, а не при смене.
+- The effects DSP lives in `core/` in the `daw::fx` namespace and is shared by the stage 06 DAW devices, Prisma (if effects are added to it) and Alloy. Alloy does not write its own effects. If at the start of 10A the stage 06 effects live in `app/` with a JUCE dependency, the first task of 10A is to move their pure DSP to `core/include/daw/fx/` without changing the sound (the 06 tests stay green).
+- Alloy effects rack: 8 slots after the voice sum, reordered by dragging. All `daw::fx` effects are available (per 06: EQ, compressor, reverb, delay, chorus, distortion; whatever 09 adds as well). Effect parameters are ordinary Alloy parameters (`fx.3.mix`), morphed and modulated by global sources.
+- Changing the effect type in a slot is a Choice with a 20 ms crossfade; memory for all effects in the rack is allocated in `prepare`, not on change.
 
-## Задача 10.11. Формат пресета
+## Task 10.11. Preset format
 
-- Файл `.alloypreset`, XML через `juce::ValueTree` в слое плагина; ядро даёт `AlloyPatch` (параметры + `AlloyPatchData`) и функции сериализации в нейтральное дерево `PatchNode`, чтобы тесты ядра проверяли круговой обмен без JUCE.
+- File `.alloypreset`, XML via `juce::ValueTree` in the plugin layer; the core provides `AlloyPatch` (parameters + `AlloyPatchData`) and serialization functions into a neutral `PatchNode` tree, so core tests can check the round trip without JUCE.
 
 ```
 ALLOYPRESET  version=1  name  author  created  modified  uuid
 ├── TAGS  category="Pad"  subcategory="Evolving"  timbre="Warm,Airy,Wide"  genre="Ambient,Cinematic"
 │         articulation="Sustained"  favourite=0
-├── PARAMS  <P id="flt1.cutoff" v="0.4372"/> ...   (только отличные от значения по умолчанию, в нормированном виде)
-├── SOURCES └── SOURCE idx=0  └── ZONE ... sampleRef path hash  (+ EMBED flac base64, если встроен)
-│                              └── MODEL kind="additive|spectral" hash  (кэш анализа, 10B)
+├── PARAMS  <P id="flt1.cutoff" v="0.4372"/> ...   (only values differing from the default, normalized)
+├── SOURCES └── SOURCE idx=0  └── ZONE ... sampleRef path hash  (+ EMBED flac base64, if embedded)
+│                              └── MODEL kind="additive|spectral" hash  (analysis cache, 10B)
 ├── MSEGS   └── MSEG idx points="t,v,c;..." loopStart loopEnd sync length
-├── TRANSFORM  morphTime  └── SNAP idx name  (только отличия от PARAMS) └── PATH mode sync length points
+├── TRANSFORM  morphTime  └── SNAP idx name  (only differences from PARAMS) └── PATH mode sync length points
 ├── PERFORM  └── KNOB idx name  └── TARGET param min max curve
 ├── MORPHEXCLUDE  ids="a.level,b.level"
 └── ARP / SEQ  (10C)
 ```
 
-- Неизвестные id при загрузке пропускаются с записью в лог, отсутствующие берут значение по умолчанию. `version` растёт при несовместимых изменениях, загрузчик читает все прошлые версии (как файл проекта в 01, задача 1.6).
-- Кэш анализа ресинтеза (10B) хранится рядом с сэмплом в `~/Library/Caches/Alloy/<hash>.alloymodel`, а не в пресете: пресет остаётся маленьким, а повторный анализ не нужен.
-- Состояние плагина (`getStateInformation`) — тот же XML плюс состояние экземпляра (MIDI Learn, открытая вкладка), сжатый `juce::GZIPCompressorOutputStream`.
-- Папки: `~/Music/Prisma DAW/Factory Library/Alloy/` (заводские, только чтение) и `User Library/Presets/Alloy/` (те же, что у пресетов устройств из 01, задача 1.6). Пресет из DAW-браузера и пресет из плагина — один и тот же файл.
+- Unknown ids are skipped on load with a log entry; missing ones take the default value. `version` grows on incompatible changes, and the loader reads all past versions (like the project file in 01, task 1.6).
+- The resynthesis analysis cache (10B) is stored next to the sample in `~/Library/Caches/Alloy/<hash>.alloymodel`, not in the preset: the preset stays small and re-analysis is not needed.
+- Plugin state (`getStateInformation`) is the same XML plus the instance state (MIDI Learn, open tab), compressed with `juce::GZIPCompressorOutputStream`.
+- Folders: `~/Music/Prisma DAW/Factory Library/Alloy/` (factory, read-only) and `User Library/Presets/Alloy/` (the same as device presets from 01, task 1.6). A preset from the DAW browser and a preset from the plugin are the same file.
 
-## Задача 10.12. Вкладка «Обзор»
+## Task 10.12. "Browse" tab
 
-- Слева столбцы атрибутов: Категория, Подкатегория, Тембр, Жанр (как столбцы Browse в Alchemy; точный их набор в Logic — по описанию, проверить). Справа список пресетов, сверху поиск, снизу Transform Pad в мини-виде и 8 ручек, чтобы можно было крутить звук, не уходя из обзора.
-- Фильтр: внутри столбца выбор нескольких значений — ИЛИ, между столбцами — И. Значение, которое при текущем фильтре дало бы 0 пресетов, показывается `dimText`. Поиск по имени, автору и тегам, без учёта регистра, кириллица и латиница.
-- Словарь тегов фиксирован (`core/src/alloy/TagVocabulary.cpp`), в интерфейсе подписи на русском, в файле — английские ключи:
-  - Категория: Bass, Lead, Pad, Keys, Pluck, Arp, Sequence, Synth Brass, Strings, Bells, Vocal, Organ, Drum, Percussion, FX, Soundscape, Init.
-  - Тембр: Warm, Bright, Dark, Airy, Gritty, Clean, Metallic, Glassy, Wide, Thin, Fat, Evolving, Static, Aggressive, Soft.
-  - Жанр: Ambient, Cinematic, Electronica, EDM, House, Techno, Hip-Hop, Pop, Rock, Experimental, Lo-Fi.
-  - Подкатегории задаются на категорию (Bass → Sub, Reese, Acid, Wobble, Plucked; Pad → Evolving, Lush, Dark, Choir, ...), полный список в том же файле.
-- **Листание.** Одиночный щелчок или стрелки вверх/вниз сразу загружают пресет. Это главная функция обзора: смена пресета во время игры не трещит и не даёт тишины больше 50 мс для пресетов без новых сэмплов. Как: процессор строит новый `AlloyPatch` и снимки в фоновом потоке, затем звучащие голоса получают быстрый release 30 мс, новые ноты идут уже с новым пресетом. Сэмплы соседних пресетов в списке (±2) предзагружаются.
-- Избранное (звёздочка), «Недавние» (последние 30), сортировка по имени и дате.
+- On the left, attribute columns: Category, Subcategory, Timbre, Genre. On the right, the preset list, with search at the top and, at the bottom, a mini Transform Pad and the 8 knobs, so the sound can be tweaked without leaving the browser.
+- Filter: multiple selections within a column are OR, between columns AND. A value that would yield 0 presets under the current filter is shown in `dimText`. Search by name, author and tags, case-insensitive, Cyrillic and Latin.
+- The tag vocabulary is fixed (`core/src/alloy/TagVocabulary.cpp`); the file uses English keys, and UI labels come from the strings file (English by default, Russian as the second language):
+  - Category: Bass, Lead, Pad, Keys, Pluck, Arp, Sequence, Synth Brass, Strings, Bells, Vocal, Organ, Drum, Percussion, FX, Soundscape, Init.
+  - Timbre: Warm, Bright, Dark, Airy, Gritty, Clean, Metallic, Glassy, Wide, Thin, Fat, Evolving, Static, Aggressive, Soft.
+  - Genre: Ambient, Cinematic, Electronica, EDM, House, Techno, Hip-Hop, Pop, Rock, Experimental, Lo-Fi.
+  - Subcategories are defined per category (Bass → Sub, Reese, Acid, Wobble, Plucked; Pad → Evolving, Lush, Dark, Choir, ...), the full list is in the same file.
+- **Stepping.** A single click or the up/down arrows load the preset immediately. This is the main function of the browser: changing presets while playing does not crackle and does not produce more than 50 ms of silence for presets without new samples. How: the processor builds the new `AlloyPatch` and snapshots on a background thread, then the sounding voices get a fast 30 ms release, and new notes already use the new preset. Samples of neighboring presets in the list (±2) are preloaded.
+- Favorites (star), "Recent" (last 30), sorting by name and date.
 
-## Задача 10.13. Вкладка «Игра»
+## Task 10.13. "Play" tab
 
-Простой вид: крупный Transform Pad (360×360 при масштабе 100 %) с 8 ячейками снимков по окружности, справа 8 исполнительских ручек в два ряда и 2 XY-пэда, внизу экранная клавиатура (`juce::MidiKeyboardComponent`, как в редакторе Prisma) и строка с громкостью, glide и полифонией. Ничего сверх этого: вид для игры, а не для настройки.
+Simple view: a large Transform Pad (360×360 at 100 % scale) with 8 snapshot cells around the circle, on the right the 8 performance knobs in two rows and 2 XY pads, at the bottom an on-screen keyboard (`juce::MidiKeyboardComponent`, as in the Prisma editor) and a row with volume, glide and polyphony. Nothing beyond that: this view is for playing, not for programming.
 
-## Задача 10.14. Вкладка «Подробно» и общий вид редактора
+## Task 10.14. "Detail" tab and the overall editor layout
 
-- Шапка всех вкладок: имя пресета с ◀ ▶, меню пресета (сохранить, сохранить как, теги…), вкладки «Обзор», «Игра», «Подробно», «Арп» (10C), «Эффекты», индикатор голосов и CPU.
-- «Подробно»: четыре полосы источников A–D (свёрнутая полоса — элемент, уровень, фильтр одной строкой), под ними XY-морф источников и глобальные фильтры, справа модуляция (вкладки огибающих, LFO, MSEG, матрица). Редактор MSEG: добавление точки двойным щелчком, кривизна перетаскиванием сегмента с `Alt`, сетка по долям.
-- Редактор окна масштабируется (75–200 %), размер по умолчанию 1100×720. Цвета, шрифты и скругления берутся только из `Theme` (01, задача 1.8): `panel`/`panel2` — блоки, `accent` — активное, `accent2` — морф, модуляция, путь Transform Pad, палитра темы — цвета источников A–D (индексы 0, 4, 9, 12). В плагине вне DAW тема выбирается в меню редактора и по умолчанию «Призма»; JSON тем встраиваются в плагин теми же файлами.
-- Тексты интерфейса — в `plugins/alloy/Source/AlloyStrings.h` по правилу 00 §4.
+- Header of all tabs: preset name with ◀ ▶, preset menu (save, save as, tags…), tabs "Browse", "Play", "Detail", "Arp" (10C), "Effects", voice and CPU meter.
+- "Detail": four source strips A–D (a collapsed strip shows element, level and filter on one line), below them the source XY morph and the global filters, on the right modulation (tabs for envelopes, LFOs, MSEGs, matrix). MSEG editor: add a point by double-click, curvature by dragging a segment with `Alt`, grid in beats.
+- The editor window scales (75–200 %), default size 1100×720. Colors, fonts and corner radii come only from `Theme` (01, task 1.8): `panel`/`panel2` for blocks, `accent` for active elements, `accent2` for morph, modulation and the Transform Pad path, the theme palette for the colors of sources A–D (indices 0, 4, 9, 12). In the plugin outside the DAW, the theme is chosen in the editor menu and defaults to "Prism"; the theme JSON files are embedded in the plugin as the same files.
+- UI text lives in `plugins/alloy/Source/AlloyStrings.h` per rule 00 §4.
 
-## Задача 10.15. Интеграция с DAW
+## Task 10.15. DAW integration
 
-- `DEVICE kind="alloy"` в модели проекта (01, задача 1.1); `state` — состояние плагина. В браузере DAW Alloy и его пресеты появляются в «Инструментах» и «Пресетах» с теми же атрибутами (столбцы атрибутов — фильтр внутри папки Alloy). Предпрослушивание пресетов в браузере работает как у Prisma.
-- **Компактный вид** в детальной панели (ширина 560 px): мини-Transform Pad 150×150 с точкой и ячейками снимков (щелчок по ячейке едет к снимку), 8 исполнительских ручек с именами из пресета, имя пресета с ◀ ▶. Кнопка ↗ открывает полный редактор.
-- **Снимки и морф DAW (этап 06).** Морф DAW интерполирует параметры устройств между снимками проекта. Для Alloy у устройства есть настройка «Морф DAW управляет»: `Parameters` (по умолчанию для чужих плагинов: морфятся параметры хоста, как у любого устройства) или `TransformPad` (по умолчанию для Alloy): ручка морфа DAW 0–1 передаётся в `transform.pathPos`, если у пресета есть путь, иначе — в положение точки по прямой между снимками, которые пользователь выбрал в настройке (по умолчанию 1 → 5). Во втором режиме параметры Alloy в снимки проекта не записываются, чтобы два морфа не спорили.
-- Автоматизация `transform.x/y`, `transform.pathPos` и исполнительских ручек в DAW работает как у любого параметра.
+- `DEVICE kind="alloy"` in the project model (01, task 1.1); `state` is the plugin state. In the DAW browser, Alloy and its presets appear under "Instruments" and "Presets" with the same attributes (attribute columns act as a filter inside the Alloy folder). Preset preview in the browser works as for Prisma.
+- **Compact view** in the detail panel (560 px wide): a 150×150 mini Transform Pad with the point and snapshot cells (clicking a cell travels to the snapshot), the 8 performance knobs with names from the preset, the preset name with ◀ ▶. The ↗ button opens the full editor.
+- **DAW snapshots and morph (stage 06).** The DAW morph interpolates device parameters between project snapshots. For Alloy the device has a "DAW morph controls" setting: `Parameters` (default for third-party plugins: host parameters are morphed, as for any device) or `TransformPad` (default for Alloy): the DAW morph knob 0–1 is passed to `transform.pathPos` if the preset has a path, otherwise to the point position along a straight line between the snapshots the user chose in the setting (default 1 → 5). In the second mode, Alloy parameters are not written into project snapshots, so the two morphs do not fight.
+- Automation of `transform.x/y`, `transform.pathPos` and the performance knobs in the DAW works like any parameter.
 
-## Задача 10.16. Аддитивный анализ (10B)
+## Task 10.16. Additive analysis (10B)
 
-`core/src/alloy/AdditiveAnalyser.cpp`, работает офлайн в фоновом потоке, на mono-сумме сэмпла.
+`core/src/alloy/AdditiveAnalyser.cpp`, runs offline on a background thread, on the mono sum of the sample.
 
-1. **Высота.** YIN (порог 0,15) по кадрам 2048 с шагом 256 → кривая f0 и признак «тональный кадр». Медианный фильтр по 5 кадрам. Медиана f0 по тональным кадрам — корневая нота, если её нет в метаданных.
-2. **STFT.** Окно Blackman — Harris 4-членное, длина `N` такая, что в окно влезает не меньше 4 периодов медианной f0 (от 1024 до 8192, степень двойки), шаг `N/8`, дополнение нулями ×2. FFT — `daw::dsp::fft` (офлайн, двойная точность).
-3. **Пики.** Локальные максимумы модуля выше `max(−90 дБ от максимума кадра, −70 дБ от локального уровня в окне ±1/6 октавы)`. Частота и амплитуда уточняются параболической интерполяцией по логарифму модуля трёх бинов. Не больше 600 пиков на кадр (у Alchemy, по описанию, тоже до 600 партиалов — проверить).
-4. **Треки (McAulay — Quatieri).** Пик кадра `k+1` продолжает трек кадра `k`, если `|Δf| < max(3 %·f, 20 Гц)`; конфликты решаются жадно по наименьшему `|Δf|`. Неподхваченный трек «умирает» с затуханием до нуля за один кадр, новый пик «рождается» с нарастанием из нуля. Треки короче 3 кадров отбрасываются.
-5. **Гармонический режим** (по умолчанию для тональных сэмплов): треки сопоставляются номерам гармоник `h = round (f / f0)` при отклонении < 0,35 гармоники; хранится отношение `f / (h · f0)`, чтобы при игре по клавиатуре сохранялась тонкая негармоничность. Негармонический режим хранит абсолютные частоты относительно корневой ноты.
-6. **Остаток.** Синтезированная сумма партиалов вычитается из исходника, остаток описывается огибающей в 24 полосах шкалы Барк на кадр (шумовая часть).
-7. Результат:
+1. **Pitch.** YIN (threshold 0.15) over 2048-sample frames with hop 256 → f0 curve and a "tonal frame" flag. 5-frame median filter. The median f0 over tonal frames is the root note, if metadata has none.
+2. **STFT.** 4-term Blackman–Harris window, length `N` such that the window holds at least 4 periods of the median f0 (1024 to 8192, power of two), hop `N/8`, zero padding ×2. FFT is `daw::dsp::fft` (offline, double precision).
+3. **Peaks.** Local magnitude maxima above `max(−90 dB from the frame maximum, −70 dB from the local level in a ±1/6 octave window)`. Frequency and amplitude are refined by parabolic interpolation over the log magnitude of three bins. No more than 600 peaks per frame.
+4. **Tracks (McAulay–Quatieri).** A peak in frame `k+1` continues a track from frame `k` if `|Δf| < max(3 %·f, 20 Hz)`; conflicts are resolved greedily by smallest `|Δf|`. A track that is not continued "dies" with a fade to zero over one frame, and a new peak is "born" with a fade-in from zero. Tracks shorter than 3 frames are discarded.
+5. **Harmonic mode** (default for tonal samples): tracks are mapped to harmonic numbers `h = round (f / f0)` when the deviation is < 0.35 of a harmonic; the ratio `f / (h · f0)` is stored, so subtle inharmonicity is preserved when playing across the keyboard. Inharmonic mode stores absolute frequencies relative to the root note.
+6. **Residual.** The synthesized sum of partials is subtracted from the original, and the residual is described by an envelope in 24 Bark-scale bands per frame (the noise part).
+7. Result:
 
 ```cpp
 struct AdditiveFrame { std::vector<float> ratio, amp; std::array<float, 24> noiseBands; float f0; };
 struct AdditiveModel
 {
     double hopSeconds; int rootNote; bool harmonic;
-    std::vector<AdditiveFrame> frames;   // число партиалов на кадр одинаково: недостающие с amp = 0
+    std::vector<AdditiveFrame> frames;   // same number of partials per frame: missing ones have amp = 0
     std::string sourceHash;
 };
 ```
 
-Модель сериализуется в `.alloymodel` (бинарный, с версией и `sourceHash`) и кэшируется (10.11). Анализ 10-секундного сэмпла укладывается в 5 с на M1 (в контейнере — сообщить цифру), отменяется кнопкой и показывает прогресс.
+The model is serialized to `.alloymodel` (binary, with a version and `sourceHash`) and cached (10.11). Analysis of a 10-second sample fits in 5 s on an M1 (in the container, report the figure), can be canceled with a button and shows progress.
 
-## Задача 10.17. Аддитивный синтез (10B)
+## Task 10.17. Additive synthesis (10B)
 
-- Элемент `Additive`: банк синус-осцилляторов на голос, до `partialLimit` партиалов (параметр 16–600, по умолчанию 128). Синус — таблица 4096 точек с линейной интерполяцией, амплитуды и частоты интерполируются между кадрами модели линейно внутри контрольного блока.
-- Партиалы с частотой выше 0,45·sr не считаются (обрезаются с плавным спадом от 0,40·sr), поэтому алиасинга нет.
-- Параметры: `position` (позиция в модели, 0–1), `speed` (−2…2, независимо от высоты), `loopStart/loopEnd`, `freeze`, `partialLimit`, `oddEven` (−1…1, баланс нечётных и чётных), `stretch` (негармоничность `f_h = f0 · h · (1 + stretch · h)`), `noiseLevel` (уровень шумовой части: белый шум через 24 полосовых фильтра, огибающие из `noiseBands`), `formantShift` не делается.
-- Шумовая часть считается раз в контрольный блок только для полос с уровнем выше −80 дБ.
-- Редактор партиалов во вкладке «Подробно»: столбики амплитуд текущего кадра (первые 64), перетаскиванием рисуется множитель поверх модели (`partialGain[64]`, данные пресета).
+- `Additive` element: a bank of sine oscillators per voice, up to `partialLimit` partials (parameter 16–600, default 128). The sine is a 4096-point table with linear interpolation; amplitudes and frequencies are interpolated linearly between model frames within the control block.
+- Partials with frequency above 0.45·sr are not computed (cut off with a smooth roll-off starting at 0.40·sr), so there is no aliasing.
+- Parameters: `position` (position in the model, 0–1), `speed` (−2…2, independent of pitch), `loopStart/loopEnd`, `freeze`, `partialLimit`, `oddEven` (−1…1, odd/even balance), `stretch` (inharmonicity `f_h = f0 · h · (1 + stretch · h)`), `noiseLevel` (level of the noise part: white noise through 24 bandpass filters, envelopes from `noiseBands`); `formantShift` is not made.
+- The noise part is computed once per control block, only for bands with a level above −80 dB.
+- Partial editor in the "Detail" tab: amplitude bars of the current frame (the first 64); dragging draws a multiplier on top of the model (`partialGain[64]`, preset data).
 
-## Задача 10.18. Спектральный анализ (10B)
+## Task 10.18. Spectral analysis (10B)
 
-- STFT с окном Hann, `N = 2048`, шаг `N/4`, частота анализа фиксирована 48 кГц (сэмпл перед анализом пересэмплирован). Хранятся модуль (float, 16 бит в файле в дБ с шагом 0,01) и мгновенная частота каждого бина, полученная из разности фаз соседних кадров (стандартный фазовый вокодер).
+- STFT with a Hann window, `N = 2048`, hop `N/4`, the analysis rate is fixed at 48 kHz (the sample is resampled before analysis). Stored are the magnitude (float; 16-bit in the file, in dB with a step of 0.01) and the instantaneous frequency of each bin, derived from the phase difference between adjacent frames (standard phase vocoder).
 - `SpectralModel { int fftSize, hop; std::vector<std::vector<uint16_t>> magDb; std::vector<std::vector<float>> instFreq; int rootNote; std::string sourceHash; }`.
-- Импорт картинки (PNG/JPEG) как спектра: яркость пикселя → модуль, ось Y логарифмическая от 20 Гц до 20 кГц, ось X — время (по умолчанию 4 с), мгновенная частота = центр бина. Это даёт «спектральное изображение», как в Alchemy.
+- Importing an image (PNG/JPEG) as a spectrum: pixel brightness → magnitude, Y axis logarithmic from 20 Hz to 20 kHz, X axis is time (default 4 s), instantaneous frequency = bin center. This gives a "spectral image" sound source.
 
-## Задача 10.19. Спектральный синтез (10B)
+## Task 10.19. Spectral synthesis (10B)
 
-- Элемент `Spectral`: фазовый вокодер с сохранением фазовой связности (identity phase locking по Ларошу — Долсону: фаза пикового бина продвигается по его мгновенной частоте, соседние бины его области получают ту же разность фаз, что в анализе). Обратное FFT размера 2048, окно Hann, overlap-add с шагом 512.
-- Высота: частоты бинов масштабируются отношением `f_note / f_root` с перераспределением модуля в соседние бины; при сдвиге больше октавы вверх бины выше Найквиста отбрасываются.
-- Параметры: `position`, `speed`, `freeze`, `pitchFollow` (вкл. — играет высоту клавиши, выкл. — исходная высота), `spectralTilt`, `blur` (сглаживание модуля по времени), `bands` (огрубление спектра по частоте, «вокодерный» звук).
-- Задержка элемента — один шаг (512 сэмплов) плюс окно; она компенсируется сдвигом старта ноты для остальных источников только если `latencyAlign` включён (по умолчанию выкл., потому что сдвиг всех источников ощущается как вялая атака).
-- Для FFT на аудиопотоке нужна быстрая реализация без выделений: написать `daw::dsp::RealFFT` (split-radix или radix-4, float, таблицы в `prepare`). Офлайн `dsp::fft` для этого медленный. Если исполнитель хочет взять PFFFT (BSD-лицензия, совместима с AGPLv3) вместо своей, это разрешено, лицензию положить в `third_party/pffft/`.
+- `Spectral` element: a phase vocoder that preserves phase coherence (identity phase locking after Laroche–Dolson: the phase of a peak bin advances by its instantaneous frequency, and the neighboring bins in its region get the same phase difference as in the analysis). Inverse FFT of size 2048, Hann window, overlap-add with hop 512.
+- Pitch: bin frequencies are scaled by the ratio `f_note / f_root`, with magnitude redistributed into neighboring bins; when shifting up by more than an octave, bins above Nyquist are discarded.
+- Parameters: `position`, `speed`, `freeze`, `pitchFollow` (on: plays the key's pitch; off: original pitch), `spectralTilt`, `blur` (magnitude smoothing over time), `bands` (coarsening the spectrum in frequency, a "vocoder" sound).
+- The element's latency is one hop (512 samples) plus the window; it is compensated by shifting note start for the other sources only if `latencyAlign` is on (off by default, because shifting all sources feels like a sluggish attack).
+- FFT on the audio thread needs a fast, allocation-free implementation: write `daw::dsp::RealFFT` (split-radix or radix-4, float, tables in `prepare`). The offline `dsp::fft` is too slow for this. If the implementer wants to use PFFFT (BSD license, compatible with AGPLv3) instead of their own, that is allowed; put the license in `third_party/pffft/`.
 
-## Задача 10.20. Спектральный морф источников (10B)
+## Task 10.20. Spectral source morph (10B)
 
-- Режим `sourceMixMode = Morph` доступен, когда все включённые источники — Additive или Spectral (при другом сочетании режим работает как Crossfade, интерфейс это пишет).
-- Additive ↔ Additive: веса A–D из 10.6 (без квадратного корня); для партиала с номером `h` амплитуда `Σ w · amp`, частота — взвешенное среднее в логарифме (`exp (Σ w · ln f)`), шумовые полосы — взвешенное среднее в дБ. Морф идёт до синтеза: звучит один банк осцилляторов, а не четыре.
-- Spectral ↔ Spectral: модуль бина — взвешенное среднее в дБ, мгновенная частота — от источника с наибольшим весом. Additive ↔ Spectral: аддитивный источник переводится в спектр (партиалы раскладываются по бинам) и морфится как Spectral.
-- Плавность: при движении `morphX/Y` веса сглаживаются за 10 мс.
+- Mode `sourceMixMode = Morph` is available when all enabled sources are Additive or Spectral (with any other combination the mode works as Crossfade, and the UI says so).
+- Additive ↔ Additive: weights A–D from 10.6 (without the square root); for partial number `h` the amplitude is `Σ w · amp`, the frequency is the weighted mean in the log domain (`exp (Σ w · ln f)`), noise bands are the weighted mean in dB. The morph happens before synthesis: one oscillator bank sounds, not four.
+- Spectral ↔ Spectral: bin magnitude is the weighted mean in dB, instantaneous frequency comes from the source with the largest weight. Additive ↔ Spectral: the additive source is converted to a spectrum (partials are distributed into bins) and morphed as Spectral.
+- Smoothness: when `morphX/Y` move, the weights are smoothed over 10 ms.
 
-## Задача 10.21. Арпеджиатор (10C)
+## Task 10.21. Arpeggiator (10C)
 
-- Режимы Up, Down, UpDown, DownUp, AsPlayed, Random, Chord; октавы 1–4; скорость синхронно (1/32 … 1 такт, триоли и с точкой); gate; swing; latch; «Retrig по ноте».
-- Шаговый узор до 32 шагов: у шага `on`, `velocity`, `length`, `tie`, `transpose` (±24) — по описанию Alchemy, его арпеджиатор тоже шаговый с такими полями, проверить состав полей.
-- Арпеджиатор стоит до `VoiceAllocator`, выдаёт события с сэмпловой точностью по позиции хоста (`AudioPlayHead`), при остановленном транспорте идёт от своего счётчика с темпом хоста.
+- Modes Up, Down, UpDown, DownUp, AsPlayed, Random, Chord; octaves 1–4; synced rate (1/32 … 1 bar, triplets and dotted); gate; swing; latch; "Retrig on note".
+- Step pattern of up to 32 steps: each step has `on`, `velocity`, `length`, `tie`, `transpose` (±24).
+- The arpeggiator sits before the `VoiceAllocator` and emits events with sample accuracy from the host position (`AudioPlayHead`); when the transport is stopped, it runs from its own counter at the host tempo.
 
-## Задача 10.22. Шаговый секвенсор (10C)
+## Task 10.22. Step sequencer (10C)
 
-- 2 секвенсора — источники модуляции: до 32 шагов, значение шага −1…1, glide между шагами, длина и скорость синхронно, режим per-voice (с ноты) или глобальный (с транспорта). Редактор — столбики, рисуются мышью.
+- 2 sequencers as modulation sources: up to 32 steps, step value −1…1, glide between steps, synced length and rate, per-voice mode (from the note) or global mode (from the transport). The editor is bars drawn with the mouse.
 
-## Задача 10.23. Заводская библиотека (10C)
+## Task 10.23. Factory library (10C)
 
-- Не меньше **300** пресетов к концу 10C (60 к концу 10A, 150 к концу 10B). Распределение не жёсткое, ориентир: Pad 50, Bass 45, Lead 40, Keys 25, Pluck 25, Arp/Sequence 30, Soundscape/FX 30, Strings/Brass/Bells/Vocal 40, Drum/Percussion 15.
-- Требования к каждому пресету: заполнены категория, подкатегория, 1–4 тембра, 0–3 жанра, автор; все 8 исполнительских ручек имеют имя и цель; не меньше 4 снимков Transform Pad, которые заметно различаются; пиковый уровень на ноте C3 со скоростью 100 от −12 до −3 dBFS; на 16 одновременных нотах нет перегрузки выше 0 dBFS; CPU в бюджете (см. ниже).
-- Сэмплы библиотеки — только собственные записи проекта или CC0 (источник и лицензия каждого файла в `Factory Library/Alloy/Samples/LICENSES.md`). Сэмплы из Alchemy, Logic и коммерческих библиотек запрещены.
-- Инструмент `tools/alloy_lint`: проверяет все требования выше для папки пресетов (рендер через ядро), выводит таблицу нарушений, код возврата ≠ 0 при нарушении. Запускается в CI.
-- Пресеты делаются вручную в редакторе. Генерация случайных параметров для «наполнения» запрещена; допустимы вариации одного пресета, если у них разные имена, теги и заметно разный звук.
+- At least **300** presets by the end of 10C (60 by the end of 10A, 150 by the end of 10B). The distribution is not strict; as a guide: Pad 50, Bass 45, Lead 40, Keys 25, Pluck 25, Arp/Sequence 30, Soundscape/FX 30, Strings/Brass/Bells/Vocal 40, Drum/Percussion 15.
+- Requirements for every preset: category, subcategory, 1–4 timbres, 0–3 genres and author are filled in; all 8 performance knobs have a name and a target; at least 4 Transform Pad snapshots that differ noticeably; peak level on note C3 at velocity 100 between −12 and −3 dBFS; no clipping above 0 dBFS on 16 simultaneous notes; CPU within budget (see below).
+- Library samples are only the project's own recordings or CC0 (the source and license of each file in `Factory Library/Alloy/Samples/LICENSES.md`). Samples taken from commercial synths, DAWs or commercial sample libraries are forbidden.
+- Tool `tools/alloy_lint`: checks all the requirements above for a preset folder (rendering through the core), prints a table of violations, exit code ≠ 0 on any violation. Runs in CI.
+- Presets are made by hand in the editor. Generating random parameters as "filler" is forbidden; variations of one preset are allowed if they have different names, tags and a noticeably different sound.
 
-## Задача 10.24. Подсказки и справка (10C)
+## Task 10.24. Hints and help (10C)
 
-Строка подсказок DAW (01) показывает описание параметра под мышью и в редакторе плагина (нижняя строка редактора). Описания — в таблице дескрипторов (`hint`), на русском, для всех параметров.
+The DAW info bar (01) shows the description of the parameter under the mouse, and so does the plugin editor (the editor's bottom line). Descriptions live in the descriptor table (`hint`), in English by default with a Russian translation, for all parameters.
 
 ---
 
-## Бюджеты CPU
+## CPU budgets
 
-Измерение — `tools/alloy_render`, 48 кГц, блок 256, один поток. На M1 целевые цифры — доля одного ядра; в контейнере сообщать относительно рендера Prisma «Init» с 8 голосами (`prisma_render`) и проверять отношения.
+Measured with `tools/alloy_render`, 48 kHz, block 256, single thread. On an M1 the targets are a fraction of one core; in the container, report relative to the Prisma "Init" render with 8 voices (`prisma_render`) and check the ratios.
 
-| Конфигурация (на 1 голос, если не сказано иное) | M1, % ядра | Относительно Prisma Init / голос |
+| Configuration (per voice unless stated otherwise) | M1, % of core | Relative to Prisma Init / voice |
 |---|---|---|
-| VA, 1 осц., без унисона, 1 фильтр | ≤ 0,4 | ≤ 1,3× |
-| VA, 2 осц. × унисон 8, 2 фильтра | ≤ 2,0 | ≤ 6× |
-| Сэмплер, 1 зона, стерео | ≤ 0,4 | ≤ 1,3× |
-| Гранулярный, 64 зерна | ≤ 2,5 | ≤ 8× |
-| Additive, 128 партиалов + шум | ≤ 2,0 | ≤ 6× |
-| Spectral, FFT 2048 | ≤ 2,5 | ≤ 8× |
-| Пустой экземпляр без нот (стойка эффектов выключена) | ≤ 0,1 на экземпляр | — |
-| Пресет 10A по умолчанию, 16 голосов, стойка из 3 эффектов | ≤ 15 на экземпляр | — |
+| VA, 1 osc., no unison, 1 filter | ≤ 0.4 | ≤ 1.3× |
+| VA, 2 osc. × unison 8, 2 filters | ≤ 2.0 | ≤ 6× |
+| Sampler, 1 zone, stereo | ≤ 0.4 | ≤ 1.3× |
+| Granular, 64 grains | ≤ 2.5 | ≤ 8× |
+| Additive, 128 partials + noise | ≤ 2.0 | ≤ 6× |
+| Spectral, FFT 2048 | ≤ 2.5 | ≤ 8× |
+| Empty instance with no notes (effects rack off) | ≤ 0.1 per instance | — |
+| Default 10A preset, 16 voices, rack of 3 effects | ≤ 15 per instance | — |
 
-Ни один заводской пресет не превышает 25 % ядра на 16 нотах (проверяет `alloy_lint`). В интерфейсе индикатор CPU экземпляра (время `processBlock` к длительности блока, усреднение 500 мс).
+No factory preset exceeds 25 % of a core on 16 notes (checked by `alloy_lint`). The UI has a per-instance CPU meter (`processBlock` time over block duration, averaged over 500 ms).
 
-## Тесты
+## Tests
 
-В `core/tests/alloy_tests.cpp` (ядро) и `tests/AlloyPluginTests.cpp` (плагин):
+In `core/tests/alloy_tests.cpp` (core) and `tests/AlloyPluginTests.cpp` (plugin):
 
-1. **Дескрипторы.** Все id уникальны, `offset` уникальны и < `kMaxParams`, значение по умолчанию в диапазоне, `fromNormalised (toNormalised (v)) == v` с точностью 1e-5 на 100 точках каждого Float.
-2. **Реальное время.** С `DAW_RT_CHECKS=ON` 2000 блоков по 256 сэмплов с 16 нотами, сменой пресета каждые 100 блоков из фонового потока, движением Transform Pad и сменой элемента источника: 0 выделений в аудиопотоке, нет NaN и Inf.
-3. **Высота.** Для каждого элемента нота A3 (220 Гц) по FFT даёт основную частоту 220 Гц ± 1 цент (для Spectral и Additive — на сэмпле синуса 440 Гц с корнем A4).
-4. **Алиасинг.** VA-пила и hard sync на ноте C7 при 44,1 кГц: энергия негармонических составляющих (алиасинг) ниже −60 дБ от основной.
-5. **Морф, математика.** Точка в позиции снимка `i` даёт ровно его значения; точка в центре при 8 снимках — среднее нормированных значений; Choice при двух снимках переключается при весе 0,5 ± 0,02 с гистерезисом (тест в обе стороны); исключённые параметры не меняются.
-6. **Морф без зиппера.** Источник VA-синус, снимки отличаются громкостью источника на 12 дБ и срезом фильтра на 3 октавы; точка проходит между ними за 200 мс. Разность соседних сэмплов огибающей (RMS по 16 сэмплам) нигде не прыгает больше чем на 0,5 дБ за блок, энергия выше 8 кГц не превышает −70 дБ относительно основной (нет щелчков). Смена Choice-элемента при морфе не даёт выброса пика больше +1 дБ над соседними 10 мс.
-7. **Путь.** Записанный путь из 1000 точек упрощается до ≤ 512, отклонение от исходного ≤ 0,005; `pathPos = 0.5` даёт точку середины пути по времени.
-8. **Морф источников.** Билинейные веса в углах дают ровно один источник; в центре 4 источника по −6 дБ; суммарная мощность при движении по диагонали постоянна ± 0,5 дБ (некоррелированные шумы).
-9. **Сэмплер.** Сэмпл синуса 1 кГц, сыгранный на +12 и −12 полутонов: 2 кГц и 500 Гц ± 1 цент; петля Forward без щелчка на шве (скачок сэмпла < 0,01 при loopXfade 10 мс); WAV, AIFF, FLAC с одинаковым содержимым дают посэмплово одинаковый звук.
-10. **Гранулярный.** Фиксированный сид → посэмплово одинаковый рендер двух прогонов; изменение `density` от 10 до 100 меняет RMS не больше чем на 3 дБ.
-11. **Аддитивный ресинтез (10B).** Синус 440 Гц, 1 с: после анализа и синтеза основная частота ± 1 цент, уровень ± 0,5 дБ, всё остальное ниже −50 дБ. Пила 110 Гц с ограниченной полосой (50 гармоник): амплитуды первых 40 гармоник в пределах ± 1 дБ, средняя лог-спектральная ошибка (по огибающей в 1/3 октавы до 10 кГц) ≤ 1,5 дБ. Синус со скольжением 220→440 Гц за 1 с даёт один непрерывный трек.
-12. **Спектральный ресинтез (10B).** Без модификаций (speed 1, pitch = корень) реконструкция пилы и белого шума с SNR ≥ 40 дБ после выравнивания задержки; растяжение ×2 синуса 440 Гц сохраняет частоту ± 1 цент и длину ×2 ± 1 шаг.
-13. **Спектральный морф (10B).** Морф двух аддитивных моделей синусов 440 и 880 Гц в точке 0,5 даёт один партиал около 622 Гц (геометрическое среднее) ± 5 центов, а не два.
-14. **Пресеты, круговой обмен.** Случайный (сид фиксирован) `AlloyPatch` со снимками, путём, MSEG и зонами → XML → `AlloyPatch` даёт равные параметры (± 1e-6) и данные. Пресет версии 1 с неизвестным id и без половины параметров грузится без ошибки.
-15. **Состояние плагина.** `getStateInformation` → новый экземпляр `setStateInformation` → рендер 2 с MIDI-фразы совпадает посэмплово.
-16. **Отсутствующий сэмпл.** Пресет со ссылкой на несуществующий файл грузится, источник помечен, остальные звучат; найденный по hash в другой папке файл подхватывается.
-17. **Смена пресета.** Во время 8 звучащих нот смена пресета через фоновую загрузку: тишина между старым и новым звуком ≤ 50 мс, пик выхода не превышает предыдущий больше чем на 1 дБ.
-18. **Заводские пресеты.** Все пресеты библиотеки грузятся, проходят `alloy_lint`, теги из словаря.
-19. **Арпеджиатор (10C).** Up, 2 октавы, 1/16 при 120 BPM на аккорде C-E-G: 6 нот за 0,75 с, смещения событий точны до сэмпла; latch держит узор после отпускания.
-20. **Интеграция с DAW.** `DEVICE kind="alloy"` сохраняется и загружается с тем же звуком; морф DAW в режиме `TransformPad` двигает `transform.pathPos`, а в режиме `Parameters` нет.
+1. **Descriptors.** All ids are unique, `offset`s are unique and < `kMaxParams`, the default value is within range, `fromNormalised (toNormalised (v)) == v` to 1e-5 at 100 points of every Float.
+2. **Real time.** With `DAW_RT_CHECKS=ON`, 2000 blocks of 256 samples with 16 notes, a preset change every 100 blocks from a background thread, Transform Pad movement and source element changes: 0 allocations on the audio thread, no NaN or Inf.
+3. **Pitch.** For each element, note A3 (220 Hz) gives a fundamental of 220 Hz ± 1 cent by FFT (for Spectral and Additive, on a 440 Hz sine sample with root A4).
+4. **Aliasing.** VA saw and hard sync on note C7 at 44.1 kHz: energy of inharmonic components (aliasing) below −60 dB relative to the fundamental.
+5. **Morph math.** The point at snapshot `i`'s position gives exactly its values; the point at the center with 8 snapshots gives the mean of the normalized values; a Choice with two snapshots switches at weight 0.5 ± 0.02 with hysteresis (tested in both directions); excluded parameters do not change.
+6. **Morph without zipper noise.** VA sine source, snapshots differ by 12 dB of source level and 3 octaves of filter cutoff; the point moves between them over 200 ms. The envelope difference between adjacent samples (RMS over 16 samples) never jumps by more than 0.5 dB per block, and energy above 8 kHz does not exceed −70 dB relative to the fundamental (no clicks). Changing a Choice element during the morph does not produce a peak overshoot of more than +1 dB above the neighboring 10 ms.
+7. **Path.** A recorded path of 1000 points is simplified to ≤ 512, deviation from the original ≤ 0.005; `pathPos = 0.5` gives the point at the middle of the path in time.
+8. **Source morph.** Bilinear weights at the corners give exactly one source; at the center, 4 sources at −6 dB each; total power when moving along the diagonal is constant ± 0.5 dB (uncorrelated noises).
+9. **Sampler.** A 1 kHz sine sample played at +12 and −12 semitones: 2 kHz and 500 Hz ± 1 cent; a Forward loop without a click at the seam (sample jump < 0.01 with loopXfade 10 ms); WAV, AIFF and FLAC with identical content give sample-identical sound.
+10. **Granular.** A fixed seed → sample-identical render across two runs; changing `density` from 10 to 100 changes RMS by no more than 3 dB.
+11. **Additive resynthesis (10B).** A 440 Hz sine, 1 s: after analysis and synthesis, fundamental ± 1 cent, level ± 0.5 dB, everything else below −50 dB. A band-limited 110 Hz saw (50 harmonics): amplitudes of the first 40 harmonics within ± 1 dB, mean log-spectral error (over a 1/3-octave envelope up to 10 kHz) ≤ 1.5 dB. A sine gliding 220→440 Hz over 1 s gives one continuous track.
+12. **Spectral resynthesis (10B).** Without modifications (speed 1, pitch = root), reconstruction of a saw and of white noise with SNR ≥ 40 dB after latency alignment; a ×2 stretch of a 440 Hz sine keeps the frequency ± 1 cent and the length ×2 ± 1 hop.
+13. **Spectral morph (10B).** Morphing two additive models of 440 and 880 Hz sines at 0.5 gives one partial near 622 Hz (geometric mean) ± 5 cents, not two.
+14. **Presets, round trip.** A random (fixed seed) `AlloyPatch` with snapshots, a path, MSEGs and zones → XML → `AlloyPatch` gives equal parameters (± 1e-6) and data. A version 1 preset with an unknown id and half the parameters missing loads without error.
+15. **Plugin state.** `getStateInformation` → a new instance `setStateInformation` → a 2 s render of a MIDI phrase matches sample for sample.
+16. **Missing sample.** A preset referencing a nonexistent file loads, the source is marked, the others sound; a file found by hash in another folder is picked up.
+17. **Preset change.** With 8 notes sounding, a preset change via background loading: silence between the old and new sound ≤ 50 ms, output peak does not exceed the previous one by more than 1 dB.
+18. **Factory presets.** All library presets load, pass `alloy_lint`, and use tags from the vocabulary.
+19. **Arpeggiator (10C).** Up, 2 octaves, 1/16 at 120 BPM on a C-E-G chord: 6 notes in 0.75 s, event offsets are sample-accurate; latch holds the pattern after release.
+20. **DAW integration.** `DEVICE kind="alloy"` saves and loads with the same sound; the DAW morph in `TransformPad` mode moves `transform.pathPos`, and in `Parameters` mode it does not.
 
-## Готово, когда
+## Done when
 
 ### 10A
-- [ ] Alloy собирается как AU, VST3 и Standalone; `auval -v aumu Aloy Dawp` проходит в CI.
-- [ ] Четыре источника с элементами VA/wavetable, сэмплер, гранулярный звучат; WAV/AIFF/FLAC загружаются перетаскиванием.
-- [ ] Transform Pad: 8 снимков, морф мышью, время морфа, запись и воспроизведение пути, автоматизация `transform.x/y` в DAW и в Logic.
-- [ ] 8 исполнительских ручек и 2 XY-пэда управляют звуком и видны в компактном устройстве DAW.
-- [ ] Вкладка «Обзор» фильтрует по атрибутам, стрелки листают пресеты во время игры без щелчков.
-- [ ] Морф DAW из этапа 06 двигает Transform Pad Alloy.
-- [ ] Скриншоты «Обзор», «Игра», «Подробно» и компактного вида в четырёх темах — в отчёте и в `media/`.
-- [ ] Не меньше 60 заводских пресетов, бюджеты CPU 10A выполнены (таблица цифр в отчёте).
-- [ ] Тесты 1–10, 14–18, 20 зелёные, старые тесты тоже.
+- [ ] Alloy builds as AU, VST3 and Standalone; `auval -v aumu Aloy Dawp` passes in CI.
+- [ ] Four sources with VA/wavetable, sampler and granular elements sound; WAV/AIFF/FLAC load by drag and drop.
+- [ ] Transform Pad: 8 snapshots, mouse morphing, morph time, path recording and playback, automation of `transform.x/y` in the DAW and in an external AU host.
+- [ ] 8 performance knobs and 2 XY pads control the sound and are visible in the compact DAW device.
+- [ ] The "Browse" tab filters by attributes, and the arrow keys step through presets while playing without clicks.
+- [ ] The stage 06 DAW morph drives Alloy's Transform Pad.
+- [ ] Screenshots of "Browse", "Play", "Detail" and the compact view in all four themes, in the report and in `media/`.
+- [ ] At least 60 factory presets, 10A CPU budgets met (table of figures in the report).
+- [ ] Tests 1–10, 14–18, 20 green, old tests too.
 
 ### 10B
-- [ ] Аддитивный и спектральный элементы работают на пользовательском сэмпле; анализ идёт в фоне с прогрессом, результат кэшируется.
-- [ ] Импорт картинки как спектра работает.
-- [ ] Режим `Morph` смешивает аддитивные и спектральные источники одним банком.
-- [ ] Тесты 11–13 зелёные с указанными допусками (фактические цифры в отчёте), бюджеты CPU для Additive и Spectral выполнены.
-- [ ] Не меньше 150 заводских пресетов.
+- [ ] Additive and spectral elements work on a user sample; analysis runs in the background with progress, the result is cached.
+- [ ] Image import as a spectrum works.
+- [ ] `Morph` mode blends additive and spectral sources with a single bank.
+- [ ] Tests 11–13 green with the stated tolerances (actual figures in the report), CPU budgets for Additive and Spectral met.
+- [ ] At least 150 factory presets.
 
 ### 10C
-- [ ] Арпеджиатор и 2 шаговых секвенсора работают синхронно с хостом; тест 19 зелёный.
-- [ ] Не меньше 300 заводских пресетов, `alloy_lint` в CI без нарушений, лицензии сэмплов записаны.
-- [ ] В отчёте — список пунктов «по описанию, проверить» с результатом сверки с Alchemy (или «не проверено: нет Mac с Logic»).
-- [ ] README обновлён: Alloy, его вкладки, горячие клавиши, скриншоты; `docs/ARCHITECTURE.md` — статус Alloy.
+- [ ] Arpeggiator and 2 step sequencers run in sync with the host; test 19 green.
+- [ ] At least 300 factory presets, `alloy_lint` in CI with no violations, sample licenses recorded.
+- [ ] In the report: the list of "verify by ear" items with the result of the listening check.
+- [ ] README updated: Alloy, its tabs, keyboard shortcuts, screenshots; `docs/ARCHITECTURE.md`: Alloy status.

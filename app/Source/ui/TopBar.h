@@ -26,7 +26,7 @@ public:
     // Called by the window's 30 Hz timer: refreshes the position, tempo, CPU and the lamps.
     void tick();
     void setComputerKeysOn (bool on);
-    // The octave of the A key, shown in the KLAV lamp ("КЛАВ C3").
+    // The octave of the A key, shown in the KLAV lamp ("KEYS C3").
     void setKeysOctave (const juce::String& octave);
 
     // The recorder gives the ribbon its notes and the record lamp its state; the window decides what the buttons do
@@ -39,7 +39,7 @@ public:
     std::function<void()> onCaptureClicked;
 
     std::function<void()> onCpuClicked;
-    // The version button: shows "v14 · 5 мин" and opens the history.
+    // The version button: shows "v14 · 5 min" and opens the history.
     std::function<void()> onVersionClicked;
     void setVersionText (const juce::String&);
 

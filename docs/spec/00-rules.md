@@ -1,16 +1,16 @@
-# 00. Общие правила для всех этапов
+# 00. General rules for all stages
 
-Этот файл обязателен к прочтению перед любым этапом. Правила здесь важнее удобства: если задача этапа требует их нарушить, остановись и опиши проблему в отчёте.
+Read this file before starting any stage. These rules take priority over convenience: if a stage task would require breaking one, stop and describe the problem in your report.
 
-## 1. Репозиторий и сборка
+## 1. Repository and build
 
-- Код: C++20, JUCE 8.0.4 (подтягивается через FetchContent), CMake + Ninja. macOS 11+, universal binary arm64 + x86_64.
-- Слои (подробно в [ARCHITECTURE.md](../ARCHITECTURE.md)):
-  - `core/` — чистый C++20 **без JUCE**: DSP, синты, транспорт, клипы, модель времени, алгоритмы (квантизация, громкость LUFS, детектор онсетов и т. п.). Всё, что можно проверить без окна и без звуковой карты, живёт здесь.
-  - `app/` — приложение на JUCE: движок, хостинг плагинов, интерфейс, файлы проекта.
-  - `plugins/` — встроенные инструменты и эффекты как отдельные AU/VST3.
-  - `tests/` — тесты JUCE-слоя (`daw_engine_tests`), `core/tests/` — тесты ядра (`daw_core_tests`).
-- Сборка на Linux (для проверки в контейнере):
+- Code: C++20, JUCE 8.0.4 (pulled in via FetchContent), CMake + Ninja. macOS 11+, universal binary arm64 + x86_64.
+- Layers (details in [ARCHITECTURE.md](../ARCHITECTURE.md)):
+  - `core/`: pure C++20 **without JUCE**: DSP, synths, transport, clips, time model, algorithms (quantize, LUFS loudness, onset detector, etc.). Everything that can be tested without a window and without an audio interface lives here.
+  - `app/`: the JUCE application: engine, plugin hosting, UI, project files.
+  - `plugins/`: built-in instruments and effects as separate AU/VST3 plugins.
+  - `tests/`: JUCE layer tests (`daw_engine_tests`); `core/tests/`: core tests (`daw_core_tests`).
+- Building on Linux (for checks in the container):
   ```bash
   sudo apt-get install -y libasound2-dev libxrandr-dev libxinerama-dev libxcursor-dev \
        libfontconfig1-dev libgl1-mesa-dev libxcomposite-dev xvfb xdotool imagemagick
@@ -18,74 +18,74 @@
   cmake --build ../build
   ctest --test-dir ../build --output-on-failure
   ```
-  Папку сборки держи вне репозитория. Если JUCE уже скачан, передай `-DFETCHCONTENT_SOURCE_DIR_JUCE=<путь>`.
-- Сборка на macOS: `./scripts/build-mac.sh`. CI (`.github/workflows/build.yml`) собирает macOS и Linux, гоняет тесты и `auval`, публикует nightly DMG. Push в `main` без зелёного CI считается незавершённой работой.
-- Предупреждения компилятора — это ошибки. Новый код собирается без единого предупреждения с флагами проекта.
+  Keep the build folder outside the repository. If JUCE is already downloaded, pass `-DFETCHCONTENT_SOURCE_DIR_JUCE=<path>`.
+- Building on macOS: `./scripts/build-mac.sh`. CI (`.github/workflows/build.yml`) builds macOS and Linux, runs the tests and `auval`, and publishes a nightly DMG. A push to `main` without green CI counts as unfinished work.
+- Compiler warnings are errors. New code builds without a single warning under the project's flags.
 
-## 2. Реальное время (самое важное)
+## 2. Real time (the most important part)
 
-Аудиопоток (`audioDeviceIOCallbackWithContext` и всё, что из него вызывается) **никогда**:
-- не выделяет и не освобождает память (`new`, `delete`, `std::vector::push_back` сверх `reserve`, `std::string`, `juce::String`, `std::function` с захватом, `juce::var`);
-- не берёт мьютексы и `CriticalSection`, не ждёт других потоков;
-- не читает и не пишет файлы, не логирует, не вызывает `DBG`;
-- не трогает `juce::ValueTree`, `juce::Component` и всё из message thread.
+The audio thread (`audioDeviceIOCallbackWithContext` and everything called from it) **never**:
+- allocates or frees memory (`new`, `delete`, `std::vector::push_back` beyond `reserve`, `std::string`, `juce::String`, `std::function` with captures, `juce::var`);
+- takes mutexes or a `CriticalSection`, or waits on other threads;
+- reads or writes files, logs, or calls `DBG`;
+- touches `juce::ValueTree`, `juce::Component`, or anything belonging to the message thread.
 
-Как передавать данные:
-- **Из интерфейса в звук:** неизменяемые снимки (`std::shared_ptr<const X>`), которые message thread собирает и публикует атомарной заменой указателя. Старый снимок удаляется на message thread, а не в аудиопотоке (см. 01, задача 1.3 «Граф воспроизведения»).
-- **Мелкие значения** (громкость, панорама, mute): `std::atomic<float>` / `std::atomic<bool>`.
-- **Команды** (запустить клип, начать запись): lock-free очередь SPSC фиксированной ёмкости (`juce::AbstractFifo` поверх массива POD-структур).
-- **Из звука в интерфейс** (уровни, позиция, записанные события): атомики и SPSC-очереди, которые интерфейс читает по таймеру (30–60 Гц).
+How to pass data:
+- **From the UI to audio:** immutable snapshots (`std::shared_ptr<const X>`) that the message thread builds and publishes with an atomic pointer swap. The old snapshot is deleted on the message thread, not on the audio thread (see 01, task 1.3 "Playback graph").
+- **Small values** (volume, pan, mute): `std::atomic<float>` / `std::atomic<bool>`.
+- **Commands** (launch a clip, start recording): a fixed-capacity lock-free SPSC queue (`juce::AbstractFifo` over an array of POD structs).
+- **From audio to the UI** (levels, position, recorded events): atomics and SPSC queues that the UI reads on a timer (30–60 Hz).
 
-Проверка: в Debug-сборке включи `DAW_RT_CHECKS=ON` (добавить в 01, задача 1.3), который подменяет `operator new` и ругается `jassertfalse`, если выделение произошло в аудиопотоке во время теста движка.
+Check: in a Debug build, enable `DAW_RT_CHECKS=ON` (added in 01, task 1.3), which replaces `operator new` and fires `jassertfalse` if an allocation happens on the audio thread during an engine test.
 
-## 3. Модель проекта и отмена действий
+## 3. Project model and undo
 
-- Всё, что сохраняется в проекте, хранится в `juce::ValueTree` (схема описана в 01, задача 1.1). Интерфейс читает и пишет только модель, а не движок напрямую.
-- Каждое действие пользователя — одна транзакция `UndoManager`: перед изменением `undoManager.beginNewTransaction ("Имя действия")`. Перетаскивание ноты мышью — одна транзакция на весь жест, а не на каждый пиксель.
-- Движок слушает модель (`ValueTree::Listener`) и пересобирает граф воспроизведения. Модель ничего не знает о движке.
+- Everything saved in the project is stored in a `juce::ValueTree` (the schema is described in 01, task 1.1). The UI reads and writes only the model, never the engine directly.
+- Each user action is one `UndoManager` transaction: call `undoManager.beginNewTransaction ("Action name")` before the change. Dragging a note with the mouse is one transaction for the whole gesture, not one per pixel.
+- The engine listens to the model (`ValueTree::Listener`) and rebuilds the playback graph. The model knows nothing about the engine.
 
-## 4. Код
+## 4. Code
 
-- Стиль как в существующих файлах: JUCE-стиль, 4 пробела, фигурные скобки на новой строке, `camelCase` для методов и переменных, `PascalCase` для классов, `kConstant` для констант. Пробел перед скобками вызова (`foo (x)`), как в JUCE.
-- Комментарии объясняют «почему», а не пересказывают код. Комментарии и идентификаторы в коде на английском, тексты интерфейса на русском.
-- Все строки интерфейса собираются в одном месте (`app/Source/Strings.h`, создаётся в 01), чтобы позже добавить английский перевод.
-- Один класс — одна пара `.h/.cpp`, если класс больше ~150 строк. Файлы интерфейса — в `app/Source/ui/`, движка — в `app/Source/engine/`, модели — в `app/Source/model/`.
-- Никаких сторонних библиотек сверх JUCE без явного разрешения в ТЗ этапа. Разрешённые библиотеки и их лицензии перечислены в этапах (LAME — 04, Rubber Band — 07). Лицензия каждой должна быть совместима с AGPLv3.
-- Цвета, шрифты, размеры отступов берутся только из темы (`Theme`, создаётся в 01). Литеральные цвета в `paint()` запрещены.
+- Style matches the existing files: JUCE style, 4 spaces, braces on a new line, `camelCase` for methods and variables, `PascalCase` for classes, `kConstant` for constants. A space before call parentheses (`foo (x)`), as in JUCE.
+- Comments explain "why", they do not retell the code. Comments and identifiers in code are in English.
+- All UI strings live in `app/Source/Strings.h` as `tr ("English", "Русский")` pairs. English is the default UI language; Russian is selectable in Settings → Appearance → Language (applies after restart). Every new string needs both.
+- One class, one `.h/.cpp` pair, if the class is larger than ~150 lines. UI files go in `app/Source/ui/`, engine files in `app/Source/engine/`, model files in `app/Source/model/`.
+- No third-party libraries beyond JUCE without explicit permission in the stage spec. Allowed libraries and their licenses are listed in the stages (LAME in 04, Rubber Band in 07). Each license must be compatible with AGPLv3.
+- Colors, fonts, and padding sizes come only from the theme (`Theme`, created in 01). Literal colors in `paint()` are forbidden.
 
-## 5. Тесты
+## 5. Tests
 
-- Каждая задача этапа добавляет тесты. Ядро тестируется в `core/tests/`, движок и модель — в `tests/` (виртуальное аудиоустройство `FakeDevice`, как в `tests/EngineTests.cpp`).
-- Тесты детерминированы: никакого реального времени, сна и случайности без фиксированного зерна.
-- Звук проверяется численно: пик, RMS, отсутствие NaN и Inf, позиция первого ненулевого сэмпла, частота через FFT. «На слух» не принимается.
-- Все существующие тесты остаются зелёными. Тест нельзя отключать, ослаблять или помечать как пропущенный, чтобы пройти этап.
+- Each stage task adds tests. The core is tested in `core/tests/`, the engine and model in `tests/` (virtual audio device `FakeDevice`, as in `tests/EngineTests.cpp`).
+- Tests are deterministic: no real time, no sleeping, and no randomness without a fixed seed.
+- Audio is checked numerically: peak, RMS, absence of NaN and Inf, position of the first non-zero sample, frequency via FFT. "Sounds right" is not accepted.
+- All existing tests stay green. A test may not be disabled, weakened, or marked as skipped to pass a stage.
 
-## 6. Проверка интерфейса
+## 6. UI checks
 
-- Интерфейс проверяется скриншотами под Xvfb:
+- The UI is checked with screenshots under Xvfb:
   ```bash
   Xvfb :99 -screen 0 1600x1000x24 & export DISPLAY=:99
-  ../build/app/DAW_artefacts/Release/DAW &   # путь зависит от генератора
-  xdotool search --name DAW | head -1        # id окна
+  ../build/app/DAW_artefacts/Release/DAW &   # path depends on the generator
+  xdotool search --name DAW | head -1        # window id
   import -window root /tmp/shot.png
   ```
-  Клики и клавиши — через `xdotool mousemove x y click 1`, `xdotool key Tab`. Процесс останавливай `pkill -x DAW` (не `pkill -f`, он убьёт и твою оболочку).
-- Для каждого экрана, который меняет этап, в отчёт идут скриншоты во всех четырёх темах, а итоговые кладутся в `media/` и обновляются в README.
-- Сверяйся с концептом [`docs/design/concept.html`](../design/concept.html): цвета, отступы, порядок элементов. Точного попиксельного совпадения не нужно, нужна та же логика и то же впечатление.
+  Clicks and keys go through `xdotool mousemove x y click 1`, `xdotool key Tab`. Stop the process with `pkill -x DAW` (not `pkill -f`, which also kills your shell).
+- For every screen a stage changes, the report includes screenshots in all four themes, and the final ones go into `media/` and are updated in the README.
+- Compare against the concept [`docs/design/concept.html`](../design/concept.html): colors, padding, element order. A pixel-exact match is not required; the same logic and the same impression are.
 
-## 7. Производительность
+## 7. Performance
 
-- Прогон тестового проекта (16 дорожек Prisma по 8 голосов, 44,1 кГц, буфер 256) не должен занимать больше 50 % времени буфера на M1. В контейнере измеряй относительно фазы 0 инструментом `tools/prisma_render` и сообщай цифры.
-- Интерфейс перерисовывает только изменившееся (`repaint (area)`), таймеры анимации не чаще 60 Гц, неиспользуемые панели не тикают.
+- Running the test project (16 Prisma tracks with 8 voices each, 44.1 kHz, buffer 256) must not take more than 50% of the buffer time on an M1. In the container, measure relative to phase 0 with the `tools/prisma_render` tool and report the numbers.
+- The UI repaints only what changed (`repaint (area)`), animation timers run at no more than 60 Hz, and unused panels do not tick.
 
-## 8. Коммиты и отчёт
+## 8. Commits and report
 
-- Ветка на этап: `stage-N-<кратко>`. Коммиты маленькие и осмысленные, сообщения на английском в повелительном наклонении («Add piano roll velocity lane»).
-- README обновляется в том же PR: что появилось, новые горячие клавиши, новые скриншоты.
-- В конце этапа — отчёт по разделу «Готово, когда»: каждая строка с отметкой «проверено» и чем (тест, скриншот, команда), или «не сделано» и почему. Нельзя писать «работает», если это не проверено.
+- One branch per stage: `stage-N-<short-name>`. Commits are small and meaningful, messages in English in the imperative mood ("Add piano roll velocity lane").
+- The README is updated in the same PR: what is new, new keyboard shortcuts, new screenshots.
+- At the end of a stage, report against the "Done when" section: each line marked "verified" with how (test, screenshot, command), or "not done" with why. Never write "works" if it was not verified.
 
-## 9. Чего не делать
+## 9. What not to do
 
-- Не начинать задачи следующих этапов, даже если «по пути». Задел под будущее — только там, где ТЗ этапа прямо просит (например, поле `type` у дорожки в 01).
-- Не менять формат файла проекта без миграции: у файла есть номер версии схемы, и загрузчик обязан открывать все предыдущие версии (01, задача 1.6).
-- Не трогать Prisma DSP и пресеты, если этап этого не требует.
+- Do not start tasks from later stages, even if they are "on the way". Groundwork for the future only where the stage spec explicitly asks for it (for example, the track `type` field in 01).
+- Do not change the project file format without a migration: the file has a schema version number, and the loader must open all previous versions (01, task 1.6).
+- Do not touch Prisma DSP and presets unless the stage requires it.

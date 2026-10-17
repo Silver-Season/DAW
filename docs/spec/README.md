@@ -1,48 +1,50 @@
-# Техническое задание: фазы 1–2
+# Specification: phases 1–2
 
-Здесь лежит подробное ТЗ на десять этапов: семь из проекта интерфейса плюс библиотека звуков и два синта. Каждый файл написан так, чтобы его мог выполнить исполнитель без контекста обсуждений, в том числе модель попроще (например, Claude Sonnet).
+This folder holds the detailed specification for ten stages: seven from the interface design plus the sound library and two synths. Each file is written so that someone without the background discussions can carry it out, including a smaller model (for example, Claude Sonnet). The stage files themselves are in Russian for now.
 
-Документ с замыслом и решениями: [DAW: проект интерфейса и функций](https://claude.ai/code/artifact/8da3f345-ad9a-4826-9e7e-47df44273770). Живой концепт окна и тем: [Призма: главное окно DAW](https://claude.ai/artifact/PUEfYcnAf9Wf62v8Xmkvtc), его копия лежит в [`docs/design/concept.html`](../design/concept.html).
+Design document with the intent and decisions: [DAW: interface and feature design](https://claude.ai/code/artifact/8da3f345-ad9a-4826-9e7e-47df44273770). Interactive concept of the window and themes: [Prism: DAW main window](https://claude.ai/artifact/PUEfYcnAf9Wf62v8Xmkvtc); a copy is in [`docs/design/concept.html`](../design/concept.html).
 
-| Файл | Этап | Опирается на |
+| File | Stage | Depends on |
 |---|---|---|
-| [00-rules.md](00-rules.md) | Общие правила для всех этапов: сборка, реальное время, тесты, проверка, коммиты | — |
-| [01-layout-project.md](01-layout-project.md) | Модель проекта, новый движок, раскладка окна, браузер, темы, сохранение, отмена, история версий, настройки звуковой карты | фаза 0 |
-| [02-midi-recording.md](02-midi-recording.md) | Метроном, отсчёт, запись MIDI, overdub, пиано-ролл, квантизация, вечная запись MIDI | 01 |
-| [03-arrangement.md](03-arrangement.md) | Arrangement View, петля, маркеры, правка клипов, запись из сессии | 02 |
-| [04-export.md](04-export.md) | Офлайн-рендер, WAV / AIFF / FLAC / MP3, стемы, нормализация, прослушивание версий | 03 |
-| [05-audio-recording.md](05-audio-recording.md) | Аудиодорожки, аудиоклипы, запись звука, компенсация задержки, дубли, вечная запись звука | 04 |
-| [06-effects-mixing.md](06-effects-mixing.md) | Шесть эффектов, посылы и возвраты, группы, PDC, автоматизация, снимки и морф | 05 |
-| [07-warp.md](07-warp.md) | Warp, аудиоредактор, дорожка темпа | 06 |
-| [08-library-drums.md](08-library-drums.md) | Sampler, Drum Rack, заводские барабаны и лупы, единый формат пресетов, теги, hot-swap, пакеты | 06 |
-| [09-prisma-pro.md](09-prisma-pro.md) | Prisma до уровня Serum: новые осцилляторы и фильтры, эффекты внутри синта, 150+ пресетов, интерфейс для релиза | 01 (эффекты общие с 06) |
-| [10-alloy.md](10-alloy.md) | Alloy, флагманский синт в духе Alchemy: 4 источника, ресинтез, Transform Pad, обзор пресетов по атрибутам | 06, 09 |
-| [12-vocal.md](12-vocal.md) | Черновик: «Вокал», живой автотюн по ладу и строю проекта и графическая правка высоты в духе Melodyne | 02, 05, 06, 07 |
-| [99-details.md](99-details.md) | Мелочи по этапам, которые легко забыть | все |
+| [00-rules.md](00-rules.md) | Rules for every stage: build, real time, tests, verification, commits | — |
+| [01-layout-project.md](01-layout-project.md) | Project model, new engine, window layout, browser, themes, saving, undo, version history, audio device settings | phase 0 |
+| [02-midi-recording.md](02-midi-recording.md) | Metronome, count-in, MIDI recording, overdub, piano roll, quantization, always-on MIDI capture | 01 |
+| [03-arrangement.md](03-arrangement.md) | Arrangement View, loop, markers, clip editing, recording from the session | 02 |
+| [04-export.md](04-export.md) | Offline render, WAV / AIFF / FLAC / MP3, stems, normalization, comparing versions by ear | 03 |
+| [05-audio-recording.md](05-audio-recording.md) | Audio tracks, audio clips, audio recording, latency compensation, takes, always-on audio capture | 04 |
+| [06-effects-mixing.md](06-effects-mixing.md) | Six effects, sends and returns, groups, PDC, automation, snapshots and morphing | 05 |
+| [07-warp.md](07-warp.md) | Warp, audio editor, tempo track | 06 |
+| [08-library-drums.md](08-library-drums.md) | Sampler, 16-pad drum machine, factory drums and loops, one preset format, tags, hot-swap, packs | 06 |
+| [09-prisma-pro.md](09-prisma-pro.md) | Prisma to release level: new oscillators and filters, built-in effects, 150+ presets, release UI | 01 (effects shared with 06) |
+| [10-alloy.md](10-alloy.md) | Alloy, the flagship multi-engine synth: 4 sources, resynthesis, Transform Pad, preset browsing by attributes | 06, 09 |
+| [12-vocal.md](12-vocal.md) | Draft: "Vocal", live pitch correction to the project scale and tuning, and graphical pitch editing | 02, 05, 06, 07 |
+| [99-details.md](99-details.md) | Small per-stage details that are easy to forget | all |
 
-Этапы 8–10 можно делать параллельно основной линии после этапа 6 (09 можно начать сразу после 01, если вынести DSP эффектов в `core/daw::fx` первым шагом).
+Stages 8–10 can run in parallel with the main line after stage 6 (09 can start right after 01 if the effect DSP is moved into `core/daw::fx` as the first step).
 
-Прототипы, которые Codex сделал отдельно (драм-пад на трекпаде и вокальный процессор), лежат в [`docs/reference/codex/`](../reference/codex/README.md) как справочник для этапов 08 и 12.
+An English UI (translation of `app/Source/Strings.h`, a language switch, English screenshots) is a separate, later stage that does not have a spec file yet.
 
-## Как выдавать этап исполнителю
+Prototypes that Codex built separately (a trackpad drum pad and a vocal processor) are in [`docs/reference/codex/`](../reference/codex/README.md) as reference for stages 08 and 12.
 
-Один этап на одну сессию. Внутри этапа задачи пронумерованы, и их можно выдавать по одной, если этап не помещается целиком. Шаблон запроса:
+## How to hand a stage to an implementer
+
+One stage per session. Tasks inside a stage are numbered and can be handed out one at a time if the whole stage does not fit. Request template:
 
 ```
-Ты работаешь в репозитории DAW (C++20, JUCE 8, CMake). Прочитай docs/spec/00-rules.md
-и docs/spec/0N-<этап>.md целиком, затем выполни задачи N.1–N.k этого этапа.
-Код этапов до N уже в main. Следуй правилам из 00-rules.md без исключений:
-сборка без предупреждений, все тесты зелёные, новые тесты на каждую задачу,
-скриншоты интерфейса под Xvfb. В конце дай отчёт по разделу «Готово, когда»
-этого этапа: что проверено и как, что не получилось.
+You are working in the DAW repository (C++20, JUCE 8, CMake). Read docs/spec/00-rules.md
+and docs/spec/0N-<stage>.md in full, then do tasks N.1–N.k of that stage.
+The code of the stages before N is already in main. Follow the rules of 00-rules.md without
+exception: a build with no warnings, all tests green, new tests for every task, UI screenshots
+under Xvfb. At the end, report against the stage's "Done when" section: what was verified
+and how, and what did not work out.
 ```
 
-## Как устроен каждый файл этапа
+## How each stage file is structured
 
-1. **Цель** одним абзацем и что пользователь увидит в конце.
-2. **Границы**: что входит и что сознательно не входит (не делать раньше времени).
-3. **Задачи** с номерами: какие файлы создать или изменить, структуры данных, алгоритмы, поведение интерфейса, крайние случаи.
-4. **Тесты**: конкретные проверки, которые нужно написать.
-5. **Готово, когда**: список проверок для приёмки.
+1. **Goal** in one paragraph and what the user sees at the end.
+2. **Scope**: what is in and what is deliberately left out (not to be done early).
+3. **Tasks**, numbered: which files to create or change, data structures, algorithms, UI behavior, edge cases.
+4. **Tests**: the specific checks to write.
+5. **Done when**: the acceptance checklist.
 
-Если исполнитель видит, что ТЗ противоречит коду или требует невозможного, он не выдумывает обход молча, а пишет об этом в отчёте и выбирает самый простой вариант, не ломающий следующие этапы.
+If an implementer sees that the specification contradicts the code or asks for the impossible, they do not invent a workaround silently: they say so in the report and pick the simplest option that does not break later stages.

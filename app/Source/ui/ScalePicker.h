@@ -6,7 +6,7 @@
 
 namespace ui
 {
-// "C минор" or "Лад: выкл" for a root (0..11) and a scale key ("" = off).
+// "C minor" or "Scale: off" for a root (0..11) and a scale key ("" = off).
 juce::String scaleLabel (int root, const juce::String& mode);
 
 // The chooser of tonic and scale: twelve tonic cells and the list of scales. Every click is reported at once

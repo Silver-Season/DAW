@@ -55,6 +55,7 @@ if(DAW_BUILD_JUCE)
     # Sources shared by the app and the engine tests: model, settings, engine, theme, built-in Prisma.
     set(DAW_APP_SHARED_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Settings.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Language.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
@@ -148,5 +149,9 @@ if(DAW_BUILD_JUCE)
         target_link_libraries(daw_engine_tests PRIVATE daw_core DawResources juce::juce_audio_utils
             juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
         add_test(NAME daw_engine_tests COMMAND daw_engine_tests)
+        # The same tests with the Russian UI: every text of Strings.h exists in both languages.
+        add_test(NAME daw_engine_tests_ru COMMAND daw_engine_tests)
+        set_tests_properties(daw_engine_tests PROPERTIES ENVIRONMENT DAW_LANG=en)
+        set_tests_properties(daw_engine_tests_ru PROPERTIES ENVIRONMENT DAW_LANG=ru)
     endif()
 endif()

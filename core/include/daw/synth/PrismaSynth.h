@@ -85,7 +85,7 @@ private:
     double sampleRate = 48000.0;
 };
 
-// Polyphonic wavetable synthesizer in the spirit of Serum. Real-time safe: no allocation in process().
+// Polyphonic wavetable synthesizer. Real-time safe: no allocation in process().
 class PrismaSynth
 {
 public:

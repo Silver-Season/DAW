@@ -1,152 +1,152 @@
-# 03. Arrangement View
+# 03. Arrangement view
 
-## Цель
+## Goal
 
-Добавить линейную шкалу времени, на которой из клипов собирается трек от начала до конца. Те же дорожки, устройства и микшер, что в Session View; `Tab` переключает виды. Сессия и аранжировка связаны как в Ableton: можно играть клипами в сессии и записывать это на шкалу.
+Add a linear timeline on which clips are assembled into a track from start to finish. The same tracks, devices and mixer as in the Session view; `Tab` switches views. Session and Arrangement are connected: you can play clips in the Session and record that onto the timeline.
 
-В конце пользователь может: сыграть сцены в Session View с включённой записью и получить их на шкале, переключиться `Tab`, поставить маркеры «Куплет», «Дроп», зациклить кусок, перетащить и разрезать клипы, дописать партию прямо на шкалу и забрать дорожку из старой версии проекта.
+At the end the user can: play scenes in the Session view with recording on and get them on the timeline, switch with `Tab`, place "Verse" and "Drop" markers, loop a section, drag and split clips, record a part directly onto the timeline, and pull a track from an old version of the project.
 
-## Границы
+## Scope
 
-Входит: модель аранжировки, воспроизведение, шкала и линейка, маркеры, петля, курсор и выделение времени, правка клипов, прилипание и зум, запись MIDI прямо на шкалу, запись сессии в аранжировку, приоритет сессии над аранжировкой и «Вернуть аранжировку», вставка и удаление времени, «Забрать дорожку из версии».
+Included: the arrangement model, playback, timeline and ruler, markers, loop, cursor and time selection, clip editing, snapping and zoom, MIDI recording directly onto the timeline, recording the session into the arrangement, session priority over arrangement and "Back to Arrangement", inserting and deleting time, "Pull Track from Version".
 
-Не входит: линии автоматизации (06), аудиоклипы (05), дорожка темпа и смена размера (07), экспорт (04).
+Not included: automation lanes (06), audio clips (05), tempo track and time signature changes (07), export (04).
 
 ---
 
-## Задача 3.1. Модель
+## Task 3.1. Model
 
 ```
 TRACK
 └── ARRANGEMENT
-    └── ACLIP  id  start  length  (доли от начала песни)
-               offset=0     (доли внутри исходного клипа, откуда начинается)
-               loop=1       (повторять содержимое клипа, если ACLIP длиннее петли клипа)
-               └── CLIP …   (собственная копия содержимого, та же схема, что в слоте)
+    └── ACLIP  id  start  length  (beats from the start of the song)
+               offset=0     (beats inside the source clip where it starts)
+               loop=1       (repeat the clip content if the ACLIP is longer than the clip loop)
+               └── CLIP …   (its own copy of the content, same schema as in a slot)
 PROJECT
 ├── MARKERS
 │   └── MARKER  id  beat  name
 └── arrangementLoopStart=0  arrangementLoopEnd=16  arrangementLoopOn=0
-    arrangementPlayStart=0  (откуда играет пробел)
+    arrangementPlayStart=0  (where the space bar plays from)
     followPlayhead=1
 ```
 
-- ACLIP не пересекаются на одной дорожке. Любая операция, которая создаёт пересечение, обрезает или разрезает нижний клип (как в Ableton: новый клип «перекрывает» старый). Функция `resolveOverlaps (track, newClipId)` в модели, с тестами.
-- Клип из сессии, перенесённый на шкалу, копирует содержимое (а не ссылается на слот).
-- Длина песни = конец последнего ACLIP или последнего маркера, минимум 16 тактов, плюс 8 тактов пустого места в интерфейсе.
+- ACLIPs do not overlap on one track. Any operation that creates an overlap trims or splits the underlying clip: the new clip "covers" the old one. A `resolveOverlaps (track, newClipId)` function in the model, with tests.
+- A clip moved from the session to the timeline copies its content (rather than referencing the slot).
+- Song length = the end of the last ACLIP or the last marker, at least 16 bars, plus 8 bars of empty space in the UI.
 
-## Задача 3.2. Движок: воспроизведение аранжировки
+## Task 3.2. Engine: arrangement playback
 
-- `PlaybackGraph::Track` получает отсортированный по `start` массив `ArrangementClipPlayback { startBeat, endBeat, offsetBeats, loop, shared_ptr<const MidiClip> }`.
-- `core`: `renderArrangement (clips, blockStartBeat, blockEndBeat, samplesPerBeat, numSamples, out)`. Для каждого ACLIP, пересекающего окно, рендерится содержимое с учётом `offset`, петли и обрезки по `endBeat`. На конце ACLIP все звучащие ноты получают note-off (тот же механизм `held`, что в `ClipPlayer`).
-- Перемотка (щелчок по линейке во время игры): все ноты, которые сейчас звучат, выключаются, и с новой позиции начинают звучать ноты, **начало которых раньше позиции, а конец позже** (догоняющие ноты, как «chase» в Ableton). Это важно для длинных пэдов.
-- Петля аранжировки: когда позиция доходит до `loopEnd`, транспорт перескакивает на `loopStart` в том же блоке, блок делится на две части. `Transport` в core получает `setLoop (start, end, on)` и выдаёт до двух окон на блок. Тест на сэмплово точный переход.
+- `PlaybackGraph::Track` gets an array sorted by `start` of `ArrangementClipPlayback { startBeat, endBeat, offsetBeats, loop, shared_ptr<const MidiClip> }`.
+- `core`: `renderArrangement (clips, blockStartBeat, blockEndBeat, samplesPerBeat, numSamples, out)`. For each ACLIP intersecting the window, the content is rendered taking into account `offset`, the loop and trimming at `endBeat`. At the end of an ACLIP all sounding notes get a note-off (the same `held` mechanism as in `ClipPlayer`).
+- Seeking (clicking the ruler during playback): all currently sounding notes are turned off, and from the new position the notes **that start before the position and end after it** start sounding (chase notes). This matters for long pads.
+- Arrangement loop: when the position reaches `loopEnd`, the transport jumps to `loopStart` within the same block, and the block is split into two parts. `Transport` in core gets `setLoop (start, end, on)` and produces up to two windows per block. A test for a sample-accurate jump.
 
-### Сессия против аранжировки
+### Session vs. arrangement
 
-- У дорожки два источника: аранжировка и сессия. Запуск клипа в сессии делает дорожку «в сессии»: её ACLIP молчат, кнопка дорожки в Arrangement показывает серую полосу поверх клипов.
-- Кнопка «Вернуть аранжировку» (оранжевая, как Back to Arrangement в Ableton) в транспорте загорается, когда хотя бы одна дорожка в сессии. Нажатие останавливает клипы сессии на следующей квантованной границе и возвращает все дорожки к аранжировке.
-- Остановка клипа кнопкой «стоп» дорожки тоже оставляет дорожку «в сессии» (молчит) до «Вернуть аранжировку», как в Ableton.
+- A track has two sources: arrangement and session. Launching a clip in the session puts the track "in session": its ACLIPs go silent, and the track in the Arrangement shows a gray bar over its clips.
+- The "Back to Arrangement" button (orange) in the transport lights up when at least one track is in session. Pressing it stops the session clips at the next quantized boundary and returns all tracks to the arrangement.
+- Stopping a clip with the track's "stop" button also leaves the track "in session" (silent) until "Back to Arrangement".
 
-## Задача 3.3. Интерфейс Arrangement View
+## Task 3.3. Arrangement view UI
 
-`ui/ArrangementView` занимает место `SessionView` в `MainView`. `Tab` переключает виды с плавным переходом 150 мс (если анимации включены).
+`ui/ArrangementView` takes the place of `SessionView` in `MainView`. `Tab` switches views with a smooth 150 ms transition (if animations are enabled).
 
-### Раскладка
+### Layout
 
 ```
-┌ заголовки ┬ линейка маркеров (имена, щелчок — перейти) ───────────────────────┐
-│ дорожек   ├ линейка тактов (щелчок — курсор, протяжка — выделение, петля) ───┤
-│ (как в    ├──────────────────────────────────────────────────────────────────┤
-│ сессии:   │  дорожки с клипами                                                │
-│ имя, M S ●│                                                                   │
-│ громкость)│                                                                   │
+┌ track     ┬ marker ruler (names, click to jump) ────────────────────────────────┐
+│ headers   ├ bar ruler (click: cursor, drag: selection, loop) ───────────────────┤
+│ (as in    ├──────────────────────────────────────────────────────────────────┤
+│ session:  │  tracks with clips                                                │
+│ name, M S ●│                                                                  │
+│ volume)   │                                                                   │
 ├───────────┴──────────────────────────────────────────────────────────────────┤
-│ обзор всей песни (мини-карта, рамка видимой области)                         │
+│ whole-song overview (minimap, frame of the visible area)                     │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Заголовок дорожки: цвет, имя, кнопки вкл/S/●, громкость числом (тянется мышью), панорама. Высота дорожки 24–240 px, тянется за нижний край; `Alt+колесо` над дорожкой меняет высоту; `H` (при фокусе в Arrangement) переключает «все дорожки одной высоты / по содержимому».
-- Мини-карта внизу высотой 36 px: все клипы песни мелко, рамка видимой части тянется и меняет масштаб за края.
-- Клипы рисуются как в концепте: цвет дорожки, имя, ноты мелко (или полосы, если клип очень узкий), значок петли, если содержимое повторяется.
-- Курсор воспроизведения — «луч»: линия цвета `text` шириной 1,5 px со свечением `accent` при `glow > 0`; там, где луч пересекает клип, справа от него рисуются шесть тонких цветных полос спектра (см. `drawArrangement` в концепте). Луч рисуется отдельным лёгким компонентом поверх, чтобы не перерисовывать дорожки 60 раз в секунду.
-- «Следовать за курсором» (кнопка в транспорте, `Cmd+Shift+F`): когда курсор уходит за правый край, вид перелистывается на страницу.
+- Track header: color, name, on/S/● buttons, volume as a number (draggable with the mouse), pan. Track height 24–240 px, resized by dragging the bottom edge; `Alt+wheel` over a track changes its height; `H` (with focus in the Arrangement) toggles "all tracks the same height / by content".
+- The minimap at the bottom, 36 px high: all clips of the song in miniature, the frame of the visible part can be dragged and resized by its edges to change the zoom.
+- Clips are drawn as in the design concept: track color, name, notes in miniature (or bars if the clip is very narrow), a loop icon if the content repeats.
+- The playhead is a "beam": a `text`-colored line 1.5 px wide with an `accent` glow when `glow > 0`; where the beam crosses a clip, six thin colored spectrum bars are drawn to its right (see `drawArrangement` in the concept). The beam is drawn as a separate lightweight component on top, so the tracks are not redrawn 60 times per second.
+- "Follow playhead" (a transport button, `Cmd+Shift+F`): when the playhead goes past the right edge, the view pages forward.
 
-### Время, выделение, петля
+### Time, selection, loop
 
-- Щелчок по линейке тактов ставит точку старта (`arrangementPlayStart`) и, если играет, перематывает. Протяжка по линейке или по пустому месту дорожки выделяет промежуток времени (на этих дорожках).
-- Петля: скобка над линейкой. `Cmd+L` ставит петлю по выделению. Щелчок по скобке включает и выключает петлю, концы и вся скобка тянутся мышью.
-- Пробел играет с `arrangementPlayStart`, `Shift+Пробел` продолжает с места остановки. Двойная остановка (нажать ■ при остановленном транспорте) возвращает курсор в начало песни.
-- `Home` в начало, `End` в конец, `←/→` двигает выделение на шаг сетки.
+- Clicking the bar ruler sets the start point (`arrangementPlayStart`) and, if playing, seeks. Dragging on the ruler or on empty track space selects a time range (on those tracks).
+- Loop: a bracket above the ruler. `Cmd+L` sets the loop to the selection. Clicking the bracket toggles the loop on and off, its ends and the whole bracket can be dragged with the mouse.
+- Space plays from `arrangementPlayStart`, `Shift+Space` continues from where it stopped. A double stop (pressing ■ with the transport stopped) returns the cursor to the start of the song.
+- `Home` to the start, `End` to the end, `←/→` moves the selection by a grid step.
 
-### Маркеры
+### Markers
 
-- Над линейкой полоса маркеров. Кнопка «+ Маркер» (или `Cmd+M`) ставит маркер в позицию курсора. Двойной щелчок по имени переименовывает, перетаскивание двигает, `Delete` при выделенном маркере удаляет.
-- Кнопки ◀ ▶ рядом с «+ Маркер» прыгают к предыдущему и следующему маркеру. Щелчок по маркеру во время игры прыгает к нему на следующей квантованной границе (как в Ableton).
+- Above the ruler is a marker strip. The "+ Marker" button (or `Cmd+M`) places a marker at the cursor position. Double-clicking the name renames it, dragging moves it, `Delete` with a marker selected deletes it.
+- The ◀ ▶ buttons next to "+ Marker" jump to the previous and next marker. Clicking a marker during playback jumps to it at the next quantized boundary.
 
-### Сетка, прилипание, зум
+### Grid, snapping, zoom
 
-- Сетка адаптивная к масштабу (линии не ближе 12 px) или фиксированная, `Cmd+1/2/3/4` как в пиано-ролле.
-- Клипы и края клипов прилипают к сетке; Cmd во время перетаскивания отключает.
-- Зум: `Cmd+колесо`, щипок, `+`/`−` (при фокусе в Arrangement), `Z` — приблизить к выделению, `X` — вернуть прошлый масштаб. Вертикальная прокрутка колесом, горизонтальная — Shift+колесо или жест.
+- The grid is adaptive to zoom (lines no closer than 12 px) or fixed, `Cmd+1/2/3/4` as in the piano roll.
+- Clips and clip edges snap to the grid; holding Cmd while dragging disables snapping.
+- Zoom: `Cmd+wheel`, pinch, `+`/`−` (with focus in the Arrangement), `Z` zooms to the selection, `X` returns to the previous zoom. Vertical scrolling with the wheel, horizontal with Shift+wheel or a gesture.
 
-### Правка клипов
+### Clip editing
 
-| Действие | Как |
+| Action | How |
 |---|---|
-| Переместить | Тащить клип (между дорожками тоже, если тип дорожки совпадает) |
-| Копировать | Alt+тащить, `Cmd+C`/`Cmd+V` в позицию курсора, `Cmd+D` дублирует выделенное время или клип сразу после него |
-| Длина | Тащить правый край: длиннее петли — содержимое повторяется; тащить левый край — меняется `offset` |
-| Разрезать | `Cmd+E` по курсору или по краям выделения времени |
-| Склеить | `Cmd+J`: выделенные клипы одной дорожки становятся одним клипом (ноты переносятся, пустоты остаются) |
-| Удалить | `Delete` удаляет клипы или содержимое выделенного времени |
-| Вставить время | `Cmd+I` при выделении времени вставляет пустое время такой же длины на всех дорожках, всё правее сдвигается (в Session View `Cmd+I` — сцена) |
-| Удалить время | `Cmd+Shift+Delete` удаляет выделенное время на всех дорожках со сдвигом |
-| Нарисовать клип | Двойной щелчок по пустому месту MIDI-дорожки: пустой клип длиной 1 такт |
-| Открыть | Двойной щелчок по клипу открывает пиано-ролл (02) для его содержимого |
-| Переименовать / цвет | `Cmd+R`, правая кнопка → цвет |
-| Отправить в сессию | Правая кнопка → «Отправить в сессию»: копия клипа в первый пустой слот дорожки начиная с выбранной сцены |
+| Move | Drag a clip (between tracks too, if the track type matches) |
+| Copy | Alt+drag, `Cmd+C`/`Cmd+V` at the cursor position, `Cmd+D` duplicates the selected time or clip right after it |
+| Length | Drag the right edge: longer than the loop repeats the content; dragging the left edge changes `offset` |
+| Split | `Cmd+E` at the cursor or at the edges of the time selection |
+| Join | `Cmd+J`: selected clips on one track become one clip (notes are carried over, gaps remain) |
+| Delete | `Delete` removes clips or the content of the selected time |
+| Insert time | `Cmd+I` with a time selection inserts empty time of the same length on all tracks, everything to the right shifts (in the Session view `Cmd+I` inserts a scene) |
+| Delete time | `Cmd+Shift+Delete` deletes the selected time on all tracks with a shift |
+| Draw a clip | Double-click on empty space of a MIDI track: an empty 1-bar clip |
+| Open | Double-click on a clip opens the piano roll (02) for its content |
+| Rename / color | `Cmd+R`, right-click → color |
+| Send to Session | Right-click → "Send to Session": a copy of the clip into the first empty slot of the track starting from the selected scene |
 
-- Из Session View в Arrangement: перетаскивание клипа на кнопку `Arrangement` в транспорте переключает вид и продолжает перетаскивание на шкалу.
-- Все операции — транзакции отмены, все пересечения решает `resolveOverlaps`.
+- From the Session view to the Arrangement: dragging a clip onto the `Arrangement` button in the transport switches the view and continues the drag onto the timeline.
+- All operations are undo transactions, all overlaps are resolved by `resolveOverlaps`.
 
-## Задача 3.4. Запись
+## Task 3.4. Recording
 
-### Прямо на шкалу
+### Directly onto the timeline
 
-- Кнопка ● в транспорте при открытом Arrangement (или `F9`) включает запись аранжировки. На всех взведённых MIDI-дорожках с позиции курсора создаётся растущий ACLIP, ноты рисуются по мере игры. Остановка транспорта или повторное ● заканчивают запись. Отсчёт и метроном как в 02.
-- С включённой петлёй аранжировки: каждый круг становится отдельным **дублем** (в этом этапе: новый ACLIP поверх старого, а старые круги сохраняются в `ACLIP/TAKES` и выбираются через правую кнопку → «Дубли ▸ Дубль 1 / 2 / 3»). Полноценный comping по полосам дублей — в 05.
-- Overdub (кнопка OVR) на шкале: новые ноты добавляются в существующий клип под курсором, а не заменяют его.
-- Punch-in / punch-out: две кнопки в транспорте рядом с петлёй. Если включены, запись идёт только внутри скобки петли.
+- The ● button in the transport with the Arrangement open (or `F9`) turns on arrangement recording. On all armed MIDI tracks a growing ACLIP is created from the cursor position, notes are drawn as they are played. Stopping the transport or pressing ● again ends recording. Count-in and metronome as in 02.
+- With the arrangement loop on: each pass becomes a separate **take** (in this stage: a new ACLIP on top of the old one, while the old passes are kept in `ACLIP/TAKES` and chosen via right-click → "Takes ▸ Take 1 / 2 / 3"). Full comping with take lanes comes in 05.
+- Overdub (OVR button) on the timeline: new notes are added to the existing clip under the cursor rather than replacing it.
+- Punch-in / punch-out: two buttons in the transport next to the loop. When on, recording happens only inside the loop bracket.
 
-### Сессия → аранжировка
+### Session → arrangement
 
-- Если нажата ● при открытом Session View, а транспорт играет из аранжировки, то всё, что запускается в сессии, записывается на шкалу: каждый запуск клипа создаёт ACLIP с копией его содержимого от момента запуска до остановки или смены клипа. Живые ноты на взведённых дорожках тоже пишутся.
-- Реализация: message thread ведёт журнал событий запуска/остановки из движка (`EngineEvent { beat, trackId, slot, type }`, SPSC-очередь из аудиопотока) и после остановки записи одной транзакцией превращает журнал в ACLIP.
+- If ● is pressed with the Session view open while the transport plays from the arrangement, everything launched in the session is recorded onto the timeline: each clip launch creates an ACLIP with a copy of its content from the moment of launch to the stop or clip change. Live notes on armed tracks are recorded too.
+- Implementation: the message thread keeps a log of launch/stop events from the engine (`EngineEvent { beat, trackId, slot, type }`, an SPSC queue from the audio thread) and after recording stops turns the log into ACLIPs in one transaction.
 
-## Задача 3.5. Забрать дорожку из версии
+## Task 3.5. Pull track from version
 
-- В списке версий (01, задача 1.7) появляется кнопка «Забрать дорожку…». Она загружает выбранную версию в память (не в движок), показывает список её дорожек, и выбранная дорожка со всеми устройствами, клипами сессии и аранжировки добавляется в текущий проект как новая дорожка (одна транзакция, `id` перевыдаются). Имя: «Reese (v12)».
+- The version list (01, task 1.7) gets a "Pull Track…" button. It loads the selected version into memory (not into the engine), shows the list of its tracks, and the chosen track with all its devices, session clips and arrangement clips is added to the current project as a new track (one transaction, `id`s are reissued). Name: "Reese (v12)".
 
-## Тесты
+## Tests
 
-1. **Пересечения.** `resolveOverlaps`: клип поверх середины другого разрезает его на два; поверх края обрезает; полностью накрывает — удаляет. Отмена возвращает всё.
-2. **Рендер аранжировки** (core): клип 1 такт с `loop=1` в ACLIP длиной 4 такта даёт 4 повтора нот; `offset` = 2 доли сдвигает содержимое; на конце ACLIP все ноты закрыты.
-3. **Догоняющие ноты.** Перемотка в середину 4-тактовой ноты пэда даёт note-on этой ноты в первом блоке после перемотки.
-4. **Петля транспорта** (core): петля 4 такта при 120 BPM и 48 кГц: переход в сэмпле 384 000 ± 0 внутри блока, блок делится на два окна, суммарная длина окон равна размеру блока.
-5. **Сессия против аранжировки.** Запуск клипа сессии глушит ACLIP дорожки; «Вернуть аранжировку» возвращает их на квантованной границе.
-6. **Запись на шкалу.** Фейковые события за 2 такта с позиции 9.1.1 создают ACLIP со `start = 32` долей и нотами в нужных местах.
-7. **Сессия → аранжировка.** Последовательность запусков сцен (Intro 8 тактов, Drop 8 тактов) даёт на каждой дорожке ACLIP нужной длины с копиями клипов.
-8. **Вставка и удаление времени** сдвигают клипы и маркеры всех дорожек; ACLIP, разрезанный вставкой, становится двумя.
-9. **Забрать дорожку.** Из сохранённой версии добавляется дорожка с тем же содержимым и новыми `id`, без конфликтов с текущими.
+1. **Overlaps.** `resolveOverlaps`: a clip on top of the middle of another splits it in two; on top of an edge trims it; fully covering removes it. Undo restores everything.
+2. **Arrangement render** (core): a 1-bar clip with `loop=1` in a 4-bar ACLIP gives 4 repetitions of the notes; `offset` = 2 beats shifts the content; at the end of the ACLIP all notes are closed.
+3. **Chase notes.** Seeking into the middle of a 4-bar pad note produces a note-on for that note in the first block after the seek.
+4. **Transport loop** (core): a 4-bar loop at 120 BPM and 48 kHz: the jump happens at sample 384,000 ± 0 within the block, the block is split into two windows, the total length of the windows equals the block size.
+5. **Session vs. arrangement.** Launching a session clip silences the track's ACLIPs; "Back to Arrangement" brings them back at a quantized boundary.
+6. **Recording onto the timeline.** Fake events over 2 bars from position 9.1.1 create an ACLIP with `start = 32` beats and notes in the right places.
+7. **Session → arrangement.** A sequence of scene launches (Intro 8 bars, Drop 8 bars) gives each track ACLIPs of the right length with copies of the clips.
+8. **Inserting and deleting time** shift the clips and markers of all tracks; an ACLIP split by an insertion becomes two.
+9. **Pull track.** A track with the same content and new `id`s, with no conflicts with the current ones, is added from a saved version.
 
-## Готово, когда
+## Done when
 
-- [ ] `Tab` переключает Session и Arrangement, дорожки и микшер общие (скриншоты Arrangement в 4 темах, луч воспроизведения виден).
-- [ ] Из сцен записывается структура трека на шкалу, потом она играет без сессии.
-- [ ] Маркеры, петля, punch-in/out, следование за курсором работают.
-- [ ] Все действия из таблицы правки клипов работают мышью и клавишами, отмена по одному действию.
-- [ ] Запись MIDI прямо на шкалу и дубли по петле работают.
-- [ ] Длинная нота догоняется при перемотке, на концах клипов нет висящих нот.
-- [ ] Дорожка забирается из старой версии.
-- [ ] Все тесты зелёные, CI зелёный, README обновлён.
+- [ ] `Tab` switches between Session and Arrangement, tracks and mixer are shared (Arrangement screenshots in 4 themes, the playhead beam is visible).
+- [ ] A track structure is recorded from scenes onto the timeline, and then plays without the session.
+- [ ] Markers, loop, punch-in/out and follow playhead work.
+- [ ] Every action in the clip editing table works with mouse and keys, undo one action at a time.
+- [ ] MIDI recording directly onto the timeline and takes over the loop work.
+- [ ] A long note is chased on seek, there are no hanging notes at clip ends.
+- [ ] A track can be pulled from an old version.
+- [ ] All tests green, CI green, README updated.
