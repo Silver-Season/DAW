@@ -255,6 +255,7 @@ void ClipPlayer::process (double a, double b, double spb, int numSamples, std::v
             renderWindow (*playingClip, startBeat, cursor, at, a, spb, numSamples, out);
         track (out, first);
         releaseHeld (toOffset (at, a, spb, numSamples), out);
+        endedAt = at;
         playing = kNoClip;
         playingClip = nullptr;
         stopQueued = false;
@@ -268,6 +269,7 @@ void ClipPlayer::process (double a, double b, double spb, int numSamples, std::v
             renderWindow (*playingClip, startBeat, cursor, at, a, spb, numSamples, out);
         track (out, first);
         releaseHeld (toOffset (at, a, spb, numSamples), out);
+        endedAt = at;
 
         playing = queued;
         playingClip = queuedClip;
@@ -292,6 +294,7 @@ void ClipPlayer::process (double a, double b, double spb, int numSamples, std::v
         if (endAt <= b)
         {
             releaseHeld (toOffset (endAt, a, spb, numSamples), out);
+            endedAt = endAt;
             playing = kNoClip;
             playingClip = nullptr;
         }

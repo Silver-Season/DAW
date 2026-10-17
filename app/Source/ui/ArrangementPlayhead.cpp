@@ -1,6 +1,8 @@
 #include "ArrangementPlayhead.h"
 
+#include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "../engine/SessionRecorder.h"
 
 #include <cmath>
 
@@ -48,6 +50,9 @@ void ArrangementPlayhead::timerCallback()
 {
     if (! isShowing())
         return;
+    // The clips that grow while a recording runs are drawn by paint(); they change with every poll of the recorder.
+    if (auto* recorder = view.getRecorder(); recorder != nullptr && recorder->arrangement().isActive() && ++recordingTick % 2 == 0)
+        repaint();
     const float x = beamX();
     if (std::abs (x - lastX) < 0.25f && lastRows == (int) view.layoutRows.size())
         return;
@@ -57,9 +62,72 @@ void ArrangementPlayhead::timerCallback()
     lastRows = (int) view.layoutRows.size();
 }
 
+// The clip that is being recorded on each track: from where the recording began to where it is now (with a loop, over the
+// whole loop, showing the pass that runs), in the colour of recording, with the notes played so far.
+void ArrangementPlayhead::paintRecording (juce::Graphics& g) const
+{
+    auto* recorder = view.getRecorder();
+    if (recorder == nullptr || ! recorder->arrangement().isActive())
+        return;
+    const auto& t = theme();
+    for (const auto& row : view.layoutRows)
+    {
+        ArrangementRecorder::Progress p;
+        if (! recorder->arrangement().getProgress (row.trackId, p) || p.waiting || p.endBeat - p.startBeat < 1.0e-3)
+            continue;
+        const float top = (float) (ArrangementView::kRulerHeight + row.y - view.v.scrollY) + 3.0f;
+        const float h = (float) row.height - 6.0f;
+        if (top + h < (float) ArrangementView::kRulerHeight || top > (float) getHeight())
+            continue;
+        const float x0 = (float) view.beatToX (p.startBeat), x1 = (float) view.beatToX (p.endBeat);
+        if (x1 < 0.0f || x0 > (float) getWidth())
+            continue;
+        const juce::Rectangle<float> r (x0, top, juce::jmax (2.0f, x1 - x0), h);
+        g.setColour (t.record.withAlpha (0.2f));
+        g.fillRoundedRectangle (r, juce::jmin (t.radius, 4.0f));
+        g.setColour (t.record.withAlpha (0.9f));
+        g.drawRoundedRectangle (r.reduced (0.75f), juce::jmin (t.radius, 4.0f), 1.5f);
+
+        juce::Graphics::ScopedSaveState state (g);
+        g.reduceClipRegion (r.toNearestInt());
+        const bool nameRow = r.getHeight() >= 34.0f;
+        if (! p.notes.empty() && r.getWidth() > 3.0f)
+        {
+            int lowest = 127, highest = 0;
+            for (const auto& n : p.notes)
+            {
+                lowest = std::min (lowest, n.pitch);
+                highest = std::max (highest, n.pitch);
+            }
+            const auto area = r.reduced (2.0f, 2.0f).withTrimmedTop (nameRow ? 15.0f : 1.0f);
+            const int span = std::max (highest - lowest, 7) + 1;
+            const float rowH = area.getHeight() / (float) span;
+            const float noteH = juce::jlimit (1.5f, 4.0f, rowH);
+            g.setColour (t.text.withAlpha (0.75f));
+            for (const auto& n : p.notes)
+            {
+                const float nx = (float) view.beatToX (p.startBeat + n.start);
+                const float w = juce::jmax (1.5f, (float) (n.length * view.v.pxPerBeat));
+                const float y = area.getBottom() - ((float) (n.pitch - lowest) + 0.5f) * rowH - noteH * 0.5f;
+                g.fillRect (nx, y, w, noteH);
+            }
+        }
+        if (nameRow && r.getWidth() > 40.0f)
+        {
+            g.setColour (t.text);
+            g.setFont (t.uiFont (11.0f, 500));
+            auto label = Strings::arrRec::clipName;
+            if (p.numPasses > 1)
+                label += " · " + Strings::arrRec::take (p.pass);
+            g.drawText (label, r.toNearestInt().withTrimmedLeft (6).withHeight (15), juce::Justification::centredLeft, true);
+        }
+    }
+}
+
 void ArrangementPlayhead::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    paintRecording (g);
     const float x = beamX();
     if (x < -12.0f || x > (float) getWidth() + 12.0f)
         return;

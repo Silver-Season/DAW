@@ -1021,6 +1021,18 @@ void ArrangementView::sendSelectionToSession()
         message (Strings::arrangement::sentToSession (scene + 1));
 }
 
+bool ArrangementView::switchTake (int64_t aclipId, int number)
+{
+    const auto clip = arrangement::findClip (model, aclipId);
+    if (! clip.isValid())
+        return false;
+    model.undo.beginNewTransaction (Strings::arrRec::undoSwitchTake);
+    if (! arrangement::switchTake (model, clip, number))
+        return false;
+    message (Strings::arrRec::takeSelected (number));
+    return true;
+}
+
 //==============================================================================
 // Edits of the gestures
 void ArrangementView::commitMove (const std::vector<Dragged>& clips, double deltaBeats, int deltaTracks, bool copy)

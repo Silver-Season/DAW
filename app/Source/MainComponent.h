@@ -126,6 +126,8 @@ private:
     int64_t selectedTrackForRecording() const;
     int selectedSceneForRecording() const;
     void recordClicked();
+    void recordToSlotClicked();
+    void recordArrangementClicked();
     void captureClicked();
     void showPluginScanner();
 

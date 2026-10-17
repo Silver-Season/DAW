@@ -20,6 +20,24 @@ double shiftedOffset (const ArrangementClipRef& c, double delta)
     return daw::engine::normaliseOffset (c.clip().toMidiClip(), c.offset() + delta, c.loop());
 }
 
+// A fresh, empty CLIP node for the content of an arrangement clip; not in the model yet.
+juce::ValueTree makeContent (ProjectModel& model, const TrackRef& track, double lengthBeats, const juce::String& name)
+{
+    juce::ValueTree c (ids::CLIP);
+    c.setProperty (ids::id, (juce::int64) model.newId(), nullptr);
+    c.setProperty (ids::name, name.isEmpty() ? Strings::defaultClipName : name, nullptr);
+    c.setProperty (ids::colour, track.colour(), nullptr);
+    c.setProperty (ids::lengthBeats, lengthBeats, nullptr);
+    c.setProperty (ids::loopStart, 0.0, nullptr);
+    c.setProperty (ids::loopEnd, lengthBeats, nullptr);
+    c.setProperty (ids::startOffset, 0.0, nullptr);
+    c.setProperty (ids::loop, true, nullptr);
+    c.setProperty (ids::ownScale, false, nullptr);
+    c.setProperty (ids::scaleRoot, model.scaleRoot(), nullptr);
+    c.setProperty (ids::scaleMode, model.scaleMode(), nullptr);
+    return c;
+}
+
 // Adds an ACLIP holding `content` (a CLIP tree with fresh ids that is not in the model yet) to the track.
 ArrangementClipRef addAClip (ProjectModel& model, const TrackRef& track, const juce::ValueTree& content, double start, double length,
                              double offset, bool loop)
@@ -161,22 +179,94 @@ ArrangementClipRef addEmptyClip (ProjectModel& model, const TrackRef& track, dou
     start = std::max (0.0, start);
     lengthBeats = std::max (kMinClipBeats, lengthBeats);
 
-    juce::ValueTree c (ids::CLIP);
-    c.setProperty (ids::id, (juce::int64) model.newId(), nullptr);
-    c.setProperty (ids::name, name.isEmpty() ? Strings::defaultClipName : name, nullptr);
-    c.setProperty (ids::colour, track.colour(), nullptr);
-    c.setProperty (ids::lengthBeats, lengthBeats, nullptr);
-    c.setProperty (ids::loopStart, 0.0, nullptr);
-    c.setProperty (ids::loopEnd, lengthBeats, nullptr);
-    c.setProperty (ids::startOffset, 0.0, nullptr);
-    c.setProperty (ids::loop, true, nullptr);
-    c.setProperty (ids::ownScale, false, nullptr);
-    c.setProperty (ids::scaleRoot, model.scaleRoot(), nullptr);
-    c.setProperty (ids::scaleMode, model.scaleMode(), nullptr);
-
-    auto a = addAClip (model, track, c, start, lengthBeats, 0.0, true);
+    auto a = addAClip (model, track, makeContent (model, track, lengthBeats, name), start, lengthBeats, 0.0, true);
     resolveOverlaps (model, track, a.id());
     return a;
+}
+
+ArrangementClipRef addRecordedClip (ProjectModel& model, const TrackRef& track, double start, double lengthBeats,
+                                    const std::vector<RecordedPass>& passes, int activePass, const juce::String& name)
+{
+    if (! track.arrangementNode().isValid() || passes.empty())
+        return {};
+    start = std::max (0.0, start);
+    lengthBeats = std::max (kMinClipBeats, lengthBeats);
+    activePass = std::clamp (activePass, 0, (int) passes.size() - 1);
+
+    // Contents are built detached (no undo needed), then the whole ACLIP is appended in one undoable step.
+    const auto content = [&] (const RecordedPass& pass) {
+        auto c = makeContent (model, track, lengthBeats, name);
+        ClipRef ref (c);
+        ref.setNotes (pass.notes, nullptr);
+        ref.setControllers (pass.controllers, nullptr);
+        return c;
+    };
+
+    juce::ValueTree a (ids::ACLIP);
+    a.setProperty (ids::id, (juce::int64) model.newId(), nullptr);
+    a.setProperty (ids::start, start, nullptr);
+    a.setProperty (ids::length, lengthBeats, nullptr);
+    a.setProperty (ids::offset, 0.0, nullptr);
+    a.setProperty (ids::loop, true, nullptr);
+    a.appendChild (content (passes[(size_t) activePass]), nullptr);
+    if (passes.size() > 1)
+    {
+        a.setProperty (ids::take, activePass + 1, nullptr);
+        juce::ValueTree takes (ids::TAKES);
+        for (int i = 0; i < (int) passes.size(); ++i)
+        {
+            if (i == activePass)
+                continue;
+            juce::ValueTree t (ids::TAKE);
+            t.setProperty (ids::id, (juce::int64) model.newId(), nullptr);
+            t.setProperty (ids::number, i + 1, nullptr);
+            t.appendChild (content (passes[(size_t) i]), nullptr);
+            takes.appendChild (t, nullptr);
+        }
+        a.appendChild (takes, nullptr);
+    }
+    auto node = track.arrangementNode();
+    node.appendChild (a, &model.undo);
+    resolveOverlaps (model, track, (int64_t) (juce::int64) a.getProperty (ids::id));
+    return ArrangementClipRef (a);
+}
+
+std::vector<TakeInfo> takesOf (const ArrangementClipRef& clip)
+{
+    std::vector<TakeInfo> out;
+    const auto takes = clip.takesNode();
+    if (! takes.isValid() || clip.activeTake() <= 0)
+        return out;
+    out.push_back ({ clip.activeTake(), true });
+    for (const auto& t : takes)
+        out.push_back ({ (int) t.getProperty (ids::number, 0), false });
+    std::sort (out.begin(), out.end(), [] (const auto& x, const auto& y) { return x.number < y.number; });
+    return out;
+}
+
+bool switchTake (ProjectModel& model, const ArrangementClipRef& clip, int number)
+{
+    const auto takes = clip.takesNode();
+    if (! takes.isValid() || number == clip.activeTake())
+        return false;
+    for (auto t : takes)
+    {
+        if ((int) t.getProperty (ids::number, 0) != number)
+            continue;
+        auto taken = t.getChildWithName (ids::CLIP);
+        auto shown = clip.state.getChildWithName (ids::CLIP);
+        if (! taken.isValid() || ! shown.isValid())
+            return false;
+        // The two contents trade places, so every take keeps its identity and nothing is copied.
+        t.removeChild (taken, &model.undo);
+        clip.state.removeChild (shown, &model.undo);
+        clip.state.appendChild (taken, &model.undo);
+        t.appendChild (shown, &model.undo);
+        t.setProperty (ids::number, clip.activeTake(), &model.undo);
+        clip.state.setProperty (ids::take, number, &model.undo);
+        return true;
+    }
+    return false;
 }
 
 ArrangementClipRef addSlotClip (ProjectModel& model, const TrackRef& track, const ClipRef& source, double start)
@@ -185,6 +275,16 @@ ArrangementClipRef addSlotClip (ProjectModel& model, const TrackRef& track, cons
         return {};
     const double length = std::max (kMinClipBeats, source.lengthBeats());
     auto a = addAClip (model, track, model.copyWithNewIds (source.state), std::max (0.0, start), length, 0.0, source.loopEnabled());
+    resolveOverlaps (model, track, a.id());
+    return a;
+}
+
+ArrangementClipRef addSlotClipPart (ProjectModel& model, const TrackRef& track, const ClipRef& source, double start, double length, double offset)
+{
+    if (! track.arrangementNode().isValid() || ! source.isValid())
+        return {};
+    auto a = addAClip (model, track, model.copyWithNewIds (source.state), std::max (0.0, start), std::max (kMinClipBeats, length),
+                       std::max (0.0, offset), source.loopEnabled());
     resolveOverlaps (model, track, a.id());
     return a;
 }

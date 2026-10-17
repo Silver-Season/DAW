@@ -84,7 +84,7 @@ public:
         }
         if (text.isNotEmpty())
         {
-            g.setFont (t.uiFont (12.5f, 500));
+            g.setFont (t.uiFont (getWidth() < 34 ? 10.5f : 12.5f, 500));
             g.drawText (text, getLocalBounds().withTrimmedLeft (icon ? 24 : 0), juce::Justification::centred, false);
         }
     }
@@ -353,6 +353,8 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     record = std::make_unique<IconButton> (I::record, juce::String(), Role::record, Strings::help::record);
     overdub = std::make_unique<IconButton> (nullptr, Strings::recording::ovr, Role::normal, Strings::help::overdub);
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
+    punchIn = std::make_unique<IconButton> (nullptr, Strings::arrRec::punchIn, Role::record, Strings::help::punchIn);
+    punchOut = std::make_unique<IconButton> (nullptr, Strings::arrRec::punchOut, Role::record, Strings::help::punchOut);
     follow = std::make_unique<IconButton> (I::follow, juce::String(), Role::normal, Strings::help::followPlayhead);
     backToArrangement = std::make_unique<IconButton> (I::backToArrangement, juce::String(), Role::warning, Strings::help::backToArrangement);
     capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
@@ -368,6 +370,8 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
         model.undo.beginNewTransaction (Strings::undoArrLoop);
         model.setArrangementLoopOn (! model.arrangementLoopOn());
     };
+    punchIn->onClick = [this] { model.setPunchIn (! model.punchIn()); };
+    punchOut->onClick = [this] { model.setPunchOut (! model.punchOut()); };
     follow->onClick = [this] { model.setFollowPlayhead (! model.followPlayhead()); };
     backToArrangement->onClick = [this] { engine.backToArrangement(); };
     metronome->onClick = [this] { model.setMetronome (! model.metronome()); };
@@ -378,7 +382,19 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
         if (onRecordClicked)
             onRecordClicked();
     };
-    record->onPopup = [this] { makeRecordMenu (model).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (record.get())); };
+    record->onPopup = [this] {
+        auto menu = makeRecordMenu (model);
+        menu.addSeparator();
+        menu.addItem (Strings::arrRec::menuToArrangement, [this] {
+            if (onRecordToArrangement)
+                onRecordToArrangement();
+        });
+        menu.addItem (Strings::arrRec::menuToSlot, [this] {
+            if (onRecordToSlot)
+                onRecordToSlot();
+        });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (record.get()));
+    };
     overdub->onClick = [this] { model.setOverdub (! model.overdub()); };
     capture->onClick = [this] {
         if (onCaptureClicked)
@@ -419,7 +435,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
             onCpuClicked();
     };
 
-    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), overdub.get(), loop.get(), follow.get(), backToArrangement.get(), capture.get(),
+    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), overdub.get(), loop.get(), punchIn.get(), punchOut.get(), follow.get(), backToArrangement.get(), capture.get(),
                                                               version.get(), scaleButton.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
         addAndMakeVisible (c);
     lastMidiCount = engine.getHardwareMidiCount();
@@ -478,6 +494,8 @@ void TopBar::tick()
     metronome->setOn (model.metronome());
     overdub->setOn (model.overdub());
     loop->setOn (model.arrangementLoopOn());
+    punchIn->setOn (model.punchIn());
+    punchOut->setOn (model.punchOut());
     follow->setOn (model.followPlayhead());
     {
         const bool inSession = engine.anyTrackInSession();
@@ -487,6 +505,8 @@ void TopBar::tick()
     {
         // Lit while a recording runs, blinking while one waits for its start or the count-in plays.
         bool recording = false, waiting = engine.isCountingIn();
+        if (recorder != nullptr && recorder->arrangement().isActive())
+            (recorder->arrangement().isWaiting() ? waiting : recording) = true; // recording onto the timeline (F9)
         if (recorder != nullptr)
             for (const auto& track : model.tracks())
             {
@@ -633,14 +653,14 @@ void TopBar::resized()
     // Left to right
     logoArea = juce::Rectangle<int> (22, 22).withCentre ({ r.getX() + 11, cy });
     // Below this width the name of the program, and some padding, give way to the transport buttons of stage 3.
-    compact = getWidth() < 1340;
+    compact = getWidth() < 1400;
     r.removeFromLeft ((compact ? 22 : 108) + gap);
 
     tempo.setBounds (juce::Rectangle<int> (80, h).withCentre ({ r.getX() + 40, cy }));
     r.removeFromLeft (80 + small);
     signatureArea = juce::Rectangle<int> (60, h).withCentre ({ r.getX() + 30, cy });
     r.removeFromLeft (60 + small);
-    place (*scaleButton, 100);
+    place (*scaleButton, compact ? 86 : 100);
     r.removeFromLeft (small);
     place (*metronome, h);
     r.removeFromLeft (gap);
@@ -653,9 +673,14 @@ void TopBar::resized()
     r.removeFromLeft (small);
     place (*overdub, 40);
     r.removeFromLeft (small);
-    positionArea = juce::Rectangle<int> (90, h).withCentre ({ r.getX() + 45, cy });
-    r.removeFromLeft (90 + small);
+    const int positionWidth = compact ? 82 : 90;
+    positionArea = juce::Rectangle<int> (positionWidth, h).withCentre ({ r.getX() + positionWidth / 2, cy });
+    r.removeFromLeft (positionWidth + small);
     place (*loop, h);
+    r.removeFromLeft (small);
+    place (*punchIn, 28);
+    r.removeFromLeft (small);
+    place (*punchOut, 28);
     r.removeFromLeft (small);
     place (*follow, h);
     r.removeFromLeft (small);

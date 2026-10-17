@@ -24,10 +24,12 @@ public:
 
 private:
     void timerCallback() override;
+    void paintRecording (juce::Graphics&) const;
 
     ArrangementView& view;
     float lastX = -1.0e6f;
     int lastRows = -1;
+    int recordingTick = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ArrangementPlayhead)
 };

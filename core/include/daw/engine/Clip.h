@@ -103,6 +103,9 @@ public:
     int queuedSlot() const noexcept { return queued; }
     bool isStopQueued() const noexcept { return stopQueued; }
     double playingStartBeat() const noexcept { return startBeat; }
+    // The monotonic beat at which the clip that played last ended (a stop, a one-shot that ran out, or the launch of
+    // another clip). The engine reads it right after process() to log "stopped at" for arrangement recording.
+    double lastEndBeat() const noexcept { return endedAt; }
 
     // The clip pointer must stay valid while it plays; call this when it is edited or deleted.
     void clipChanged (int slot, const MidiClip* clip);
@@ -124,7 +127,7 @@ private:
     int playing = kNoClip, queued = kNoClip;
     const MidiClip* playingClip = nullptr;
     const MidiClip* queuedClip = nullptr;
-    double startBeat = 0.0, queuedBeat = 0.0, stopBeat = 0.0;
+    double startBeat = 0.0, queuedBeat = 0.0, stopBeat = 0.0, endedAt = 0.0;
     bool stopQueued = false, catchUp = false;
     bool resetControllers = false; // the clip moved sustain or pitch bend, so they are reset when it ends
     std::vector<uint8_t> held = std::vector<uint8_t> (128, 0);
@@ -152,6 +155,9 @@ public:
         int sampleOffset = 0; // from the start of the block
         int numSamples = 0;
         double startBeat = 0.0, endBeat = 0.0; // song beats, [start, end)
+        // The window begins right after a loop jump (not a seek, not the start of the transport). Recording uses it to
+        // tell the passes of a loop from a move of the cursor.
+        bool afterLoop = false;
     };
 
     struct Block
@@ -252,6 +258,7 @@ public:
 
         const int64_t blockEnd = positionSamples + numSamples;
         int64_t p = positionSamples;
+        bool afterLoopJump = false;
         while (p < blockEnd && b.numWindows < kMaxWindows)
         {
             // The earliest jump inside the rest of the block. A seek wins over a loop jump at the same sample.
@@ -288,6 +295,8 @@ public:
                 w.numSamples = (int) (jumpAt - p);
                 w.startBeat = songBeatAt (p);
                 w.endBeat = songBeatAt (jumpAt);
+                w.afterLoop = afterLoopJump;
+                afterLoopJump = false;
             }
             if (! isSeek && ! isLoop)
                 break;
@@ -295,6 +304,7 @@ public:
             songAnchorSample = jumpAt;
             if (isSeek)
                 seekPending = false;
+            afterLoopJump = isLoop;
             p = jumpAt;
         }
         positionSamples = blockEnd;

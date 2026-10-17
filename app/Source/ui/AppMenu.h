@@ -41,6 +41,7 @@ enum : juce::CommandID
     captureScene,
     newClip,
     captureMidi,
+    recordArrangement, // F9
     addMarker,
 
     toggleBrowser,

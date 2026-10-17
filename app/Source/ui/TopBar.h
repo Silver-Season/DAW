@@ -31,6 +31,9 @@ public:
     // (it knows the selection): record = Session Record from the selected scene, capture = the last phrase.
     void setRecorder (SessionRecorder*);
     std::function<void()> onRecordClicked;
+    // The items of the record button's menu (right mouse button) that choose where the recording goes (task 3.4):
+    // the Arrangement timeline (F9) or a slot of Session View.
+    std::function<void()> onRecordToArrangement, onRecordToSlot;
     std::function<void()> onCaptureClicked;
 
     std::function<void()> onCpuClicked;
@@ -59,7 +62,7 @@ private:
     ProjectModel& model;
 
     NumberField tempo;
-    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, follow, backToArrangement, capture, version, scaleButton;
+    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, punchIn, punchOut, follow, backToArrangement, capture, version, scaleButton;
     std::unique_ptr<FakeSlider> morph;
     std::unique_ptr<Tabs> tabs;
     std::unique_ptr<Lamp> midiLamp, keysLamp;

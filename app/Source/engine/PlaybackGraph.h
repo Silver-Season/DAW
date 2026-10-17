@@ -154,11 +154,33 @@ struct EngineCommand
         seek,           // beat: the song position jumps there now
         seekQuantised,  // beat: the song position jumps there at the next launch-quantisation boundary (now if stopped)
         rewind,         // the song position goes to 0
-        backToArrangement // stops the session clips and gives every track back to the arrangement at the next boundary
+        backToArrangement, // stops the session clips and gives every track back to the arrangement at the next boundary
+        startArrangementRecord, // record onto the timeline (task 3.4): beat = nothing, the engine picks the start
+        stopArrangementRecord
     };
 
     Type type = Type::stopAll;
     int64_t trackId = -1;
     int sceneIndex = -1;
     double beat = 0.0;
+};
+
+// Audio thread -> message thread, through a fixed-size SPSC queue, while an arrangement recording runs (task 3.4).
+// It is the log from which the recorder turns live notes and Session View launches into arrangement clips.
+struct EngineEvent
+{
+    enum class Type : uint8_t
+    {
+        anchor,   // the song position does not continue where it was (the start, a seek): from monoBeat on it is `beat`
+        loopJump, // the same, but caused by the loop of the arrangement: a new pass of the loop begins
+        launch,   // a session clip of (trackId, slot) began to play; its phase counts from clipStartMono
+        stop      // the clip of (trackId, slot) stopped
+    };
+
+    Type type = Type::anchor;
+    int64_t trackId = 0;
+    int slot = -1;
+    double beat = 0.0;          // the song beat at which it happened
+    double monoBeat = 0.0;      // the same moment on the monotonic transport clock (the clock of InputEvent::beat)
+    double clipStartMono = 0.0; // launch only: the monotonic beat at which the clip's cycle began (may be before monoBeat)
 };

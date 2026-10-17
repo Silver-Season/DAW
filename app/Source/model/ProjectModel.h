@@ -130,6 +130,12 @@ public:
     void setArrangementPlayStart (double beat) { root.setProperty (ids::arrangementPlayStart, juce::jmax (0.0, beat), nullptr); }
     bool followPlayhead() const { return (bool) root.getProperty (ids::followPlayhead, true); }
     void setFollowPlayhead (bool on) { root.setProperty (ids::followPlayhead, on, nullptr); }
+    // Punch-in / punch-out (task 3.4): recording on the timeline only happens inside the loop brace, from its start
+    // (punch-in) and/or up to its end (punch-out). Like the other transport switches they are not edits.
+    bool punchIn() const { return (bool) root.getProperty (ids::punchIn, false); }
+    bool punchOut() const { return (bool) root.getProperty (ids::punchOut, false); }
+    void setPunchIn (bool on) { root.setProperty (ids::punchIn, on, nullptr); }
+    void setPunchOut (bool on) { root.setProperty (ids::punchOut, on, nullptr); }
 
     juce::ValueTree markersNode() const { return root.getChildWithName (ids::MARKERS); }
     // The markers sorted by beat.

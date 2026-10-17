@@ -124,6 +124,10 @@ public:
     bool loop() const { return get<bool> (ids::loop, true); }
     // The content. Invalid only in a broken file.
     ClipRef clip() const { return ClipRef (state.getChildWithName (ids::CLIP)); }
+    // Takes of a recording that ran in a loop (task 3.4): the content above is take `activeTake()`; the other passes sit
+    // in TAKES as TAKE nodes (number = which pass, a CLIP child = its content). 0 = a clip without takes.
+    int activeTake() const { return get<int> (ids::take, 0); }
+    juce::ValueTree takesNode() const { return state.getChildWithName (ids::TAKES); }
 
     void setStart (double v, juce::UndoManager* um) const { set (ids::start, v, um); }
     void setLength (double v, juce::UndoManager* um) const { set (ids::length, v, um); }
