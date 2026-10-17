@@ -13,7 +13,9 @@ add_library(daw_core STATIC
     src/DemoContent.cpp
     src/VersionHistory.cpp
     src/SincInterpolator.cpp
-    src/AudioAnalysis.cpp)
+    src/AudioAnalysis.cpp
+    src/gen/Patterns.cpp
+    src/gen/Patches.cpp)
 
 # Built-in effects: one file per effect, plus the shared base and the registry.
 file(GLOB DAW_FX_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/fx/*.cpp)
@@ -33,6 +35,13 @@ if(DAW_BUILD_TESTS)
     add_executable(daw_core_tests tests/core_tests.cpp)
     target_link_libraries(daw_core_tests PRIVATE daw_core)
     add_test(NAME daw_core_tests COMMAND daw_core_tests)
+
+    add_executable(daw_gen_tests tests/gen_tests.cpp)
+    target_link_libraries(daw_gen_tests PRIVATE daw_core)
+    add_test(NAME daw_gen_tests COMMAND daw_gen_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_gen_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    endif()
 
     add_executable(daw_core_audio_tests tests/audio_tests.cpp)
     target_link_libraries(daw_core_audio_tests PRIVATE daw_core)
