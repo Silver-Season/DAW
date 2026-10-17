@@ -9,7 +9,7 @@ class Settings;
 
 namespace ui
 {
-// The settings window (docs/spec/01-layout-project.md, task 1.9): Sound, MIDI, Appearance and Library tabs.
+// The settings window (docs/spec/01-layout-project.md, task 1.9): Sound, MIDI, Recording, Appearance and Library tabs.
 class SettingsWindow final : public juce::DocumentWindow
 {
 public:
@@ -24,7 +24,7 @@ public:
     SettingsWindow (AudioEngine&, Settings&, Hooks);
     ~SettingsWindow() override;
 
-    enum Tab { sound, midi, appearance, library };
+    enum Tab { sound, midi, recording, appearance, library };
     void showTab (Tab);
     void closeButtonPressed() override;
 

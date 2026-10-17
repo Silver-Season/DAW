@@ -811,8 +811,70 @@ void DeviceChainView::tick()
 }
 
 //==============================================================================
-DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : model (m), selection (s)
+// "MIDI | Звук": what the selected track records. The audio half waits for stage 5 and is drawn disabled.
+class RecordSourceSwitch final : public juce::Component, public HelpProvider
 {
+public:
+    RecordSourceSwitch() { setHelpText (Strings::help::trackRecordSource); }
+
+    std::function<void (const juce::String& source)> onChoose;
+
+    void setSource (const juce::String& s)
+    {
+        if (s != source)
+        {
+            source = s;
+            repaint();
+        }
+    }
+
+    juce::String helpAt (juce::Point<int> p) const override
+    {
+        return p.x >= getWidth() / 2 ? Strings::help::trackRecordAudio : Strings::help::trackRecordSource;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        auto r = getLocalBounds().toFloat();
+        fillCell (g, r, t.panel);
+        auto left = r.removeFromLeft (r.getWidth() * 0.5f);
+        const auto cell = [&] (juce::Rectangle<float> area, const juce::String& text, bool active, bool enabled) {
+            if (active)
+            {
+                fillCell (g, area.reduced (1.5f), t.panel2);
+                g.setColour (t.accent);
+                g.fillRect (area.reduced (4.0f, 0.0f).removeFromBottom (2.0f));
+            }
+            g.setColour (active ? t.text : (enabled ? t.dimText : t.dimText.withAlpha (0.5f)));
+            g.setFont (t.uiFont (11.5f, 500));
+            g.drawText (text, area.toNearestInt(), juce::Justification::centred, false);
+        };
+        cell (left, Strings::recording::sourceMidi, source != "audio", true);
+        cell (r, Strings::recording::sourceAudio, source == "audio", false);
+        strokeCell (g, getLocalBounds().toFloat(), t.line);
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.x < getWidth() / 2 && onChoose)
+            onChoose ("midi"); // audio is not selectable before stage 5
+    }
+
+private:
+    juce::String source = "midi";
+};
+
+//==============================================================================
+DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : model (m), actions (a), selection (s)
+{
+    recordSwitch = std::make_unique<RecordSourceSwitch>();
+    recordSwitch->onChoose = [this] (const juce::String& source) {
+        if (model.findTrack (shownTrack).isValid())
+            actions.setTrackRecordSource (shownTrack, source);
+    };
+    addAndMakeVisible (*recordSwitch);
+
     chainView = std::make_unique<DeviceChainView> (e, m, a, s);
     addAndMakeVisible (*chainView);
     editor = std::make_unique<PianoRoll> (e, m, a, s);
@@ -852,6 +914,7 @@ void DetailPanel::updateEditor()
         editor->setVisible (shown);
         chainView->setVisible (! shown);
         transposeField.setVisible (! shown);
+        recordSwitch->setVisible (! shown);
         resized();
         repaint();
         if (onEditorShownChanged)
@@ -883,6 +946,8 @@ void DetailPanel::tick()
     if (! transposeField.isEditing())
         transposeField.setValue (track.isValid() ? track.transpose() : 0);
     transposeField.setEnabled (track.isValid());
+    recordSwitch->setEnabled (track.isValid());
+    recordSwitch->setSource (track.isValid() ? track.recordSource() : juce::String ("midi"));
     const auto summary = track.isValid() ? track.name() + "|" + juce::String (track.colour()) + "|" + track.input() + "|" + track.monitor()
                                                + "|" + juce::String (track.numDevices())
                                          : juce::String();
@@ -943,6 +1008,7 @@ void DetailPanel::paint (juce::Graphics& g)
     g.setColour (t.dimText);
     g.setFont (t.uiFont (12.5f));
     g.drawText (Strings::detail::transpose + ": ", area.removeFromTop (22).withWidth (110), juce::Justification::centredLeft, false);
+    g.drawText (Strings::recording::recordSourceLabel + ": ", area.removeFromTop (22).withWidth (110), juce::Justification::centredLeft, false);
 }
 
 void DetailPanel::resized()
@@ -951,5 +1017,6 @@ void DetailPanel::resized()
     editor->setBounds (getLocalBounds().withTrimmedTop (1));
     // below the three lines of the summary card: 14 + 16 + 22 + 6 + 3 * 22 + 13
     transposeField.setBounds (14 + 112, 13 + 16 + 22 + 6 + 3 * 22, 76, 20);
+    recordSwitch->setBounds (14 + 112, 13 + 16 + 22 + 6 + 4 * 22, 76, 20);
 }
 } // namespace ui

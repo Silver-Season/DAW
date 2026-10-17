@@ -503,6 +503,92 @@ private:
 };
 
 //==============================================================================
+// Recording: the manual correction of the MIDI delay (docs/spec/02, task 2.2)
+class RecordingPage final : public Page, private juce::Timer
+{
+public:
+    RecordingPage (AudioEngine& e, Settings&) : engine (e)
+    {
+        for (auto* l : { &heading, &autoLabel, &autoValue, &note })
+            addAndMakeVisible (*l);
+        heading.setText (Strings::recording::correction, juce::dontSendNotification);
+        autoLabel.setText (Strings::recording::automaticCompensation, juce::dontSendNotification);
+        note.setText (Strings::recording::correctionNote, juce::dontSendNotification);
+        note.setJustificationType (juce::Justification::topLeft);
+
+        slider.setSliderStyle (juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 24);
+        slider.setRange (-50.0, 50.0, 0.1);
+        slider.setDoubleClickReturnValue (true, 0.0);
+        slider.setValue (engine.getRecordCorrectionMs(), juce::dontSendNotification);
+        slider.textFromValueFunction = [] (double v) { return Strings::recording::signedMs (v); };
+        slider.valueFromTextFunction = [] (const juce::String& text) {
+            return juce::jlimit (-50.0, 50.0, text.replace (juce::String::fromUTF8 ("\xe2\x88\x92"), "-").replace (",", ".").getDoubleValue());
+        };
+        slider.onValueChange = [this] { engine.setRecordCorrectionMs (slider.getValue()); };
+        addAndMakeVisible (slider);
+
+        reset.setButtonText (Strings::recording::correctionReset);
+        reset.onClick = [this] { slider.setValue (0.0, juce::sendNotificationSync); };
+        addAndMakeVisible (reset);
+        restyle();
+        refresh();
+        startTimer (500); // the device can change while the window is open
+    }
+
+    void refresh() override
+    {
+        restyle();
+        const double sr = engine.getSampleRate() > 0.0 ? engine.getSampleRate() : 44100.0;
+        const int manual = juce::roundToInt (engine.getRecordCorrectionMs() * sr / 1000.0);
+        autoValue.setText (Strings::recording::autoMs ((double) (engine.getRecordCompensationSamples() - manual) * 1000.0 / sr), juce::dontSendNotification);
+        if (std::abs (slider.getValue() - engine.getRecordCorrectionMs()) > 0.05 && ! slider.isMouseButtonDown())
+            slider.setValue (engine.getRecordCorrectionMs(), juce::dontSendNotification);
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (20, 16);
+        heading.setBounds (r.removeFromTop (24));
+        auto line = r.removeFromTop (kRowHeight + 6);
+        reset.setBounds (line.removeFromRight (100).reduced (0, 2));
+        line.removeFromRight (10);
+        slider.setBounds (line);
+        r.removeFromTop (14);
+        auto row = r.removeFromTop (kRowHeight);
+        autoLabel.setBounds (row.removeFromLeft (230));
+        autoValue.setBounds (row.removeFromLeft (160));
+        r.removeFromTop (14);
+        note.setBounds (r.removeFromTop (70));
+    }
+
+private:
+    void timerCallback() override { refresh(); }
+    void restyle()
+    {
+        heading.setFont (theme().uiFont (12.5f, 600));
+        heading.setColour (juce::Label::textColourId, theme().text);
+        autoLabel.setFont (theme().uiFont (12.5f));
+        autoLabel.setColour (juce::Label::textColourId, theme().text);
+        autoValue.setFont (theme().numFont (12.5f));
+        autoValue.setColour (juce::Label::textColourId, theme().text);
+        note.setFont (theme().uiFont (11.5f));
+        note.setColour (juce::Label::textColourId, theme().dimText);
+        slider.setColour (juce::Slider::trackColourId, theme().accent);
+        slider.setColour (juce::Slider::thumbColourId, theme().accent);
+        slider.setColour (juce::Slider::backgroundColourId, theme().panel2);
+        slider.setColour (juce::Slider::textBoxTextColourId, theme().text);
+        slider.setColour (juce::Slider::textBoxOutlineColourId, theme().line);
+        slider.setColour (juce::Slider::textBoxBackgroundColourId, theme().panel);
+    }
+
+    AudioEngine& engine;
+    juce::Label heading, autoLabel, autoValue, note;
+    juce::Slider slider;
+    juce::TextButton reset;
+};
+
+//==============================================================================
 // Appearance
 class AppearancePage final : public Page
 {
@@ -778,11 +864,12 @@ public:
     {
         pages[sound] = std::make_unique<SoundPage> (e, s);
         pages[midi] = std::make_unique<MidiPage> (e, s);
+        pages[recording] = std::make_unique<RecordingPage> (e, s);
         pages[appearance] = std::make_unique<AppearancePage> (s);
         pages[library] = std::make_unique<LibraryPage> (s, h);
-        const juce::String names[4] { Strings::settingsui::tabSound, Strings::settingsui::tabMidi, Strings::settingsui::tabAppearance,
-                                      Strings::settingsui::tabLibrary };
-        for (int i = 0; i < 4; ++i)
+        const juce::String names[5] { Strings::settingsui::tabSound, Strings::settingsui::tabMidi, Strings::settingsui::tabRecording,
+                                      Strings::settingsui::tabAppearance, Strings::settingsui::tabLibrary };
+        for (int i = 0; i < 5; ++i)
         {
             addChildComponent (*pages[(size_t) i]);
             tabs[(size_t) i].setButtonText (names[i]);
@@ -800,7 +887,7 @@ public:
     void show (Tab t)
     {
         current = t;
-        for (int i = 0; i < 4; ++i)
+        for (int i = 0; i < 5; ++i)
         {
             pages[(size_t) i]->setVisible (i == (int) t);
             tabs[(size_t) i].setToggleState (i == (int) t, juce::dontSendNotification);
@@ -842,8 +929,8 @@ private:
         repaint();
     }
 
-    std::array<std::unique_ptr<Page>, 4> pages;
-    std::array<juce::TextButton, 4> tabs;
+    std::array<std::unique_ptr<Page>, 5> pages;
+    std::array<juce::TextButton, 5> tabs;
     Tab current = sound;
 };
 

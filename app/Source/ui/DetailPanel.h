@@ -12,13 +12,14 @@ class AudioEngine;
 namespace ui
 {
 class DeviceChainView;
+class RecordSourceSwitch;
 
 // The bottom panel (232 px): a summary of the selected track on the left and its device chain on the right.
 // In clip-editor mode (double-click on a clip, Shift+Tab) a selected clip shows the piano roll in their place.
 class DetailPanel final : public juce::Component
 {
 public:
-    static constexpr int kMinHeight = 160, kMaxHeight = 480, kDefaultHeight = 232;
+    static constexpr int kMinHeight = 176, kMaxHeight = 480, kDefaultHeight = 232;
     static constexpr int kInfoWidth = 236;
 
     DetailPanel (AudioEngine&, ProjectModel&, ProjectActions&, SelectionState&);
@@ -46,8 +47,10 @@ private:
     void updateEditor();
 
     ProjectModel& model;
+    ProjectActions& actions;
     SelectionState& selection;
     std::unique_ptr<DeviceChainView> chainView;
+    std::unique_ptr<RecordSourceSwitch> recordSwitch;
     std::unique_ptr<PianoRoll> editor;
     NumberField transposeField;
     bool editorOn = false, editorShown = false;
