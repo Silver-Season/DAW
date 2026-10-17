@@ -6,6 +6,7 @@
 #include "TestSupport.h"
 
 #include "../app/Source/engine/RtCheck.h"
+#include "../app/Source/model/ArrangementEdit.h"
 
 #include <array>
 #include <atomic>
@@ -295,6 +296,12 @@ void testLockFree()
     putClip (model, keepA, 0, daw::engine::demo::arpClip());
     putClip (model, keepB, 0, daw::engine::demo::bassClip (false));
     putClip (model, keepA, 1, daw::engine::demo::padClip());
+    // Arrangement clips play, too: a pad (long notes, chased after every seek) on one track, an arpeggio on the other,
+    // inside a song loop that the editor thread keeps moving.
+    arrangement::addSlotClip (model, keepA, keepA.clipAt (1), 0.0);
+    arrangement::addSlotClip (model, keepB, keepB.clipAt (0), 4.0);
+    arrangement::addSlotClip (model, keepA, keepA.clipAt (0), 8.0);
+    model.setArrangementLoop (0.0, 24.0, true);
 
     FakeDevice fake (kBlock, 44100.0);
     engine.audioDeviceAboutToStart (&fake);
@@ -311,7 +318,7 @@ void testLockFree()
         int step = 0;
         while (! stopEditing.load())
         {
-            switch (step % 9)
+            switch (step % 10)
             {
                 case 0: // new track with an instrument and a clip
                 {
@@ -354,6 +361,20 @@ void testLockFree()
                     putClip (model, keepA, 3, daw::engine::demo::arpClip());
                     engine.stopTrack (keepB.id());
                     break;
+                case 9: // the arrangement is edited, the song jumps around, tracks come back from Session View
+                {
+                    const auto clips = keepA.arrangementClips();
+                    if (! clips.empty())
+                        arrangement::resizeRight (model, clips.front(), clips.front().end() + (step % 2 == 0 ? 1.0 : -1.0));
+                    if (step % 4 == 1)
+                        arrangement::splitAt (model, keepB.arrangementClips().front(), keepB.arrangementClips().front().start() + 1.5);
+                    engine.seek ((double) (step % 20));
+                    engine.seekQuantised ((double) (step % 7));
+                    if (step % 3 == 0)
+                        engine.backToArrangement();
+                    model.setArrangementLoop (0.0, 16.0 + (double) (step % 5), step % 6 != 5);
+                    break;
+                }
                 default: break;
             }
             engine.rebuildGraphIfNeeded();

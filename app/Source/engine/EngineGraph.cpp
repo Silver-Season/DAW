@@ -192,6 +192,10 @@ void AudioEngine::applyProjectProperties()
     metronomeWood = model->metronomeSound() == "wood";
     const double clickDb = model->metronomeVolumeDb();
     metronomeGain = clickDb <= ProjectModel::kMinMetronomeDb ? 0.0f : juce::Decibels::decibelsToGain ((float) clickDb);
+    arrLoopStart = model->arrangementLoopStart();
+    arrLoopEnd = model->arrangementLoopEnd();
+    arrLoopOn = model->arrangementLoopOn();
+    arrPlayStart = model->arrangementPlayStart();
     countInBars = model->countInBars();
     overdubOn = model->overdub();
     recordFixedBars = model->recordFixedBars();
@@ -231,13 +235,15 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
         if (property == ids::volumeDb || property == ids::tempo || property == ids::launchQuantise || property == ids::selectedTrack
             || property == ids::tuningA4 || property == ids::sigNum || property == ids::sigDen || property == ids::metronome
             || property == ids::metronomeVolumeDb || property == ids::metronomeOnlyRecording || property == ids::metronomeSound
-            || property == ids::countInBars || property == ids::overdub || property == ids::recordFixedBars)
+            || property == ids::countInBars || property == ids::overdub || property == ids::recordFixedBars
+            || property == ids::arrangementLoopStart || property == ids::arrangementLoopEnd || property == ids::arrangementLoopOn
+            || property == ids::arrangementPlayStart)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             applyProjectProperties();
         }
     }
-    else if (type == ids::CLIP || type == ids::NOTE || type == ids::CC || type == ids::BEND || type == ids::PRESSURE)
+    else if (type == ids::ACLIP || type == ids::CLIP || type == ids::NOTE || type == ids::CC || type == ids::BEND || type == ids::PRESSURE)
         graphDirty = true;
 }
 
@@ -468,6 +474,31 @@ void AudioEngine::rebuildGraph()
             const auto clip = track.clipAt (scene);
             gt.slots.push_back (clip.isValid() ? acquireClip (clip, usedClips) : nullptr);
         }
+        // The arrangement: each clip with its own content, sorted by start. The signature tells the audio thread whether
+        // anything that sounds changed (positions, loop, content), so that it chases only then.
+        Hasher signature;
+        for (const auto& aclip : track.arrangementClips())
+        {
+            const auto content = aclip.clip();
+            if (! content.isValid() || aclip.length() <= 0.0)
+                continue;
+            daw::engine::ArrangementClipPlayback p;
+            p.startBeat = aclip.start();
+            p.endBeat = aclip.end();
+            p.offsetBeats = aclip.offset();
+            p.loop = aclip.loop();
+            if (! gt.arrangement.empty() && p.startBeat < gt.arrangement.back().endBeat - 1.0e-9)
+                continue; // overlapping clips can only come from a damaged file: the earlier one wins
+            p.clip = acquireClip (content, usedClips);
+            signature.add (p.startBeat);
+            signature.add (p.endBeat);
+            signature.add (p.offsetBeats);
+            signature.add (p.loop);
+            signature.add (content.id());
+            signature.add (clipCache[content.id()].hash);
+            gt.arrangement.push_back (std::move (p));
+        }
+        gt.arrangementSignature = gt.arrangement.empty() ? 0 : signature.h;
         graph->tracks.push_back (std::move (gt));
     }
 

@@ -409,7 +409,8 @@ void TopBar::tick()
     if (! tempo.isEditing() && std::abs (tempo.getValue() - model.tempo()) > 0.004)
         tempo.setValue (model.tempo());
 
-    const auto text = formatPosition (engine.getPositionBeats(), model.beatsPerBar()); // 6/8 is three quarter notes long
+    // The song position (the arrangement's); the count-in shows its own run from -4 to 0. 6/8 is three quarter notes long.
+    const auto text = formatPosition (engine.isCountingIn() ? engine.getPositionBeats() : engine.getSongPositionBeats(), model.beatsPerBar());
     if (text != positionText)
     {
         positionText = text;

@@ -12,7 +12,7 @@ public:
     juce::Optional<PositionInfo> getPosition() const override
     {
         PositionInfo info;
-        const double beats = engine.positionBeats.load();
+        const double beats = engine.songPositionBeats.load();
         const double bpm = engine.tempo.load();
         info.setBpm (bpm);
         info.setTimeSignature (juce::AudioPlayHead::TimeSignature { engine.sigNum.load(), engine.sigDen.load() });
@@ -172,6 +172,12 @@ void AudioEngine::play()
         playing = true;
 }
 
+void AudioEngine::playFromPosition()
+{
+    if (! pushCommand ({ EngineCommand::Type::resumeContinue, -1, -1 }))
+        playing = true;
+}
+
 void AudioEngine::stop()
 {
     playing = false;
@@ -205,6 +211,26 @@ bool AudioEngine::stopTrack (int64_t trackId)
 bool AudioEngine::stopAllClips()
 {
     return pushCommand ({ EngineCommand::Type::stopAll, -1, -1 });
+}
+
+bool AudioEngine::seek (double songBeat)
+{
+    return pushCommand ({ EngineCommand::Type::seek, -1, -1, juce::jmax (0.0, songBeat) });
+}
+
+bool AudioEngine::seekQuantised (double songBeat)
+{
+    return pushCommand ({ EngineCommand::Type::seekQuantised, -1, -1, juce::jmax (0.0, songBeat) });
+}
+
+bool AudioEngine::rewindSong()
+{
+    return pushCommand ({ EngineCommand::Type::rewind, -1, -1 });
+}
+
+bool AudioEngine::backToArrangement()
+{
+    return pushCommand ({ EngineCommand::Type::backToArrangement, -1, -1 });
 }
 
 bool AudioEngine::startRecord (int64_t trackId, int scene)
@@ -340,6 +366,13 @@ void AudioEngine::reconcileWithGraph (const PlaybackGraph& graph)
         const int newQueued = oldQueued == daw::engine::ClipPlayer::kNoClip
                                   ? oldQueued
                                   : findById (player.queuedClipPtr(), oldQueued, newQueuedClip);
+
+        // The arrangement of the track changed: what it holds sounds from the new clips, chased from the current position.
+        if (t.arrangementSignature != t.runtime->arrangementSignature)
+        {
+            t.runtime->arrangementSignature = t.arrangementSignature;
+            t.runtime->arrangement.invalidate();
+        }
 
         player.relocate (newPlaying, newQueued);
         if (newPlaying != daw::engine::ClipPlayer::kNoClip && newPlayingClip != player.playingClipPtr())
@@ -478,6 +511,9 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 }
                 break;
             case EngineCommand::Type::resume:
+            case EngineCommand::Type::resumeContinue:
+                if (c.type == EngineCommand::Type::resumeContinue && ! transport.isPlaying())
+                    continueSong = true;
                 for (const auto& t : graph.tracks)
                     if (t.runtime->resumeSlot >= 0 && t.runtime->player.playingSlot() < 0)
                         if (auto* clip = slotClip (t, t.runtime->resumeSlot))
@@ -486,11 +522,42 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 break;
             case EngineCommand::Type::stopTrack:
                 if (auto* t = findTrack (c.trackId))
+                {
                     t->runtime->player.stop (now, q);
+                    t->runtime->inSession = true; // like Live: the stopped track stays silent until "Back to arrangement"
+                    t->runtime->backPending = false;
+                }
                 break;
             case EngineCommand::Type::stopAll:
                 for (const auto& t : graph.tracks)
+                {
                     t.runtime->player.stop (now, q);
+                    t.runtime->inSession = true;
+                    t.runtime->backPending = false;
+                }
+                break;
+            case EngineCommand::Type::seek:
+                transport.seekSong (c.beat);
+                break;
+            case EngineCommand::Type::seekQuantised:
+                if (transport.isPlaying() && playing.load())
+                    transport.scheduleSeek (daw::engine::nextQuantisedBeat (now, q), c.beat);
+                else
+                    transport.seekSong (c.beat);
+                break;
+            case EngineCommand::Type::rewind:
+                transport.seekSong (0.0);
+                break;
+            case EngineCommand::Type::backToArrangement:
+                for (const auto& t : graph.tracks)
+                {
+                    auto& rt = *t.runtime;
+                    if (! rt.inSession.load() && rt.player.playingSlot() == daw::engine::ClipPlayer::kNoClip)
+                        continue; // already plays its arrangement
+                    rt.player.stop (now, q);
+                    rt.backPending = true;
+                    rt.backBeat = daw::engine::nextQuantisedBeat (now, q);
+                }
                 break;
             case EngineCommand::Type::startRecord:
                 if (auto* t = findTrack (c.trackId))
@@ -716,6 +783,50 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
 
     rt.events.clear();
     rt.player.process (block.startBeat, block.endBeat, spb, numSamples, rt.events);
+
+    // A session clip that plays takes the track away from the arrangement, until "Back to arrangement". The arrangement
+    // goes quiet for the whole block in which the clip starts (at most one block early).
+    if (rt.player.playingSlot() != daw::engine::ClipPlayer::kNoClip)
+        rt.inSession.store (true, std::memory_order_relaxed);
+
+    // "Back to arrangement" takes effect at its quantisation boundary: the session clip has just been stopped there by the
+    // player, and the arrangement plays from that sample on, chasing the notes under the position.
+    int arrangementFrom = 0;
+    if (rt.backPending && rt.backBeat < block.endBeat)
+    {
+        rt.backPending = false;
+        rt.inSession.store (false, std::memory_order_relaxed);
+        rt.arrangement.invalidate();
+        arrangementFrom = std::clamp ((int) std::llround ((rt.backBeat - block.startBeat) * spb), 0, std::max (0, numSamples - 1));
+    }
+
+    // The count-in is only the click: the arrangement waits for beat 0 of the monotonic clock, where the song reaches its start.
+    if (block.startBeat < 0.0)
+        arrangementFrom = std::max (arrangementFrom, (int) std::min ((double) numSamples, std::ceil (-block.startBeat * spb)));
+
+    if (killNotes)
+        rt.arrangement.releaseAll (0, rt.events);
+    if (rt.inSession.load (std::memory_order_relaxed))
+    {
+        if (rt.arrangement.hasHeldNotes())
+            rt.arrangement.releaseAll (0, rt.events);
+        rt.arrangement.invalidate();
+    }
+    else
+        for (int i = 0; i < block.numWindows; ++i)
+        {
+            auto w = block.windows[i];
+            if (w.sampleOffset + w.numSamples <= arrangementFrom)
+                continue;
+            if (w.sampleOffset < arrangementFrom) // the window begins before the boundary: only its later part plays
+            {
+                const int cut = arrangementFrom - w.sampleOffset;
+                w.startBeat += (double) cut / spb;
+                w.sampleOffset += cut;
+                w.numSamples -= cut;
+            }
+            rt.arrangement.process (t.arrangement, w.startBeat, w.endBeat, spb, w.sampleOffset, w.numSamples, rt.events);
+        }
     daw::engine::sortEvents (rt.events);
 
     rt.playingSlot.store (rt.player.playingSlot(), std::memory_order_relaxed);
@@ -810,6 +921,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     // Only now may the message thread delete what older graphs held.
     seenGeneration.store (graph->generation, std::memory_order_release);
 
+    transport.setSongStart (arrPlayStart.load());
+    transport.setLoop (arrLoopStart.load(), arrLoopEnd.load(), arrLoopOn.load());
+
     // Stop first, so that a record command that arrives with it starts a fresh transport.
     const bool killNotes = stopRequested.exchange (false);
     if (killNotes)
@@ -819,6 +933,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         {
             t.runtime->resumeSlot = t.runtime->player.playingSlot();
             t.runtime->player.stopImmediately();
+            t.runtime->arrangement.invalidate(); // its notes are released in renderTrack; the next start chases from its position
+            t.runtime->backPending = false;
         }
         transport.stop();
     }
@@ -847,7 +963,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     if (! juce::exactlyEqual (transport.getTempo(), tempo.load()))
         transport.setTempo (tempo.load());
     if (playing.load() && ! transport.isPlaying())
-        transport.play();
+    {
+        transport.play (continueSong);
+        continueSong = false;
+    }
 
     const auto block = transport.advance (numSamples);
     const double spb = transport.samplesPerBeat();
@@ -883,8 +1002,17 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         const bool countIn = block.startBeat < 0.0;
         const bool emit = transport.isPlaying() && (countIn || (metronomeOn.load() && (! metronomeOnlyRecording.load() || anyRecording)));
-        metronome.render (master.getWritePointer (0), master.getWritePointer (1), numSamples, block.startBeat, spb, beatsPerBar.load(),
-                          metronomeGain.load(), metronomeWood.load() ? Metronome::Sound::wood : Metronome::Sound::classic, emit);
+        // The clicks follow the song, not the monotonic clock: after a loop jump or a seek they stay on the bar lines.
+        const auto sound = metronomeWood.load() ? Metronome::Sound::wood : Metronome::Sound::classic;
+        if (block.numWindows == 0)
+            metronome.render (master.getWritePointer (0), master.getWritePointer (1), numSamples, block.songStartBeat, spb, beatsPerBar.load(),
+                              metronomeGain.load(), sound, emit);
+        for (int i = 0; i < block.numWindows; ++i)
+        {
+            const auto& w = block.windows[i];
+            metronome.render (master.getWritePointer (0) + w.sampleOffset, master.getWritePointer (1) + w.sampleOffset, w.numSamples, w.startBeat,
+                              spb, beatsPerBar.load(), metronomeGain.load(), sound, emit);
+        }
     }
 
     for (int ch = 0; ch < juce::jmin (2, numOutputs); ++ch)
@@ -923,4 +1051,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     }
 
     positionBeats = transport.getPositionBeats();
+    songPositionBeats = transport.getSongPositionBeats();
+
+    bool anyInSessionNow = false;
+    for (const auto& t : graph->tracks)
+        anyInSessionNow = anyInSessionNow || t.runtime->inSession.load (std::memory_order_relaxed);
+    anyInSession.store (anyInSessionNow, std::memory_order_relaxed);
 }
