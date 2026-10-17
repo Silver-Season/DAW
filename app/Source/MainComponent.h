@@ -69,6 +69,7 @@ public:
 
     // Access for the screenshot script and tests.
     ui::SessionView& getSessionView() { return *session; }
+    ui::ArrangementView& getArrangementView() { return *arrangement; }
     ui::InfoBar& getInfoBar() { return *infoBar; }
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     ui::BrowserPanel& getBrowser() { return *browser; }
@@ -95,6 +96,7 @@ private:
     void setArrangementShown (bool);
     void setKeyboardStripVisible (bool);
     void openClipEditor (int64_t trackId, int scene);
+    void openArrangementClip (int64_t trackId, int64_t aclipId);
     int currentDetailHeight() const;
     void showProjectProperties();
     void setUiScale (double);

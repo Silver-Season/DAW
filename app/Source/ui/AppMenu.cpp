@@ -72,6 +72,11 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             menu.addSeparator();
             add (commands::quantiseNotes);
             add (commands::quantiseOptions);
+            menu.addSeparator();
+            add (commands::splitClips);
+            add (commands::joinClips);
+            add (commands::loopSelection);
+            add (commands::removeTime);
             break;
         case 2:
             add (commands::newTrack);
@@ -80,6 +85,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::newClip);
             menu.addSeparator();
             add (commands::captureMidi);
+            add (commands::addMarker);
             break;
         case 3:
         {
@@ -87,6 +93,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::toggleDetail);
             add (commands::toggleMixer);
             add (commands::switchView);
+            add (commands::toggleFollow);
             add (commands::toggleClipEditor);
             add (commands::toggleKeyboardStrip);
             menu.addSeparator();

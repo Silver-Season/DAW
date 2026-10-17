@@ -6,6 +6,7 @@
 #include "../engine/AudioEngine.h"
 #include "../engine/SessionRecorder.h"
 #include "TransportMenus.h"
+#include "ArrangementView.h"
 
 
 namespace ui
@@ -18,7 +19,8 @@ public:
     {
         normal,
         play,
-        record
+        record,
+        warning // lit in the orange of the theme ("Back to arrangement")
     };
 
     std::function<juce::Path (juce::Rectangle<float>)> icon;
@@ -55,11 +57,11 @@ public:
             ink = t.accent;
         if (on)
         {
-            const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : t.accent);
+            const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : (role == Role::warning ? t.warning : t.accent));
             fill = accent;
             border = accent;
             ink = t.clipInk;
-            if (role == Role::play && t.glow > 0.0f)
+            if ((role == Role::play || role == Role::warning) && t.glow > 0.0f)
                 juce::DropShadow (accent.withAlpha (0.6f), juce::roundToInt (14.0f * t.glow), {}).drawForRectangle (g, getLocalBounds().reduced (3));
         }
         else if (isMouseOver() && isEnabled())
@@ -232,10 +234,45 @@ public:
 };
 
 //==============================================================================
-class TopBar::Tabs final : public juce::Component, public HelpProvider
+class TopBar::Tabs final : public juce::Component, public HelpProvider, public juce::DragAndDropTarget, private juce::Timer
 {
 public:
     Tabs() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+
+    // A Session View clip dragged onto "Arrangement" switches the view after a short hold; the drag then goes on over the
+    // timeline, which is a drop target of its own.
+    bool isInterestedInDragSource (const SourceDetails& d) override
+    {
+        int64_t track = 0;
+        int scene = 0;
+        return ArrangementView::parseSessionClip (d.description, track, scene);
+    }
+    void itemDragEnter (const SourceDetails& d) override { itemDragMove (d); }
+    void itemDragMove (const SourceDetails& d) override
+    {
+        const bool overArrangement = d.localPosition.x >= getWidth() / 2 && ! arrangement;
+        if (overArrangement != hovering)
+        {
+            hovering = overArrangement;
+            hovering ? startTimer (350) : stopTimer();
+            repaint();
+        }
+    }
+    void itemDragExit (const SourceDetails&) override { clearHover(); }
+    void itemDropped (const SourceDetails&) override { clearHover(); }
+    void clearHover()
+    {
+        hovering = false;
+        stopTimer();
+        repaint();
+    }
+    void timerCallback() override
+    {
+        stopTimer();
+        hovering = false;
+        if (onSwitch)
+            onSwitch (true);
+    }
 
     std::function<void (bool arrangement)> onSwitch;
 
@@ -281,11 +318,16 @@ public:
         };
         drawTab (left, Strings::transport::sessionTab, ! arrangement);
         drawTab (r, Strings::transport::arrangementTab, arrangement);
+        if (hovering) // a clip is held over the Arrangement tab
+        {
+            g.setColour (t.accent.withAlpha (0.25f));
+            g.fillRoundedRectangle (r, t.radius);
+        }
         strokeCell (g, getLocalBounds().toFloat(), t.line);
     }
 
 private:
-    bool arrangement = false;
+    bool arrangement = false, hovering = false;
 };
 
 //==============================================================================
@@ -311,6 +353,8 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     record = std::make_unique<IconButton> (I::record, juce::String(), Role::record, Strings::help::record);
     overdub = std::make_unique<IconButton> (nullptr, Strings::recording::ovr, Role::normal, Strings::help::overdub);
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
+    follow = std::make_unique<IconButton> (I::follow, juce::String(), Role::normal, Strings::help::followPlayhead);
+    backToArrangement = std::make_unique<IconButton> (I::backToArrangement, juce::String(), Role::warning, Strings::help::backToArrangement);
     capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
     version = std::make_unique<IconButton> (nullptr, Strings::transport::versionNone, Role::normal, Strings::help::version);
     scaleButton = std::make_unique<IconButton> (nullptr, Strings::transport::scaleOff, Role::normal, Strings::help::scaleButton);
@@ -320,7 +364,12 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
             model.setScale (root, mode);
         });
     };
-    loop->setEnabled (false);
+    loop->onClick = [this] {
+        model.undo.beginNewTransaction (Strings::undoArrLoop);
+        model.setArrangementLoopOn (! model.arrangementLoopOn());
+    };
+    follow->onClick = [this] { model.setFollowPlayhead (! model.followPlayhead()); };
+    backToArrangement->onClick = [this] { engine.backToArrangement(); };
     metronome->onClick = [this] { model.setMetronome (! model.metronome()); };
     metronome->onPopup = [this] {
         makeMetronomeMenu (model).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (metronome.get()));
@@ -345,7 +394,16 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
         else
             engine.play();
     };
-    stop->onClick = [this] { engine.stop(); };
+    // A second press while stopped brings the song back to its start (and the play start with it).
+    stop->onClick = [this] {
+        if (engine.isPlaying())
+            engine.stop();
+        else
+        {
+            engine.rewindSong();
+            model.setArrangementPlayStart (0.0);
+        }
+    };
 
     morph = std::make_unique<FakeSlider>();
     tabs = std::make_unique<Tabs>();
@@ -361,7 +419,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
             onCpuClicked();
     };
 
-    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), overdub.get(), loop.get(), capture.get(),
+    for (auto* c : std::initializer_list<juce::Component*> { metronome.get(), play.get(), stop.get(), record.get(), overdub.get(), loop.get(), follow.get(), backToArrangement.get(), capture.get(),
                                                               version.get(), scaleButton.get(), morph.get(), tabs.get(), midiLamp.get(), keysLamp.get(), cpu.get() })
         addAndMakeVisible (c);
     lastMidiCount = engine.getHardwareMidiCount();
@@ -419,6 +477,13 @@ void TopBar::tick()
 
     metronome->setOn (model.metronome());
     overdub->setOn (model.overdub());
+    loop->setOn (model.arrangementLoopOn());
+    follow->setOn (model.followPlayhead());
+    {
+        const bool inSession = engine.anyTrackInSession();
+        backToArrangement->setOn (inSession);
+        backToArrangement->setEnabled (inSession);
+    }
     {
         // Lit while a recording runs, blinking while one waits for its start or the count-in plays.
         bool recording = false, waiting = engine.isCountingIn();
@@ -588,6 +653,10 @@ void TopBar::resized()
     positionArea = juce::Rectangle<int> (90, h).withCentre ({ r.getX() + 45, cy });
     r.removeFromLeft (90 + small);
     place (*loop, h);
+    r.removeFromLeft (small);
+    place (*follow, h);
+    r.removeFromLeft (small);
+    place (*backToArrangement, h);
     r.removeFromLeft (gap);
 
     // Right to left: what has to stay visible at the minimum window width
