@@ -9,6 +9,8 @@
 #include <map>
 #include <vector>
 
+class AudioRecorder;
+
 // The message-thread half of recording onto the Arrangement timeline (docs/spec/03-arrangement.md, task 3.4).
 //
 // The engine runs the transport (count-in, start on the launch quantisation) and logs, while a recording is armed,
@@ -50,6 +52,9 @@ class ArrangementRecorder
 {
 public:
     ArrangementRecorder (AudioEngine&, ProjectModel&);
+    // Recording of sound (docs/spec/05-audio-recording.md, task 5.4): armed tracks that record sound get a file each, which
+    // becomes an audio clip (with a take per pass of the loop) when the recording is written. Without it only MIDI records.
+    void setAudioRecorder (AudioRecorder* r) { sound = r; }
 
     //==========================================================================
     // Commands (the transport's record button, F9)
@@ -101,6 +106,7 @@ public:
         int numTakes = 0;      // takes kept under them
         int numLaunches = 0;   // of the clips: copies of session clips
         bool wrote = false;
+        juce::String warning;  // a recording of sound lost frames (the disk was too slow)
     };
     // Ends the recording at monotonic beat `endMono` and writes the clips (one undo transaction). Nothing is opened when
     // nothing was recorded.
@@ -116,10 +122,14 @@ private:
         double startMono = 0.0, endMono = TrackRuntime::kNoEnd;
         std::vector<EngineEvent> events;
         std::map<int64_t, std::vector<daw::engine::InputEvent>> input;
+        std::vector<int64_t> soundTracks; // tracks that record sound into a file
     };
 
     Summary commit();
     void cancel();
+    bool soundReady() const;
+    void finishAndReport();
+    bool isSoundTrack (int64_t trackId) const;
 
     AudioEngine& engine;
     ProjectModel& model;
@@ -130,6 +140,9 @@ private:
     bool stopSent = false;
     bool collecting = false; // events are being kept (between beginRun and the end of finishRun)
     juce::uint32 createdMs = 0;
+    AudioRecorder* sound = nullptr;
+    bool awaitingSound = false; // the engine finished; the files of the sound tracks are still being completed
+    juce::uint32 awaitingSinceMs = 0;
     double songNow = 0.0, monoNow = 0.0;
     Summary lastSummary;
 };

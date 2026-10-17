@@ -165,7 +165,7 @@ public:
     // plays the clip of the slot while OVR is on is overdubbed instead. stopRecord ends a recording at the next bar
     // line (an overdub at once) and cancels one that has not begun. launchAligned plays a clip that was just
     // recorded as if it had been launched at `beat`, which may lie a few milliseconds in the past.
-    bool startRecord (int64_t trackId, int scene);
+    bool startRecord (int64_t trackId, int scene, bool noOverdub = false);
     bool stopRecord (int64_t trackId);
     bool launchAligned (int64_t trackId, int scene, double beat);
 
@@ -203,6 +203,33 @@ public:
     int getRecordCompensationSamples() const { return recordCompensation.load(); }
     void setRecordCorrectionMs (double ms); // -50..+50, also stored in the settings
     double getRecordCorrectionMs() const { return correctionMs.load(); }
+
+    //==========================================================================
+    // Sound input (docs/spec/05-audio-recording.md, tasks 5.3 and 5.4)
+    // How many frames a recorded input lags behind what the engine played at the same moment: the driver's input and
+    // output latency, one buffer each way, and the manual correction of the settings. Recordings are moved earlier by it.
+    int getAudioRecordLatency() const { return audioRecordLatency.load(); }
+    int getDriverRoundTrip() const { return driverRoundTrip.load(); }
+    void setAudioLatencyCorrectionMs (double ms); // -100..+100, also stored in the settings
+    double getAudioLatencyCorrectionMs() const { return audioCorrectionMs.load(); }
+    // Number of input channels the device has open, and their names ("1", "2" or the driver's). Message thread.
+    juce::StringArray getInputChannelNames() const;
+
+    // Loopback test (settings, Recording, "Measure latency"): the engine plays 10 clicks 100 ms apart on the first two
+    // outputs and records `inputChannel`. Message thread; poll isLatencyTestDone(), then takeLatencyTestResult().
+    bool startLatencyTest (int inputChannel);
+    bool isLatencyTestRunning() const { return latencyTestState.load() == 1; }
+    bool isLatencyTestDone() const { return latencyTestState.load() == 2; }
+    // The measured round trip in samples (ok = false if the clicks did not come back); resets the test.
+    struct LatencyTestResult
+    {
+        bool ok = false;
+        int roundTripSamples = 0;
+        int driverSamples = 0;
+        double correctionMs = 0.0; // what the manual correction should be so that recordings land on the beat
+    };
+    LatencyTestResult takeLatencyTestResult();
+    static constexpr int kLatencyClicks = 10;
 
     // Live MIDI from any thread, with the time (ms, juce::Time::getMillisecondCounterHiRes) it happened.
     // The audio thread turns the time into a sample offset inside the block. Used by the device callbacks
@@ -308,6 +335,11 @@ private:
                                  double samplesPerBeat);
     void renderTrack (const PlaybackGraph::Track&, const daw::engine::Transport::Block&, double samplesPerBeat, int numSamples,
                       bool killNotes, bool anySolo, bool anyArmed);
+    void readInput (TrackRuntime&, int numSamples);
+    void feedRecordStream (const PlaybackGraph::Track&, const juce::AudioBuffer<float>& source, const daw::engine::Transport::Block&,
+                           double samplesPerBeat, int numSamples, int latency);
+    void runLatencyTest (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs, int numSamples);
+    void updateAudioRecordLatency();
 
     Settings& settings;
     juce::AudioDeviceManager deviceManager;
@@ -418,6 +450,25 @@ private:
 
     std::atomic<double> sampleRate { 44100.0 };
     int blockSize = 512;
+
+    // Sound input. The callback gets the active input channels packed; inputIndex maps a device channel to its place
+    // there (-1 = not open). Written in audioDeviceAboutToStart, read by the audio thread.
+    static constexpr int kMaxInputChannels = 64;
+    std::array<int, kMaxInputChannels> inputIndex {};
+    std::atomic<int> numOpenInputs { 0 };
+    const float* const* blockInputs = nullptr; // audio thread: the inputs of the block being processed
+    int blockNumInputs = 0;
+    int64_t blockStartSample = 0;              // audio thread: engine sample of the block's first frame
+    juce::AudioBuffer<float> lastMaster;       // audio thread: the master of the previous block, the "Resample" input
+    std::atomic<int> audioRecordLatency { 0 }, driverRoundTrip { 0 };
+    std::atomic<double> audioCorrectionMs { 0.0 };
+
+    // Loopback test: 0 idle, 1 running, 2 done. The buffer is allocated before the state goes to 1.
+    std::atomic<int> latencyTestState { 0 };
+    std::vector<float> latencyRecording;
+    std::atomic<int> latencyInput { 0 };
+    int latencyPos = 0;                        // audio thread
+    static constexpr int kLatencySpacingMs = 100;
 
     // audio thread only
     daw::engine::Transport transport;

@@ -677,6 +677,13 @@ inline juce::String captured (int bars, int notes, const juce::String& track, co
     return utf8 ("Захвачено ") + plural (bars, "такт", "такта", "тактов") + ", " + plural (notes, "нота", "ноты", "нот") + utf8 (" → ") + track
            + utf8 (", сцена ") + scene;
 }
+// Recording of sound (docs/spec/05-audio-recording.md, task 5.4)
+inline const juce::String undoRecordAudio = utf8 ("Запись звука");
+inline juce::String audioDropped (double atSeconds, double lostMs)
+{
+    return utf8 ("Диск не успевал за записью: ") + juce::String (lostMs, 0) + utf8 (" мс тишины на ") + juce::String (atSeconds, 1).replace (".", ",")
+           + utf8 (" с от начала записи");
+}
 } // namespace recording
 
 // Recording onto the Arrangement timeline, takes and taking a track from a version (docs/spec/03-arrangement.md, 3.4 and 3.5)

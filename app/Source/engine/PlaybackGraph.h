@@ -3,6 +3,9 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "../model/AudioInput.h"
+#include "RecordStream.h"
+
 #include "daw/engine/Arrangement.h"
 #include "daw/engine/Clip.h"
 
@@ -39,6 +42,7 @@ struct TrackRuntime
         midi.ensureSize (4096);
         fxMidi.ensureSize (64);
         events.reserve (4096);
+        inputBuffer.setSize (2, maxBlock, false, true, false);
     }
 
     const int64_t trackId;
@@ -48,6 +52,19 @@ struct TrackRuntime
     std::atomic<bool> mute { false }, solo { false }, arm { false };
     std::atomic<int> inputMode { (int) TrackInputMode::allMidi };
     std::atomic<int> transpose { 0 }; // semitones added to every note that reaches the instrument
+
+    // Sound input of an audio track (task 5.3). Device channels count from 0; inputRight < 0 is a mono input.
+    std::atomic<int> audioInput { (int) AudioInputKind::none };
+    std::atomic<int> inputLeft { 0 }, inputRight { 1 };
+    std::atomic<int> monitorMode { (int) MonitorMode::automatic };
+    // The recording stream of the track, for the message thread (the audio thread uses the graph's pointer). Replaced
+    // only while it is idle.
+    std::shared_ptr<RecordStream> recordStream;
+
+    // written by the audio thread: the peak of the input (shown before anything records) and whether it went over
+    // -0.5 dBFS (red until the user clicks the meter, which stores false); whether the input is heard now
+    std::atomic<float> inputMeter { 0.0f };
+    std::atomic<bool> inputClipped { false }, monitoring { false };
 
     // written by the audio thread, read by the UI timer
     std::atomic<float> meterL { 0.0f }, meterR { 0.0f };
@@ -83,6 +100,7 @@ struct TrackRuntime
     bool backPending = false;           // "Back to arrangement" waits for its quantisation boundary
     double backBeat = 0.0;              // that boundary, on the monotonic clock
     juce::AudioBuffer<float> buffer;
+    juce::AudioBuffer<float> inputBuffer; // the sound input of this block (audio tracks)
     juce::MidiBuffer midi, fxMidi;
     std::vector<daw::MidiEvent> events;
     float lastGainL = 0.0f, lastGainR = 0.0f;
@@ -126,6 +144,10 @@ struct PlaybackGraph
         std::vector<std::shared_ptr<const daw::engine::MidiClip>> slots; // by scene, nullptr = empty
         daw::engine::ArrangementClips arrangement; // sorted by start, not overlapping
         uint64_t arrangementSignature = 0;          // identifies the clips and their content; 0 = no arrangement clips
+        // Recording of sound (task 5.4): the stream the track records into, null if it cannot record sound. An audio
+        // track records its input; a MIDI track whose record source is "audio" records what its instrument plays.
+        std::shared_ptr<RecordStream> stream;
+        bool recordsOutput = false;
     };
     std::vector<Track> tracks;
     std::vector<DeviceInstance*> masterChain;
@@ -164,6 +186,7 @@ struct EngineCommand
     int64_t trackId = -1;
     int sceneIndex = -1;
     double beat = 0.0;
+    bool noOverdub = false; // startRecord: always a new clip (a recording of sound never overdubs)
 };
 
 // Audio thread -> message thread, through a fixed-size SPSC queue, while an arrangement recording runs (task 3.4).

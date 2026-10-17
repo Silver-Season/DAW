@@ -3,6 +3,7 @@
 #include "../model/ProjectModel.h"
 #include "AudioEngine.h"
 #include "ArrangementRecorder.h"
+#include "AudioRecorder.h"
 
 #include "daw/engine/Capture.h"
 #include "daw/engine/Recording.h"
@@ -26,6 +27,11 @@ public:
     // Recording onto the Arrangement timeline (task 3.4). It shares the live events this class drains from the engine.
     ArrangementRecorder& arrangement() { return arr; }
     const ArrangementRecorder& arrangement() const { return arr; }
+    // Recording of sound to disk (task 5.4), shared by both recorders.
+    AudioRecorder& sound() { return audio; }
+    const AudioRecorder& sound() const { return audio; }
+    // A recording of sound lost frames (the disk was too slow): the window shows the text in its info bar.
+    std::function<void (const juce::String&)> onWarning;
 
     void startPolling() { startTimerHz (30); }
     void poll();
@@ -98,6 +104,7 @@ private:
     struct Rec
     {
         int scene = 0;
+        bool sound = false;    // records sound into a file instead of notes
         bool sawState = false; // the audio thread has taken the command (the state left idle at least once)
         juce::uint32 createdMs = 0;
         bool overdubStarted = false;
@@ -119,12 +126,14 @@ private:
     bool stepNew (int64_t trackId, Rec&, TrackRuntime&, int state);
     bool stepOverdub (int64_t trackId, Rec&, TrackRuntime&, int state);
     void commitNew (int64_t trackId, Rec&);
+    bool stepSound (int64_t trackId, Rec&, TrackRuntime&, int state);
     void flushOverdub (Rec&, const ClipRef&, const daw::engine::MidiClip& shape, double playStart, bool all, long beforePass);
     static long passOf (const daw::engine::MidiClip&, double elapsed);
     daw::engine::MidiClip shapeOf (const ClipRef&) const;
 
     AudioEngine& engine;
     ProjectModel& model;
+    AudioRecorder audio;
     ArrangementRecorder arr;
     std::map<int64_t, Rec> recs; // by track
     daw::engine::CaptureBuffer capture_;

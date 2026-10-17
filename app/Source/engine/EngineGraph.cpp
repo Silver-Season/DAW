@@ -184,6 +184,11 @@ void AudioEngine::applyTrackProperties (TrackRuntime& rt, const TrackRef& t)
     rt.arm = t.arm();
     rt.inputMode = (int) inputModeFor (t.input());
     rt.transpose = juce::jlimit (-48, 48, t.transpose());
+    const auto in = AudioInputSpec::parse (t.input());
+    rt.audioInput = (int) in.kind;
+    rt.inputLeft = in.left;
+    rt.inputRight = in.right;
+    rt.monitorMode = (int) monitorModeOf (t.monitor());
 }
 
 void AudioEngine::applyProjectProperties()
@@ -224,13 +229,15 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     if (type == ids::TRACK)
     {
         if (property == ids::volumeDb || property == ids::pan || property == ids::mute || property == ids::solo
-            || property == ids::arm || property == ids::input || property == ids::transpose)
+            || property == ids::arm || property == ids::input || property == ids::transpose || property == ids::monitor)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             const auto it = runtimes.find ((int64_t) (juce::int64) tree.getProperty (ids::id, -1));
             if (it != runtimes.end())
                 applyTrackProperties (*it->second, TrackRef (tree));
         }
+        else if (property == ids::recordSource || property == ids::type)
+            graphDirty = true; // whether the track records sound decides whether it has a stream
     }
     else if (type == ids::DEVICE)
     {
@@ -545,6 +552,16 @@ void AudioEngine::rebuildGraph()
         PlaybackGraph::Track gt;
         gt.runtime = slot.get();
         gt.audio = track.isAudio();
+        gt.recordsOutput = ! gt.audio && track.recordSource() == "audio";
+        if (gt.audio || gt.recordsOutput)
+        {
+            // Two seconds of ring at the current rate. A stream that is busy keeps its size until it is idle again.
+            const int wanted = juce::roundToInt (2.0 * sampleRate.load());
+            auto& stream = slot->recordStream;
+            if (stream == nullptr || (stream->getCapacity() < wanted && stream->state.load() == RecordStream::idle))
+                stream = std::make_shared<RecordStream> (2, wanted);
+            gt.stream = stream;
+        }
         for (const auto& device : track.devices())
             gt.chain.push_back (acquireDevice (device, usedDevices)); // nullptr keeps the position of a device without an instance
         for (int scene = 0; scene < track.numSlots(); ++scene)

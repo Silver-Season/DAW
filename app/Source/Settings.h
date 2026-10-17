@@ -97,6 +97,9 @@ public:
     void setAudioCaptureMinutes (int);
     bool trimRecordedSilence() const;    // cut the silence at the start of a recording (off by default)
     void setTrimRecordedSilence (bool);
+    // Stage 5 opened the sound card's inputs; settings saved before had none. True once the inputs were switched on.
+    bool audioInputsOpened() const;
+    void setAudioInputsOpened (bool);
 
     // Plugins (list written by the plugin scanner)
     std::unique_ptr<juce::XmlElement> knownPlugins() const;

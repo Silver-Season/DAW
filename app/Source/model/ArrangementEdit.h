@@ -56,6 +56,10 @@ struct RecordedPass
 };
 ArrangementClipRef addRecordedClip (ProjectModel&, const TrackRef&, double start, double lengthBeats, const std::vector<RecordedPass>& passes,
                                     int activePass, const juce::String& name = {});
+// The same with the contents ready made (CLIP trees, detached, fresh ids): recordings of sound, whose takes are audio clips
+// of one file at different sample starts.
+ArrangementClipRef addRecordedContents (ProjectModel&, const TrackRef&, double start, double lengthBeats, std::vector<juce::ValueTree> contents,
+                                        int activePass);
 // A copy of a Session View clip. Length: the clip length; the loop flag follows the clip's.
 ArrangementClipRef addSlotClip (ProjectModel&, const TrackRef&, const ClipRef& source, double start);
 // A part of a Session View clip as the session played it (arrangement recording): `length` beats from `start`, entered at

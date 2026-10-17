@@ -190,18 +190,28 @@ ArrangementClipRef addRecordedClip (ProjectModel& model, const TrackRef& track, 
 {
     if (! track.arrangementNode().isValid() || passes.empty())
         return {};
-    start = std::max (0.0, start);
     lengthBeats = std::max (kMinClipBeats, lengthBeats);
-    activePass = std::clamp (activePass, 0, (int) passes.size() - 1);
-
     // Contents are built detached (no undo needed), then the whole ACLIP is appended in one undoable step.
-    const auto content = [&] (const RecordedPass& pass) {
+    std::vector<juce::ValueTree> contents;
+    for (const auto& pass : passes)
+    {
         auto c = makeContent (model, track, lengthBeats, name);
         ClipRef ref (c);
         ref.setNotes (pass.notes, nullptr);
         ref.setControllers (pass.controllers, nullptr);
-        return c;
-    };
+        contents.push_back (c);
+    }
+    return addRecordedContents (model, track, start, lengthBeats, std::move (contents), activePass);
+}
+
+ArrangementClipRef addRecordedContents (ProjectModel& model, const TrackRef& track, double start, double lengthBeats,
+                                        std::vector<juce::ValueTree> contents, int activePass)
+{
+    if (! track.arrangementNode().isValid() || contents.empty())
+        return {};
+    start = std::max (0.0, start);
+    lengthBeats = std::max (kMinClipBeats, lengthBeats);
+    activePass = std::clamp (activePass, 0, (int) contents.size() - 1);
 
     juce::ValueTree a (ids::ACLIP);
     a.setProperty (ids::id, (juce::int64) model.newId(), nullptr);
@@ -209,19 +219,19 @@ ArrangementClipRef addRecordedClip (ProjectModel& model, const TrackRef& track, 
     a.setProperty (ids::length, lengthBeats, nullptr);
     a.setProperty (ids::offset, 0.0, nullptr);
     a.setProperty (ids::loop, true, nullptr);
-    a.appendChild (content (passes[(size_t) activePass]), nullptr);
-    if (passes.size() > 1)
+    a.appendChild (contents[(size_t) activePass], nullptr);
+    if (contents.size() > 1)
     {
         a.setProperty (ids::take, activePass + 1, nullptr);
         juce::ValueTree takes (ids::TAKES);
-        for (int i = 0; i < (int) passes.size(); ++i)
+        for (int i = 0; i < (int) contents.size(); ++i)
         {
             if (i == activePass)
                 continue;
             juce::ValueTree t (ids::TAKE);
             t.setProperty (ids::id, (juce::int64) model.newId(), nullptr);
             t.setProperty (ids::number, i + 1, nullptr);
-            t.appendChild (content (passes[(size_t) i]), nullptr);
+            t.appendChild (contents[(size_t) i], nullptr);
             takes.appendChild (t, nullptr);
         }
         a.appendChild (takes, nullptr);

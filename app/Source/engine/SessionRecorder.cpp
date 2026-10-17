@@ -43,9 +43,10 @@ juce::uint32 nowMs() { return juce::Time::getMillisecondCounter(); }
 } // namespace
 
 //==============================================================================
-SessionRecorder::SessionRecorder (AudioEngine& e, ProjectModel& m) : engine (e), model (m), arr (e, m)
+SessionRecorder::SessionRecorder (AudioEngine& e, ProjectModel& m) : engine (e), model (m), audio (e, m), arr (e, m)
 {
     scratch.reserve (4096);
+    arr.setAudioRecorder (&audio);
 }
 
 SessionRecorder::~SessionRecorder()
@@ -58,14 +59,25 @@ bool SessionRecorder::startRecording (int64_t trackId, int scene)
 {
     const auto track = model.findTrack (trackId);
     auto* rt = engine.findRuntime (trackId);
-    if (! track.isValid() || rt == nullptr || track.type() != "midi" || track.recordSource() != "midi")
+    if (! track.isValid() || rt == nullptr)
+        return false;
+    const bool sound = audio.recordsSound (track);
+    if (! sound && (track.type() != "midi" || track.recordSource() != "midi"))
         return false;
     if (scene < 0 || scene >= track.numSlots() || recs.count (trackId) > 0 || rt->recordState.load() != TrackRuntime::recordIdle)
         return false;
-    if (! engine.startRecord (trackId, scene))
+    // The stream is armed before the command, so that the audio thread finds it when the recording begins.
+    if (sound && ! audio.begin (trackId, RecordStream::Mode::slot))
         return false;
+    if (! engine.startRecord (trackId, scene, sound))
+    {
+        if (sound)
+            audio.cancel (trackId);
+        return false;
+    }
     Rec rec;
     rec.scene = scene;
+    rec.sound = sound;
     rec.createdMs = nowMs();
     recs[trackId] = std::move (rec);
     return true;
@@ -102,7 +114,7 @@ bool SessionRecorder::sessionRecord (int fromScene)
     for (const auto& t : targets)
     {
         int scene = -1;
-        if (model.overdub())
+        if (model.overdub() && ! audio.recordsSound (t)) // sound never overdubs: it records into an empty slot
             if (auto* rt = engine.findRuntime (t.id()); rt != nullptr && rt->playingSlot.load() >= 0 && t.clipAt (rt->playingSlot.load()).isValid())
                 scene = rt->playingSlot.load();
         for (int s = juce::jmax (0, fromScene); scene < 0 && s < t.numSlots(); ++s)
@@ -193,10 +205,13 @@ void SessionRecorder::poll()
                 rec.startBeat = snap->second.start;
                 rec.endBeat = snap->second.end;
                 rec.waiting = snap->second.state == TrackRuntime::recordWaiting;
-                keep = rec.overdub ? stepOverdub (it->first, rec, *snap->second.runtime, snap->second.state)
-                                   : stepNew (it->first, rec, *snap->second.runtime, snap->second.state);
+                keep = rec.sound     ? stepSound (it->first, rec, *snap->second.runtime, snap->second.state)
+                       : rec.overdub ? stepOverdub (it->first, rec, *snap->second.runtime, snap->second.state)
+                                     : stepNew (it->first, rec, *snap->second.runtime, snap->second.state);
             }
         }
+        if (! keep && it->second.sound)
+            audio.cancel (it->first); // a recording that began finishes on its own and is let go of by the next one
         it = keep ? std::next (it) : recs.erase (it);
     }
 }
@@ -264,6 +279,36 @@ void SessionRecorder::commitNew (int64_t trackId, Rec& rec)
     auto clip = model.createClip (track, rec.scene, length);
     clip.setNotes (notes, &model.undo);
     clip.setControllers (controllers, &model.undo);
+}
+
+// A recording of sound ends when its file is complete (a few milliseconds after the end beat: the latency tail and the
+// writer). The track stays "finished" until then, so that nothing else records on it in between.
+bool SessionRecorder::stepSound (int64_t trackId, Rec& rec, TrackRuntime& rt, int state)
+{
+    if (state != TrackRuntime::recordFinished)
+        return true;
+    AudioRecorder::Finished f;
+    if (! audio.takeFinished (trackId, f))
+        return true;
+
+    const auto track = model.findTrack (trackId);
+    if (f.ok && rec.scene < track.numSlots())
+    {
+        const double length = std::max (1.0e-3, rec.endBeat - rec.startBeat);
+        model.undo.beginNewTransaction (Strings::recording::undoRecordAudio);
+        const auto fileId = audio.addToPool (f);
+        auto clip = model.createAudioClip (track, rec.scene, fileId, length, f.name);
+        clip.setSampleStart ((double) f.latency, &model.undo); // frame 0 is the start beat as the engine played it
+        if (f.droppedFrames > 0 && onWarning)
+            onWarning (Strings::recording::audioDropped ((double) juce::jmax ((int64_t) 0, f.firstDropFrame) / f.sampleRate,
+                                                         (double) f.droppedFrames * 1000.0 / f.sampleRate));
+    }
+    rt.recordState = TrackRuntime::recordIdle;
+    engine.rebuildGraph();
+    const bool otherClipFollows = rt.queuedSlot.load() >= 0 || (rt.playingSlot.load() >= 0 && rt.playingStartBeat.load() > rec.endBeat - 1.0e-6);
+    if (engine.isPlaying() && ! otherClipFollows)
+        engine.launchAligned (trackId, rec.scene, rec.endBeat);
+    return false;
 }
 
 //==============================================================================
