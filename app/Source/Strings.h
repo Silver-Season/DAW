@@ -134,6 +134,10 @@ inline juce::String undoAddMidiClip (const juce::String& what) { return utf8 ("�
 inline juce::String errorChainRead (const juce::String& n) { return utf8 ("Не удалось прочитать цепочку «") + n + utf8 ("»"); }
 inline juce::String errorPluginUnknown (const juce::String& n) { return utf8 ("Плагин «") + n + utf8 ("» не найден в списке плагинов"); }
 inline const juce::String errorNoSlot = utf8 ("Некуда положить клип");
+inline juce::String undoAddAudioClip (const juce::String& what) { return utf8 ("Добавить звук · ") + what; }
+inline juce::String undoAddAudioClips (int n) { return utf8 ("Добавить звуки · ") + juce::String (n); }
+inline const juce::String errorAudioRead = utf8 ("Не удалось прочитать звуковой файл");
+inline const juce::String errorAudioOnMidi = utf8 ("Звук кладётся на аудиодорожку или на пустое место");
 
 // Dialogs
 inline const juce::String dialogOk = utf8 ("OK");

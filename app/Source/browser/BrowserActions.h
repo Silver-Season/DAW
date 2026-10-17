@@ -12,6 +12,13 @@ class Settings;
 // tasks 1.5 and 1.6). Each drop is exactly one undo transaction, named after what happened ("Добавить Prisma · Reese Bass").
 namespace browser
 {
+struct ImportedSound
+{
+    int64_t fileId = -1;
+    juce::String name;
+    double lengthBeats = 4.0;
+};
+
 // The description a dragged browser row carries: { kind, id, path, name, instrument }.
 struct DragItem
 {
@@ -50,6 +57,16 @@ public:
     DropResult drop (const DragItem&, DropTarget, int64_t trackId, int scene = -1, int index = -1, int64_t deviceId = -1);
     // A .mid file from Finder or from the browser's MIDI list.
     DropResult dropMidiFile (const juce::File&, DropTarget, int64_t trackId, int scene = -1);
+    // Sound files (docs/spec/05-audio-recording.md, task 5.6), from the browser or from Finder, as one undo transaction.
+    // Session View: onto a slot of an audio track (several files fill that slot and the ones below it, one per scene; with
+    // `alternate` each file gets a track of its own next to it instead), or onto empty space (new audio tracks).
+    DropResult dropAudioFiles (const juce::Array<juce::File>&, DropTarget, int64_t trackId, int scene, bool alternate = false);
+    // Arrangement: onto the lane of an audio track at `beat` (trackId -1: new audio tracks at the end). Several files go
+    // under each other, one track each (the first on the lane that was hit); with `alternate` one after another on it.
+    DropResult dropAudioOnTimeline (const juce::Array<juce::File>&, int64_t trackId, double beat, bool alternate = false);
+    // The project folder, made if there is none yet, so dropped files can be copied into it. Set by the window.
+    std::function<juce::File()> ensureProjectFolder;
+
     // Double click and Enter in the browser: the item goes to the selected track (or to a new one).
     DropResult useOnTrack (const DragItem&, int64_t selectedTrackId);
 
@@ -86,7 +103,9 @@ private:
     DeviceRef addNode (const TrackRef&, const juce::ValueTree& node, int index);
     void removeAllDevices (const TrackRef&);
     static juce::String describe (const DeviceSpec&);
-    TrackRef newTrackAt (int64_t afterTrackId, const juce::String& name);
+    TrackRef newTrackAt (int64_t afterTrackId, const juce::String& name, const juce::String& type = "midi");
+    // Imports the files (skipping what cannot be read); false with r.message set if none could be.
+    bool importAll (const juce::Array<juce::File>&, std::vector<struct ImportedSound>&, DropResult& r);
     double beatsPerBar() const;
 
     ProjectModel& model;

@@ -24,6 +24,8 @@ public:
     //==========================================================================
     // State
     juce::File folder() const { return projectFolder; }         // invalid until the first autosave or save
+    // The folder, made now if the project has none yet (an import or a recording needs a place for its sound files).
+    juce::File ensureFolder();
     juce::File mainFile() const;                                 // the .prisma of a saved project
     bool hasFile() const { return named; }                       // saved or opened from a file
     juce::String name() const;                                   // for the window title

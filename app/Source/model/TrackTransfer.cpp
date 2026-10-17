@@ -1,5 +1,7 @@
 #include "TrackTransfer.h"
 
+#include <functional>
+
 namespace transfer
 {
 std::vector<TrackInfo> listTracks (const ProjectModel& other)
@@ -54,6 +56,29 @@ TrackRef importTrack (ProjectModel& dest, const ProjectModel& source, int64_t tr
         copy.appendChild (juce::ValueTree (ids::ARRANGEMENT), nullptr);
 
     dest.tracksNode().addChild (copy, -1, &dest.undo);
+
+    // Audio clips play files of the source's pool: the ones `dest` lacks come along, under their own ids (ids are never
+    // reused within a project's history, so a version's FILE id is that same file or no file of `dest` at all).
+    const std::function<void (const juce::ValueTree&)> bringFiles = [&] (const juce::ValueTree& v) {
+        if (v.hasType (ids::CLIP) && v.hasProperty (ids::file))
+        {
+            const auto fileId = (int64_t) (juce::int64) v.getProperty (ids::file);
+            if (! dest.findAudioFile (fileId).isValid())
+                if (const auto f = source.findAudioFile (fileId); f.isValid())
+                {
+                    auto pool = dest.audioFilesNode();
+                    if (! pool.isValid())
+                    {
+                        pool = juce::ValueTree (ids::AUDIOFILES);
+                        dest.root.appendChild (pool, &dest.undo);
+                    }
+                    pool.appendChild (f.state.createCopy(), &dest.undo);
+                }
+        }
+        for (const auto& c : v)
+            bringFiles (c);
+    };
+    bringFiles (copy);
     return track;
 }
 } // namespace transfer

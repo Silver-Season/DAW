@@ -2,6 +2,8 @@
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "../model/ArrangementEdit.h"
+#include "../project/AudioImport.h"
 #include "../project/MidiImport.h"
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
@@ -155,13 +157,15 @@ bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t t
     if (needsTrack && ! model.findTrack (trackId).isValid() && target != DropTarget::device)
         return false;
 
+    const auto track = model.findTrack (trackId);
+    const bool audioTrack = track.isValid() && track.isAudio();
     if (item.kind == kinds::midiFile)
-        return target == DropTarget::newTrack || target == DropTarget::slot;
+        return target == DropTarget::newTrack || (target == DropTarget::slot && ! audioTrack);
     if (item.kind == kinds::audioFile)
-        return false; // audio tracks arrive with stage 5
+        return target == DropTarget::newTrack || ((target == DropTarget::slot || target == DropTarget::track) && audioTrack);
 
     if (item.kind == kinds::chain)
-        return target != DropTarget::device;
+        return target != DropTarget::device && ! audioTrack; // a chain begins with an instrument
 
     const bool isPreset = item.kind == kinds::prismaPreset || item.kind == kinds::userPreset;
     if (item.kind == kinds::prisma || item.kind == kinds::prismaPreset || item.kind == kinds::userPreset || item.kind == kinds::plugin)
@@ -171,6 +175,9 @@ bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t t
         // An effect only makes sense on a track that exists: an empty MIDI track would have no sound.
         if (target == DropTarget::newTrack)
             return item.instrument || item.kind == kinds::prisma || item.kind == kinds::prismaPreset;
+        // An audio track has no instrument: only effects go on it (a preset only onto its own device, below).
+        if (audioTrack && target != DropTarget::device && (item.instrument || item.kind == kinds::prisma || item.kind == kinds::prismaPreset))
+            return false;
         if (target == DropTarget::device)
         {
             if (! isPreset)
@@ -218,10 +225,10 @@ void BrowserActions::removeAllDevices (const TrackRef& track)
         engine.removeDevice (track.device (i));
 }
 
-TrackRef BrowserActions::newTrackAt (int64_t afterTrackId, const juce::String& name)
+TrackRef BrowserActions::newTrackAt (int64_t afterTrackId, const juce::String& name, const juce::String& type)
 {
     const int index = afterTrackId >= 0 ? model.indexOfTrack (afterTrackId) + 1 : -1;
-    auto track = model.addTrack ("midi", index);
+    auto track = model.addTrack (type, index);
     if (name.isNotEmpty())
         track.setName (name, &model.undo);
     return track;
@@ -235,6 +242,8 @@ DropResult BrowserActions::drop (const DragItem& item, DropTarget target, int64_
 
     if (item.kind == kinds::midiFile)
         return dropMidiFile (juce::File (item.path), target, trackId, scene);
+    if (item.kind == kinds::audioFile)
+        return dropAudioFiles ({ juce::File (item.path) }, target, trackId, target == DropTarget::track ? -1 : scene);
 
     if (item.kind == kinds::chain)
     {
@@ -381,9 +390,109 @@ DropResult BrowserActions::dropMidiFile (const juce::File& file, DropTarget targ
     return r;
 }
 
+bool BrowserActions::importAll (const juce::Array<juce::File>& files, std::vector<ImportedSound>& out, DropResult& r)
+{
+    if (engine.getProjectFolder() == juce::File() && ensureProjectFolder)
+        ensureProjectFolder();
+    const bool copy = engine.getSettings().copySamplesIntoProject();
+    for (const auto& f : files)
+    {
+        const auto imported = audioimport::importFile (model, engine, f, copy);
+        if (imported.ok)
+            out.push_back ({ imported.fileId, imported.name, imported.lengthBeats });
+    }
+    if (out.empty())
+        r.message = Strings::errorAudioRead;
+    return ! out.empty();
+}
+
+DropResult BrowserActions::dropAudioFiles (const juce::Array<juce::File>& files, DropTarget target, int64_t trackId, int scene, bool alternate)
+{
+    DropResult r;
+    auto track = model.findTrack (trackId);
+    if (target != DropTarget::newTrack && ! (track.isValid() && track.isAudio()))
+    {
+        r.message = Strings::errorAudioOnMidi;
+        return r;
+    }
+    if (files.isEmpty())
+        return r;
+    model.undo.beginNewTransaction (files.size() == 1 ? Strings::undoAddAudioClip (files[0].getFileNameWithoutExtension())
+                                                      : Strings::undoAddAudioClips (files.size()));
+    std::vector<ImportedSound> sounds;
+    if (! importAll (files, sounds, r))
+        return r;
+
+    if (target == DropTarget::newTrack)
+    {
+        track = {};
+        scene = 0;
+    }
+    else if (scene < 0) // onto the header: the first empty slot
+    {
+        scene = 0;
+        while (scene < model.numScenes() && track.clipAt (scene).isValid())
+            ++scene;
+    }
+    int64_t after = track.isValid() ? track.id() : -1;
+    for (size_t i = 0; i < sounds.size(); ++i)
+    {
+        const auto& s = sounds[i];
+        if (! track.isValid() || (alternate && i > 0))
+        {
+            track = newTrackAt (after, s.name, "audio");
+            after = track.id();
+        }
+        const int slot = alternate ? scene : scene + (int) i;
+        while (slot >= model.numScenes())
+            model.insertScene (-1);
+        model.createAudioClip (track, slot, s.fileId, s.lengthBeats, s.name);
+        r.trackId = track.id();
+    }
+    r.ok = true;
+    return r;
+}
+
+DropResult BrowserActions::dropAudioOnTimeline (const juce::Array<juce::File>& files, int64_t trackId, double beat, bool alternate)
+{
+    DropResult r;
+    auto track = model.findTrack (trackId);
+    if (track.isValid() && ! track.isAudio())
+    {
+        r.message = Strings::errorAudioOnMidi;
+        return r;
+    }
+    if (files.isEmpty())
+        return r;
+    model.undo.beginNewTransaction (files.size() == 1 ? Strings::undoAddAudioClip (files[0].getFileNameWithoutExtension())
+                                                      : Strings::undoAddAudioClips (files.size()));
+    std::vector<ImportedSound> sounds;
+    if (! importAll (files, sounds, r))
+        return r;
+
+    beat = juce::jmax (0.0, beat);
+    double at = beat;
+    for (size_t i = 0; i < sounds.size(); ++i)
+    {
+        const auto& s = sounds[i];
+        if (! track.isValid() || (! alternate && i > 0))
+            track = newTrackAt (track.isValid() ? track.id() : -1, s.name, "audio");
+        auto node = model.makeAudioClipNode (track, s.fileId, s.lengthBeats, s.name);
+        auto a = arrangement::addSlotClip (model, track, ClipRef (node), alternate ? at : beat);
+        a.setLoop (false, &model.undo); // a sound on the timeline plays once; stretching its end repeats it only if asked
+        at += s.lengthBeats;
+        r.trackId = track.id();
+    }
+    r.ok = true;
+    return r;
+}
+
 DropResult BrowserActions::useOnTrack (const DragItem& item, int64_t selectedTrackId)
 {
     const auto track = model.findTrack (selectedTrackId);
+    if (item.kind == kinds::audioFile)
+        return dropAudioFiles ({ juce::File (item.path) }, track.isValid() && track.isAudio() ? DropTarget::track : DropTarget::newTrack,
+                               selectedTrackId, -1);
     if (item.kind == kinds::midiFile)
     {
         if (track.isValid())

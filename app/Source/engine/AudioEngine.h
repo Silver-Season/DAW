@@ -97,6 +97,9 @@ public:
     juce::File resolveAudioFile (const AudioFileRef&) const;
     // The decoded file of a FILE id (loading in the background), null if it is missing. Message thread.
     std::shared_ptr<daw::engine::AudioSource> audioSourceFor (int64_t fileId);
+    // The same, cheap enough to call from paint(): remembers what it found (and what was missing) until the next graph
+    // rebuild, so it does not look at the disk again for every repaint.
+    std::shared_ptr<daw::engine::AudioSource> peekAudioSource (int64_t fileId);
     // Blocks of the audio thread in which an audio clip wanted samples the loader had not decoded yet. The transport
     // shows a disk symbol while it grows.
     uint32_t getDiskMisses() const { return diskMisses.load (std::memory_order_relaxed); }
@@ -305,6 +308,7 @@ private:
     juce::KnownPluginList knownPlugins;
     AudioFilePool audioPool;
     juce::File projectFolder;
+    std::map<int64_t, std::shared_ptr<daw::engine::AudioSource>> peekedSources; // by FILE id, null = missing; cleared by rebuilds
     juce::MidiKeyboardState keyboardState;
     MidiInputQueue midiQueue;
     std::unique_ptr<PlayHead> playHead;

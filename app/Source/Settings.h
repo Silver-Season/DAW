@@ -86,6 +86,18 @@ public:
     double recordCorrectionMs() const;
     void setRecordCorrectionMs (double);
 
+    // Recording and sound files (docs/spec/05-audio-recording.md)
+    bool copySamplesIntoProject() const; // a dropped file from outside is copied to Samples/Imported (on by default)
+    void setCopySamplesIntoProject (bool);
+    int recordBitDepth() const;          // 16, 24 (default) or 32 (float)
+    void setRecordBitDepth (int);
+    double audioLatencyCorrectionMs() const; // manual correction of recorded audio, -100..+100 ms, step 0.1
+    void setAudioLatencyCorrectionMs (double);
+    int audioCaptureMinutes() const;     // length of the "always recording" audio buffer: 1, 2, 5 (default) or 10
+    void setAudioCaptureMinutes (int);
+    bool trimRecordedSilence() const;    // cut the silence at the start of a recording (off by default)
+    void setTrimRecordedSilence (bool);
+
     // Plugins (list written by the plugin scanner)
     std::unique_ptr<juce::XmlElement> knownPlugins() const;
     void setKnownPlugins (const juce::XmlElement&);

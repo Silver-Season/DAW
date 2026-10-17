@@ -125,6 +125,7 @@ void AudioEngine::retireEverything()
     loadingDevices.clear();
     ++modelEpoch;
     clipCache.clear();
+    peekedSources.clear();
 }
 
 void AudioEngine::valueTreeRedirected (juce::ValueTree&)
@@ -291,6 +292,14 @@ std::shared_ptr<daw::engine::AudioSource> AudioEngine::audioSourceFor (int64_t f
         return nullptr;
     const auto file = resolveAudioFile (model->findAudioFile (fileId));
     return file != juce::File() ? audioPool.acquire (file) : nullptr;
+}
+
+std::shared_ptr<daw::engine::AudioSource> AudioEngine::peekAudioSource (int64_t fileId)
+{
+    std::lock_guard<std::recursive_mutex> sl (buildLock);
+    if (const auto it = peekedSources.find (fileId); it != peekedSources.end())
+        return it->second;
+    return peekedSources[fileId] = audioSourceFor (fileId);
 }
 
 //==============================================================================
@@ -513,6 +522,7 @@ void AudioEngine::rebuildGraph()
     if (model == nullptr)
         return;
     graphDirty = false;
+    peekedSources.clear(); // what the views remembered may have moved, been found or been lost
 
     const uint64_t generation = generationCounter.load() + 1;
     auto graph = std::make_unique<PlaybackGraph>();

@@ -98,6 +98,7 @@ void ProjectSession::adopt (juce::ValueTree tree, const juce::File& folder, bool
     flush();
     hasDocument = true;
     projectFolder = folder;
+    engine.setProjectFolder (projectFolder); // before the model, so its sound files resolve against the right folder
     named = isNamed;
     if (tree.getProperty (ids::name).toString().isEmpty() && folder != juce::File() && isNamed)
         tree.setProperty (ids::name, projectNameOfFolder (folder), nullptr);
@@ -205,6 +206,7 @@ juce::Result ProjectSession::saveAs (const juce::File& target)
         return juce::Result::fail (Strings::errorWriteFile (target.getFullPathName()));
 
     projectFolder = target;
+    engine.setProjectFolder (projectFolder);
     named = true;
     model.root.setProperty (ids::name, newName, nullptr);
     updateLock();
@@ -262,11 +264,7 @@ void ProjectSession::autosaveNow()
         return;
     persistedHash = h;
 
-    if (projectFolder == juce::File())
-    {
-        projectFolder = newUnsavedFolder (musicFolder, juce::Time::getCurrentTime());
-        updateLock();
-    }
+    ensureFolder();
     const auto dir = projectFolder;
     const auto now = juce::Time::currentTimeMillis();
     submit ([=] {
@@ -274,6 +272,18 @@ void ProjectSession::autosaveNow()
         writeAutosave (dir, text, now, error);
         return error;
     });
+}
+
+juce::File ProjectSession::ensureFolder()
+{
+    if (projectFolder == juce::File())
+    {
+        projectFolder = newUnsavedFolder (musicFolder, juce::Time::getCurrentTime());
+        projectFolder.createDirectory();
+        engine.setProjectFolder (projectFolder);
+        updateLock();
+    }
+    return projectFolder;
 }
 
 //==============================================================================

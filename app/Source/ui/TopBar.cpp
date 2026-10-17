@@ -579,10 +579,10 @@ void TopBar::updateRibbon()
     const double sr = engine.getSampleRate() > 0.0 ? engine.getSampleRate() : 44100.0;
     const int64_t pixel = (int64_t) std::floor ((double) engine.getEngineSample() / sr * (double) ribbonStripArea.getWidth()
                                                 / daw::engine::CaptureBuffer::kWindowSeconds);
-    const auto version = recorder->getCaptureVersion();
-    if (version == ribbonVersion && pixel == ribbonPixel)
+    const auto captureVersion = recorder->getCaptureVersion();
+    if (captureVersion == ribbonVersion && pixel == ribbonPixel)
         return;
-    if (version != ribbonVersion)
+    if (captureVersion != ribbonVersion)
     {
         std::vector<SessionRecorder::NoteMark> marks;
         recorder->getRecentNoteOns (marks);
@@ -596,7 +596,7 @@ void TopBar::updateRibbon()
             markTracks.push_back (m.trackId);
         }
     }
-    ribbonVersion = version;
+    ribbonVersion = captureVersion;
     ribbonPixel = pixel;
     repaint (ribbonStripArea);
 }
