@@ -1,22 +1,28 @@
 #pragma once
 
 #include "../../plugins/prisma/Source/PrismaEditor.h"
+#include "browser/BrowserActions.h"
+#include "browser/BrowserSources.h"
 #include "engine/AudioEngine.h"
 #include "model/ProjectActions.h"
 #include "model/ProjectModel.h"
+#include "project/ProjectSession.h"
 #include "ui/AppMenu.h"
 #include "ui/BrowserPanel.h"
 #include "ui/Chrome.h"
 #include "ui/DetailPanel.h"
 #include "ui/EditCommands.h"
+#include "ui/SettingsWindow.h"
 #include "ui/SessionView.h"
 #include "ui/TopBar.h"
+#include "ui/VersionWindow.h"
 
 class PluginWindow;
 
 // The window content: top bar, browser, Session View, detail panel, info bar and the menu. It reads and
 // writes only the ProjectModel (through ProjectActions); sound comes from the engine that listens to the model.
 class MainComponent final : public juce::Component,
+                            public juce::DragAndDropContainer,
                             public juce::ApplicationCommandTarget,
                             private juce::Timer,
                             private juce::ChangeListener,
@@ -32,8 +38,14 @@ public:
     // "Name" or "Name •" when there are unsaved changes (docs/spec/99-details.md, stage 1).
     juce::String windowTitle() const;
     std::function<void (const juce::String&)> onTitleChanged;
-    void markClean();
-    bool isDirty() const { return dirty; }
+    bool isDirty() const { return doc.isDirty(); }
+
+    // Called once the window is visible: offers the recovery of a lost session, or opens the first-run demo
+    // or a new project (the template if there is one).
+    void startup();
+    // Asks about unsaved changes, then calls `quitNow` (the lock is removed first). Cancel does nothing.
+    void requestQuit (std::function<void()> quitNow);
+    project::ProjectSession& document() { return doc; }
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -59,10 +71,8 @@ private:
 
     void timerCallback() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
-    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
-    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override { dirty = true; }
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override;
-    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { dirty = true; }
+    void valueTreeRedirected (juce::ValueTree&) override { closeEditorsOfMissingDevices(); }
 
     void setBrowserVisible (bool);
     void setDetailVisible (bool);
@@ -70,19 +80,35 @@ private:
     void applyTheme();
     void updateTitle();
 
-    // instruments and plugin windows (kept from phase 0 until the browser of task 1.5 replaces the menu)
-    void showInstrumentMenu (int64_t deviceId, juce::Point<int> screenPosition);
-    void setPrismaInstrument (int64_t trackId, const juce::String& presetName);
-    void loadPluginInstrument (int64_t trackId, const juce::PluginDescription&);
+    // project files (task 1.7)
+    void confirmDiscard (std::function<void()> proceed);
+    void doSave (std::function<void()> then = nullptr);
+    void doSaveAs (std::function<void()> then = nullptr);
+    void showVersionHistory();
+    void doOpenDialog();
+    void doOpen (const juce::File&);
+    void documentChanged();
+    juce::File projectsFolder() const;
+
+    // the browser and the library (tasks 1.5 and 1.6)
+    void showDeviceMenu (int64_t deviceId, juce::Point<int> screenPosition);
+    void savePresetOf (int64_t deviceId);
+    void saveChainOf (int64_t trackId);
+    void reportDrop (const browser::DropResult&, const browser::DragItem&);
+
     void openInstrumentEditor (int64_t deviceId);
     void closeEditorsOfMissingDevices();
-    void showAudioSettings();
+    void showSettings (ui::SettingsWindow::Tab);
     void showPluginScanner();
 
     AudioEngine& engine;
     ProjectModel& model;
     Settings& settings;
     ProjectActions actions;
+    library::UserLibrary library;
+    browser::BrowserSources sources;
+    browser::BrowserActions browserActions;
+    project::ProjectSession doc;
     ui::SelectionState selection;
     ui::EditCommands editCommands;
 
@@ -104,11 +130,13 @@ private:
 
     int browserWidth, detailHeight, dragStartSize = 0;
     bool browserVisible, detailVisible;
-    bool dirty = false;
     juce::String lastTitle;
+    std::unique_ptr<juce::FileChooser> chooser;
 
     std::map<int64_t, std::unique_ptr<PluginWindow>> editorWindows; // by device id
     std::unique_ptr<juce::DocumentWindow> scannerWindow;
+    std::unique_ptr<ui::VersionWindow> versionWindow;
+    std::unique_ptr<ui::SettingsWindow> settingsWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

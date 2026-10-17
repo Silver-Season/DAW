@@ -60,6 +60,8 @@ public:
     std::function<juce::String()> currentThemeId;
     std::function<void (const juce::String&)> onThemeChosen;
     std::function<juce::StringArray()> recentProjects;
+    std::function<void (const juce::String& path)> onOpenRecent;
+    std::function<void()> onClearRecent;
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int index, const juce::String& name) override;

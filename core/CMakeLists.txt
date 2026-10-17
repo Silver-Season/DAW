@@ -5,7 +5,8 @@ add_library(daw_core STATIC
     src/PrismaParams.cpp
     src/PrismaSynth.cpp
     src/Clip.cpp
-    src/DemoContent.cpp)
+    src/DemoContent.cpp
+    src/VersionHistory.cpp)
 
 target_include_directories(daw_core PUBLIC include)
 target_compile_features(daw_core PUBLIC cxx_std_20)

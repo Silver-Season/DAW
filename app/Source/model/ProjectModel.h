@@ -25,6 +25,15 @@ public:
     // Adopts an existing tree (e.g. a loaded file). Clears the undo history.
     explicit ProjectModel (juce::ValueTree projectTree);
 
+    // Replaces the whole project (opening a file, returning to a version). `root` stays the same handle, so
+    // everyone listening to it hears valueTreeRedirected and starts again from the new content. The undo
+    // history is cleared.
+    void adopt (juce::ValueTree projectTree);
+
+    // Makes a loaded tree safe to use: adds the container nodes a hand-edited file may lack and gives every
+    // track one SLOT per scene.
+    static void normalise (juce::ValueTree& projectTree);
+
     ProjectModel (const ProjectModel&) = delete;
     ProjectModel& operator= (const ProjectModel&) = delete;
 

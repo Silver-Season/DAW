@@ -1271,6 +1271,180 @@ void SessionView::paint (juce::Graphics& g)
     }
 }
 
+//==============================================================================
+// Drops
+SessionView::DropSpot SessionView::spotAt (juce::Point<int> p) const
+{
+    DropSpot s;
+    s.valid = true;
+    auto columnAtX = [this] (int contentX) {
+        for (int i = 0; i < numColumns(); ++i)
+            if (contentX >= columnX[(size_t) i] && contentX < columnX[(size_t) i] + columnW[(size_t) i])
+                return i;
+        return -1;
+    };
+    int column = -1;
+    if (headerArea.contains (p))
+        column = columnAtX (p.x - headerArea.getX() + scrollX);
+    else if (gridArea.contains (p))
+    {
+        column = columnAtX (p.x - gridArea.getX() + scrollX);
+        const int y = p.y - gridArea.getY() + scrollY;
+        const int row = y / (kSlotHeight + kGap);
+        if (column >= 0 && y >= 0 && row < model.numScenes() && y - row * (kSlotHeight + kGap) < kSlotHeight)
+        {
+            s.target = browser::DropTarget::slot;
+            s.trackId = columnTrack[(size_t) column];
+            s.scene = row;
+            return s;
+        }
+    }
+    else if (mixerArea.contains (p))
+        column = columnAtX (p.x - mixerArea.getX() + scrollX);
+
+    if (column >= 0)
+    {
+        s.target = browser::DropTarget::track;
+        s.trackId = columnTrack[(size_t) column];
+    }
+    else
+        s.target = browser::DropTarget::newTrack;
+    return s;
+}
+
+juce::Rectangle<int> SessionView::spotBounds (const DropSpot& s) const
+{
+    if (! s.valid)
+        return {};
+    if (s.target == browser::DropTarget::newTrack)
+    {
+        const int x = juce::jmin (gridArea.getRight() - 90, gridArea.getX() + juce::jmax (0, contentWidth() - scrollX) + (numColumns() > 0 ? kGap : 0));
+        return { x, headerArea.getY(), gridArea.getRight() - x, gridArea.getBottom() - headerArea.getY() };
+    }
+    for (int i = 0; i < numColumns(); ++i)
+        if (columnTrack[(size_t) i] == s.trackId)
+        {
+            const int x = gridArea.getX() + columnX[(size_t) i] - scrollX;
+            if (s.target == browser::DropTarget::slot)
+                return juce::Rectangle<int> (x, gridArea.getY() + s.scene * (kSlotHeight + kGap) - scrollY, columnW[(size_t) i], kSlotHeight).getIntersection (gridArea);
+            return { x, headerArea.getY(), columnW[(size_t) i], gridArea.getBottom() - headerArea.getY() };
+        }
+    return {};
+}
+
+void SessionView::setDropSpot (const DropSpot& s)
+{
+    if (s == dropSpot)
+        return;
+    dropSpot = s;
+    repaint();
+}
+
+bool SessionView::isInterestedInDragSource (const SourceDetails& d)
+{
+    browser::DragItem item;
+    return dropActions != nullptr && browser::parseDrag (d.description, item);
+}
+
+void SessionView::itemDragMove (const SourceDetails& d)
+{
+    browser::DragItem item;
+    if (dropActions == nullptr || ! browser::parseDrag (d.description, item))
+        return;
+    auto spot = spotAt (d.localPosition);
+    // A track that does not take the item (a chain onto a slot is fine) falls back to a new track.
+    if (! dropActions->accepts (item, spot.target, spot.trackId))
+        spot.valid = false;
+    setDropSpot (spot);
+}
+
+void SessionView::itemDropped (const SourceDetails& d)
+{
+    browser::DragItem item;
+    const auto spot = spotAt (d.localPosition);
+    setDropSpot ({});
+    if (dropActions == nullptr || ! browser::parseDrag (d.description, item))
+        return;
+    const auto result = dropActions->drop (item, spot.target, spot.trackId, spot.scene);
+    if (result.trackId >= 0)
+        commands.selectTrack (result.trackId);
+    if (onDropped)
+        onDropped (result, item);
+}
+
+bool SessionView::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    if (dropActions == nullptr)
+        return false;
+    for (const auto& f : files)
+        if (f.endsWithIgnoreCase (".mid") || f.endsWithIgnoreCase (".midi"))
+            return true;
+    return files.isEmpty(); // some systems ask before they know the files
+}
+
+void SessionView::fileDragMove (const juce::StringArray&, int x, int y)
+{
+    auto spot = spotAt ({ x, y });
+    if (spot.target == browser::DropTarget::track)
+        spot.valid = false; // a file needs a slot or a new track, not a whole track
+    setDropSpot (spot);
+}
+
+void SessionView::filesDropped (const juce::StringArray& files, int x, int y)
+{
+    const auto spot = spotAt ({ x, y });
+    setDropSpot ({});
+    if (dropActions == nullptr)
+        return;
+    for (const auto& path : files)
+    {
+        if (! (path.endsWithIgnoreCase (".mid") || path.endsWithIgnoreCase (".midi")))
+            continue;
+        const auto target = spot.target == browser::DropTarget::slot ? browser::DropTarget::slot : browser::DropTarget::newTrack;
+        const auto result = dropActions->dropMidiFile (juce::File (path), target, spot.trackId, spot.scene);
+        if (result.trackId >= 0)
+            commands.selectTrack (result.trackId);
+        if (onDropped)
+        {
+            browser::DragItem item;
+            item.kind = browser::kinds::midiFile;
+            item.path = path;
+            item.name = juce::File (path).getFileNameWithoutExtension();
+            onDropped (result, item);
+        }
+        break; // one file per drop: each is one undo step and one new track
+    }
+}
+
+void SessionView::paintOverChildren (juce::Graphics& g)
+{
+    if (! dropSpot.valid)
+        return;
+    const auto r = spotBounds (dropSpot);
+    if (r.isEmpty())
+        return;
+    const auto& t = theme();
+    if (dropSpot.target == browser::DropTarget::newTrack)
+    {
+        juce::Path outline;
+        outline.addRoundedRectangle (r.toFloat().reduced (1.0f), t.radius);
+        juce::Path dashed;
+        const float dashes[] { 6.0f, 4.0f };
+        juce::PathStrokeType (1.8f).createDashedStroke (dashed, outline, dashes, 2);
+        g.setColour (t.accent.withAlpha (0.10f));
+        g.fillRoundedRectangle (r.toFloat().reduced (1.0f), t.radius);
+        g.setColour (t.accent);
+        g.fillPath (dashed);
+        g.setFont (t.uiFont (12.0f, 500));
+        g.drawFittedText (Strings::browser::dropNewTrack, r.reduced (10, 60), juce::Justification::centredTop, 2);
+        return;
+    }
+    g.setColour (t.accent.withAlpha (0.16f));
+    g.fillRoundedRectangle (r.toFloat(), t.radius);
+    g.setColour (t.accent);
+    g.drawRoundedRectangle (r.toFloat().reduced (1.0f), t.radius, 2.0f);
+}
+
 juce::String SessionView::helpAt (juce::Point<int> p) const
 {
     if (masterHeaderArea.contains (p))
@@ -1386,6 +1560,8 @@ void SessionView::showTrackMenu (juce::Point<int> screenPosition, int64_t trackI
     menu.addItem (item (4, M::remove, juce::KeyPress (juce::KeyPress::deleteKey).getTextDescriptionWithIcons()));
     menu.addSeparator();
     menu.addItem (item (5, M::insertTrackHere, shortcutText ('t')));
+    menu.addSeparator();
+    menu.addItem (item (6, Strings::browser::saveChain));
 
     juce::Component::SafePointer<SessionView> safe (this);
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea ({ screenPosition.x, screenPosition.y, 1, 1 }),
@@ -1399,6 +1575,10 @@ void SessionView::showTrackMenu (juce::Point<int> screenPosition, int64_t trackI
                                 case 3: safe->commands.duplicateSelection(); break;
                                 case 4: safe->commands.deleteSelection(); break;
                                 case 5: safe->commands.newTrack ((int) trackId); break;
+                                case 6:
+                                    if (safe->onSaveChain)
+                                        safe->onSaveChain (trackId);
+                                    break;
                                 default: break;
                             }
                         });

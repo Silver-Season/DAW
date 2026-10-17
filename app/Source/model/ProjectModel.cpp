@@ -46,12 +46,60 @@ juce::ValueTree ProjectModel::createEmptyTree()
     return p;
 }
 
+void ProjectModel::normalise (juce::ValueTree& p)
+{
+    const auto ensure = [&p] (const juce::Identifier& type) {
+        auto child = p.getChildWithName (type);
+        if (! child.isValid())
+        {
+            child = juce::ValueTree (type);
+            p.appendChild (child, nullptr);
+        }
+        return child;
+    };
+    ensure (ids::TRACKS);
+    auto master = ensure (ids::MASTER);
+    if (! master.getChildWithName (ids::DEVICES).isValid())
+        master.appendChild (juce::ValueTree (ids::DEVICES), nullptr);
+    auto scenes = ensure (ids::SCENES);
+    ensure (ids::MARKERS);
+    ensure (ids::SNAPSHOTS);
+
+    const int numScenes = scenes.getNumChildren();
+    for (auto track : p.getChildWithName (ids::TRACKS))
+    {
+        if (! track.getChildWithName (ids::DEVICES).isValid())
+            track.appendChild (juce::ValueTree (ids::DEVICES), nullptr);
+        auto slots = track.getChildWithName (ids::SLOTS);
+        if (! slots.isValid())
+        {
+            slots = juce::ValueTree (ids::SLOTS);
+            track.appendChild (slots, nullptr);
+        }
+        while (slots.getNumChildren() < numScenes)
+            slots.appendChild (juce::ValueTree (ids::SLOT), nullptr);
+        while (slots.getNumChildren() > numScenes)
+            slots.removeChild (slots.getNumChildren() - 1, nullptr);
+    }
+}
+
 ProjectModel::ProjectModel (juce::ValueTree projectTree) : root (std::move (projectTree))
 {
+    normalise (root);
     int64_t maxId = 0;
     collectMaxId (root, maxId);
     highWater = maxId + 1;
     undo.clearUndoHistory();
+}
+
+void ProjectModel::adopt (juce::ValueTree projectTree)
+{
+    normalise (projectTree);
+    int64_t maxId = 0;
+    collectMaxId (projectTree, maxId);
+    highWater = maxId + 1;
+    undo.clearUndoHistory();
+    root = projectTree; // tells the listeners of `root` through valueTreeRedirected
 }
 
 ProjectModel::ProjectModel (DefaultTag) : root (createEmptyTree())

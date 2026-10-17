@@ -261,8 +261,12 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
     capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
     version = std::make_unique<IconButton> (nullptr, Strings::transport::versionNone, Role::normal, Strings::help::version);
-    for (auto* b : { metronome.get(), record.get(), loop.get(), capture.get(), version.get() })
+    for (auto* b : { metronome.get(), record.get(), loop.get(), capture.get() })
         b->setEnabled (false);
+    version->onClick = [this] {
+        if (onVersionClicked)
+            onVersionClicked();
+    };
     play->onClick = [this] {
         if (engine.isPlaying())
             engine.stop();
@@ -289,6 +293,15 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
 }
 
 TopBar::~TopBar() = default;
+
+void TopBar::setVersionText (const juce::String& text)
+{
+    if (version->text != text)
+    {
+        version->text = text;
+        version->repaint();
+    }
+}
 
 void TopBar::setComputerKeysOn (bool on)
 {

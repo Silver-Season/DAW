@@ -27,6 +27,7 @@ juce::Path chevronDown (juce::Rectangle<float> area);
 juce::Path triangle (juce::Rectangle<float> area, int direction); // 0 up, 1 right, 2 down, 3 left
 juce::Path cross (juce::Rectangle<float> area);
 juce::Path openExternal (juce::Rectangle<float> area);
+juce::Path headphones (juce::Rectangle<float> area);
 } // namespace icons
 
 // Single-line text editor for renaming and typing numbers in place. Enter confirms, Esc cancels,

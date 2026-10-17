@@ -4,6 +4,8 @@
 //     (the path the UI uses), played, and released again.
 #include "TestSupport.h"
 
+#include "../app/Source/project/ProjectFile.h"
+
 using namespace tests;
 
 namespace
@@ -76,6 +78,161 @@ void testStateSurvivesDeleteAndUndo()
 }
 
 #ifdef DAW_TEST_VST3_DIR
+void waitUntil (const std::function<bool()>& done, int maxMs = 15000)
+{
+    for (int waited = 0; waited < maxMs && ! done(); waited += 20)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+}
+
+// Index of the hosted plugin's filter cutoff parameter (the parameters of a VST3 are not named by our ids).
+int cutoffIndex (juce::AudioProcessor& p)
+{
+    const auto& params = p.getParameters();
+    for (int i = 0; i < params.size(); ++i)
+        if (params[i]->getName (64).containsIgnoreCase ("cutoff"))
+            return i;
+    return -1;
+}
+
+juce::PluginDescription scanPrisma (AudioEngine& engine)
+{
+    juce::VST3PluginFormat vst3;
+    juce::OwnedArray<juce::PluginDescription> found;
+    for (const auto& file : juce::File (DAW_TEST_VST3_DIR).findChildFiles (juce::File::findFilesAndDirectories, false, "*.vst3"))
+        engine.getKnownPlugins().scanAndAddFile (file.getFullPathName(), true, found, vst3);
+    return found.isEmpty() ? juce::PluginDescription() : *found[0];
+}
+
+void testRestoreHostedPlugin()
+{
+    std::printf ("[test] hosted plugins come back from pluginDesc: project load, undo of a delete, a missing plugin that appears\n");
+
+    // First life of the project: a hosted Prisma with its cutoff moved.
+    Fixture f;
+    const auto desc = scanPrisma (f.engine);
+    check (desc.name == "Prisma", "the Prisma VST3 of this build is found");
+    if (desc.name != "Prisma")
+        return;
+    f.model.insertScene (-1);
+    const auto firstTrack = f.model.addTrack ("midi");
+    f.model.addDevice (firstTrack, "prisma", "Prisma");
+    FakeDevice fake { 512, 48000.0 };
+    f.engine.audioDeviceAboutToStart (&fake);
+    f.engine.rebuildGraphIfNeeded();
+
+    juce::String error = "pending";
+    f.engine.loadPluginInstrument (firstTrack.id(), desc, [&] (juce::String e, int64_t) { error = e; });
+    waitUntil ([&] { return error != "pending"; });
+    check (error.isEmpty(), "the plugin loaded: " + error);
+    auto* hosted = f.engine.findProcessor (firstTrack.device (0).id());
+    check (hosted != nullptr, "the hosted plugin is live");
+    if (hosted == nullptr)
+        return;
+    const int cutoff = cutoffIndex (*hosted);
+    check (cutoff >= 0, "the plugin has a cutoff parameter");
+    if (cutoff < 0)
+        return;
+    const float target = 0.8f; // open enough to hear the note
+    hosted->getParameters()[cutoff]->setValueNotifyingHost (target);
+    f.engine.captureDeviceStates (f.model.root);
+    const auto xml = project::serialise (f.model.root);
+    check (firstTrack.device (0).stateBase64().isNotEmpty() && firstTrack.device (0).pluginDesc().isNotEmpty(),
+           "the DEVICE node holds the description and the state");
+    f.engine.audioDeviceStopped();
+
+    // 1. The project is loaded into another engine: the plugin is created in the background.
+    juce::TemporaryFile settingsFile (".settings");
+    Settings settings (settingsFile.getFile());
+    ProjectModel model (ProjectModel::createEmpty());
+    AudioEngine engine (settings, false);
+    engine.setModel (&model);
+    scanPrisma (engine);
+    const auto parsed = project::parseProject (xml);
+    check (parsed.ok(), "the project parses");
+    FakeDevice fake2 { 512, 48000.0 };
+    engine.audioDeviceAboutToStart (&fake2);
+    model.adopt (parsed.tree);
+    engine.rebuildGraphIfNeeded();
+    const auto loaded = model.trackAt (0).device (0);
+    check (loaded.kind() == "plugin" && engine.findProcessor (loaded.id()) == nullptr, "right after loading the device has no instance yet");
+    check (engine.isDeviceLoading (loaded.id()), "and is marked as loading (the view shows a spinner)");
+    const auto epochBefore = engine.getDeviceEpoch();
+    waitUntil ([&] { return engine.findProcessor (loaded.id()) != nullptr; });
+    auto* restored = engine.findProcessor (loaded.id());
+    check (restored != nullptr, "the plugin instance appears without blocking the caller");
+    if (restored == nullptr)
+        return;
+    check (! engine.isDeviceLoading (loaded.id()) && engine.getDeviceEpoch() != epochBefore, "loading is over and the views were told");
+    check (loaded.kind() == "plugin", "the kind stays \"plugin\"");
+    check (cutoffIndex (*restored) == cutoff && std::abs (restored->getParameters()[cutoff]->getValue() - target) < 2e-3f,
+           "the restored plugin has the saved parameter value");
+
+    model.trackAt (0).setArm (true, nullptr);
+    Runner runner { engine };
+    runner.run (10);
+    check (runner.run (10) < 1e-6, "silent before a note");
+    engine.getKeyboardState().noteOn (1, 60, 1.0f);
+    const double rms = runner.run (40);
+    engine.getKeyboardState().noteOff (1, 60, 0.0f);
+    std::printf ("    restored VST3 note RMS %.4f\n", rms);
+    check (rms > 0.005 && runner.nonFinite == 0, "the restored plugin makes sound");
+    runner.run (300);
+
+    // 2. Delete and undo: the instance is made again, with the state it had when it was deleted.
+    const float moved = 0.45f;
+    restored->getParameters()[cutoff]->setValueNotifyingHost (moved);
+    model.undo.beginNewTransaction ("delete");
+    engine.removeDevice (loaded);
+    engine.rebuildGraphIfNeeded();
+    runner.run (4);
+    engine.collectGarbage();
+    check (engine.findProcessor (loaded.id()) == nullptr, "the deleted plugin is gone");
+    model.undo.undo();
+    engine.rebuildGraphIfNeeded();
+    const auto undone = model.trackAt (0).device (0);
+    check (model.trackAt (0).numDevices() == 1 && undone.kind() == "plugin", "undo brings the DEVICE node back");
+    check (engine.findProcessor (undone.id()) == nullptr && engine.isDeviceLoading (undone.id()), "without an instance, which starts loading");
+    waitUntil ([&] { return engine.findProcessor (undone.id()) != nullptr; });
+    auto* back = engine.findProcessor (undone.id());
+    check (back != nullptr, "the instance is back after undo");
+    if (back != nullptr)
+        check (std::abs (back->getParameters()[cutoff]->getValue() - moved) < 2e-3f, "with the parameter it had when it was deleted");
+
+    // 3. A device that was missing when the project was saved comes back once the plugin is installed.
+    auto tree = juce::ValueTree::fromXml (*juce::XmlDocument::parse (xml));
+    tree.getChildWithName (ids::TRACKS).getChild (0).getChildWithName (ids::DEVICES).getChild (0).setProperty (ids::kind, "missing", nullptr);
+    model.adopt (tree);
+    engine.rebuildGraphIfNeeded();
+    const auto wasMissing = model.trackAt (0).device (0);
+    check (wasMissing.kind() == "missing" && engine.findProcessor (wasMissing.id()) == nullptr, "a missing device has no instance");
+    engine.reviveMissingDevices();
+    check (wasMissing.kind() == "plugin", "it becomes a plugin again, because the plugin exists now");
+    engine.rebuildGraphIfNeeded();
+    waitUntil ([&] { return engine.findProcessor (wasMissing.id()) != nullptr; });
+    check (engine.findProcessor (wasMissing.id()) != nullptr, "and it loads");
+
+    // 4. An unreadable description: the device is missing at once and keeps its state.
+    auto broken = juce::ValueTree::fromXml (*juce::XmlDocument::parse (xml));
+    auto node = broken.getChildWithName (ids::TRACKS).getChild (0).getChildWithName (ids::DEVICES).getChild (0);
+    node.setProperty (ids::pluginDesc, "this is not a description", nullptr);
+    model.adopt (broken);
+    engine.rebuildGraphIfNeeded();
+    check (model.trackAt (0).device (0).kind() == "missing", "an unreadable description makes the device missing");
+    check (model.trackAt (0).device (0).stateBase64() == node.getProperty (ids::state).toString(), "and its state is kept");
+
+    // 5. The project is replaced while a load is in flight: the late instance is dropped.
+    model.adopt (parsed.tree.createCopy());
+    engine.rebuildGraphIfNeeded();
+    check (engine.isDeviceLoading (model.trackAt (0).device (0).id()), "a load is in flight");
+    model.adopt (ProjectModel::createDefault().root.createCopy());
+    engine.rebuildGraphIfNeeded();
+    const auto epochAfterReplace = engine.getDeviceEpoch();
+    waitUntil ([] { return false; }, 800);
+    check (engine.getDeviceEpoch() == epochAfterReplace, "the instance that arrives for the old project is thrown away");
+    runner.run (10);
+    engine.audioDeviceStopped();
+}
+
 void testHostVst3()
 {
     std::printf ("[test] hosting: scan the Prisma VST3 from this build, load, play, remove\n");
@@ -160,6 +317,7 @@ void tests::runHostingTests()
     testStateSurvivesDeleteAndUndo();
 #ifdef DAW_TEST_VST3_DIR
     testHostVst3();
+    testRestoreHostedPlugin();
 #else
     check (false, "DAW_TEST_VST3_DIR is not defined: the VST3 hosting test cannot run");
 #endif

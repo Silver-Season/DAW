@@ -8,6 +8,7 @@
 #include "../model/ProjectModel.h"
 #include "MidiInputQueue.h"
 #include "PlaybackGraph.h"
+#include "PreviewPlayer.h"
 
 #include "daw/engine/Clip.h"
 
@@ -71,6 +72,18 @@ public:
     // (empty on success) and the new device id. This is the path the UI uses.
     void loadPluginInstrument (int64_t trackId, const juce::PluginDescription&, std::function<void (juce::String error, int64_t deviceId)> done);
 
+    // Third-party plugins are created from DEVICE.pluginDesc whenever a DEVICE node has no instance: after a
+    // project is loaded, and when undo brings a deleted device back. The load runs asynchronously
+    // (createPluginInstanceAsync); until it is done the device passes the sound through. If the plugin is
+    // gone or fails to load, the node becomes kind="missing" and keeps its state.
+    bool isDeviceLoading (int64_t deviceId) const;
+    bool isAnyDeviceLoading() const;
+    // After a project is opened: devices that were "missing" when it was saved but whose plugin is installed
+    // now become plugins again (and load). Devices whose plugin is still absent stay "missing".
+    void reviveMissingDevices();
+    // Bumped when a plugin load finishes (either way), so that views can refresh themselves.
+    uint32_t getDeviceEpoch() const { return deviceEpoch.load(); }
+
     // Message thread only; the pointers stay valid until the next graph rebuild that drops them.
     juce::AudioProcessor* findProcessor (int64_t deviceId) const;
     TrackRuntime* findRuntime (int64_t trackId) const;
@@ -111,6 +124,23 @@ public:
 
     std::atomic<float> masterMeterL { 0.0f }, masterMeterR { 0.0f };
 
+    //==========================================================================
+    // Pre-listening of Prisma presets from the browser (message thread). It plays into the master after the
+    // master chain, with the volume of the settings.
+    void previewFactoryPreset (int program);
+    void previewPresetState (const juce::MemoryBlock& prismaState);
+    void stopPreview();
+    void setPreviewVolumeDb (float db) { preview.setGainDb (db); }
+    bool isPreviewSounding() const { return preview.isSounding(); }
+
+    // 440 Hz at -20 dBFS for one second on the first two outputs (settings, Sound).
+    void playTestTone();
+    bool isTestToneSounding() const { return toneSamplesLeft.load() > 0; }
+
+    // Opens the MIDI inputs that are switched on in the settings ("plays tracks") and closes the others. Called
+    // by the settings window and, on its own, when a device is plugged in or out. Does nothing without devices.
+    void refreshMidiInputs();
+
     // Number of events received from MIDI hardware so far; the transport's MIDI indicator blinks when it changes.
     uint32_t getHardwareMidiCount() const { return hardwareMidiCount.load (std::memory_order_relaxed); }
 
@@ -138,13 +168,15 @@ private:
     void handleNoteOn (juce::MidiKeyboardState*, int channel, int note, float velocity) override;
     void handleNoteOff (juce::MidiKeyboardState*, int channel, int note, float velocity) override;
     void updateMidiInputs();
+    bool devicesOpened = false;
+    juce::MidiDeviceListConnection midiListConnection;
 
     // juce::ValueTree::Listener (message thread)
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override { graphDirty = true; }
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override { graphDirty = true; }
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { graphDirty = true; }
-    void valueTreeRedirected (juce::ValueTree&) override { graphDirty = true; }
+    void valueTreeRedirected (juce::ValueTree&) override;
 
     // graph building (EngineGraph.cpp)
     void applyTrackProperties (TrackRuntime&, const TrackRef&);
@@ -152,6 +184,10 @@ private:
     DeviceInstance* acquireDevice (const DeviceRef&, std::set<int64_t>& used);
     std::shared_ptr<const daw::engine::MidiClip> acquireClip (const ClipRef&, std::set<int64_t>& used);
     std::unique_ptr<juce::AudioProcessor> makeProcessor (const DeviceRef&);
+    void startPluginLoad (const DeviceRef&);
+    void finishPluginLoad (int64_t deviceId, uint64_t epoch, std::unique_ptr<juce::AudioPluginInstance>, const juce::String& error,
+                           const juce::String& stateBase64);
+    void markDeviceMissing (int64_t deviceId);
     void prepareDevice (DeviceInstance&) const;
     void retireEverything();
 
@@ -177,6 +213,10 @@ private:
     std::map<int64_t, std::unique_ptr<TrackRuntime>> runtimes;
     std::map<int64_t, std::unique_ptr<DeviceInstance>> devices;
     std::map<int64_t, std::unique_ptr<juce::AudioProcessor>> pendingProcessors;
+    std::set<int64_t> loadingDevices;       // plugin loads in flight
+    uint64_t modelEpoch = 0;                // bumped when the project is replaced, so that late loads are dropped
+    std::atomic<uint32_t> deviceEpoch { 0 };
+    std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true); // seen by async callbacks
     struct ClipCacheEntry
     {
         uint64_t hash = 0;
@@ -200,6 +240,11 @@ private:
     juce::AbstractFifo commandFifo { kCommandQueueSize };
     std::array<EngineCommand, kCommandQueueSize> commands;
     bool pushCommand (const EngineCommand&);
+
+    PreviewPlayer preview;
+    std::atomic<int> toneSamplesLeft { 0 };
+    int toneSamplesTotal = 0;   // audio thread
+    double tonePhase = 0.0;     // audio thread
 
     std::atomic<bool> playing { false }, stopRequested { false };
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, quantise { 4.0 };
