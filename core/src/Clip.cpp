@@ -17,9 +17,13 @@ namespace
     // Emits the notes of one pass over the clip-content range [from, to). The pass begins `passStart` beats
     // after the launch; the render window is [la, lb) in beats after the launch.
     // With catchUp, a note that began before the window but is still sounding at its start is emitted at the
-    // window start (offset 0): used by the first block of a launch that arrived a few milliseconds late.
+    // window start (offset 0): used by the first block of a launch that arrived a few milliseconds late, and by
+    // the arrangement after a jump of the play position.
+    // With closeAtEnd the window ends where the clip is cut off (the end of an arrangement clip): a note that is
+    // still sounding there gets its note-off at the last sample of the window.
     void renderPass (const MidiClip& clip, double from, double to, double passStart, double la, double lb, double clipStart,
-                     double originBeat, double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out, bool catchUp)
+                     double originBeat, double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out, bool catchUp,
+                     bool closeAtEnd)
     {
         const double passEnd = passStart + (to - from);
         if (passEnd <= la || passStart >= lb)
@@ -30,12 +34,16 @@ namespace
                 continue;
             const double on = passStart + (n.start - from);
             const double off = passStart + (std::min (n.start + std::max (n.length, 1.0e-3), to) - from);
-            const bool late = catchUp && on < la && off >= la;
+            // A note that ends exactly at the window start does not sound at all (its note-on and note-off would
+            // land on the same sample and the sort would put the off first).
+            const bool late = catchUp && on < la && off > la;
             if ((on >= la || late) && on < lb)
                 out.push_back (MidiEvent::noteOn (toOffset (clipStart + on, originBeat, samplesPerBeat, numSamples), n.pitch,
                                                   std::clamp (n.velocity, 1, 127)));
             if (off >= la && off < lb)
                 out.push_back (MidiEvent::noteOff (toOffset (clipStart + off, originBeat, samplesPerBeat, numSamples), n.pitch));
+            else if (closeAtEnd && on < lb && off >= lb && off >= la)
+                out.push_back (MidiEvent::noteOff (toOffset (clipStart + lb, originBeat, samplesPerBeat, numSamples), n.pitch));
         }
         for (const auto& c : clip.controllers)
         {
@@ -49,9 +57,10 @@ namespace
         }
     }
 
-    // Window [a, b) in absolute beats, offsets measured from originBeat.
-    void renderWindow (const MidiClip& clip, double clipStart, double a, double b, double originBeat,
-                       double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out, bool catchUp = false)
+    // Window [a, b) in absolute beats, offsets measured from originBeat. The first pass starts at the content
+    // position `entry` when the clip begins to play at clipStart; with `repeat` the loop brace follows.
+    void renderWindowFrom (const MidiClip& clip, double entry, bool repeat, double clipStart, double a, double b, double originBeat,
+                           double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out, bool catchUp, bool closeAtEnd)
     {
         if (b <= a)
             return;
@@ -60,10 +69,10 @@ namespace
         if (lb <= 0.0)
             return;
 
-        const double end = clip.endBeat(), first = clip.firstPassBeats();
+        const double end = clip.endBeat(), first = end - entry;
         // pass 0: from the start point to the end of the clip
-        renderPass (clip, clip.playStart(), end, 0.0, la, lb, clipStart, originBeat, samplesPerBeat, numSamples, out, catchUp);
-        if (! clip.loop || lb <= first)
+        renderPass (clip, entry, end, 0.0, la, lb, clipStart, originBeat, samplesPerBeat, numSamples, out, catchUp, closeAtEnd);
+        if (! repeat || lb <= first)
             return;
 
         // later passes: the loop brace over and over
@@ -71,7 +80,14 @@ namespace
         const long firstK = std::max (0L, (long) std::floor ((la - first) / brace) - 1);
         const long lastK = (long) std::floor ((lb - first) / brace);
         for (long k = firstK; k <= lastK; ++k)
-            renderPass (clip, from, end, first + (double) k * brace, la, lb, clipStart, originBeat, samplesPerBeat, numSamples, out, catchUp);
+            renderPass (clip, from, end, first + (double) k * brace, la, lb, clipStart, originBeat, samplesPerBeat, numSamples, out, catchUp,
+                        closeAtEnd);
+    }
+
+    void renderWindow (const MidiClip& clip, double clipStart, double a, double b, double originBeat, double samplesPerBeat,
+                       int numSamples, std::vector<MidiEvent>& out, bool catchUp = false)
+    {
+        renderWindowFrom (clip, clip.playStart(), clip.loop, clipStart, a, b, originBeat, samplesPerBeat, numSamples, out, catchUp, false);
     }
 } // namespace
 
@@ -91,6 +107,12 @@ void renderClip (const MidiClip& clip, double clipStartBeat, double blockStartBe
                  double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out)
 {
     renderWindow (clip, clipStartBeat, blockStartBeat, blockEndBeat, blockStartBeat, samplesPerBeat, numSamples, out);
+}
+
+void renderClipFrom (const MidiClip& clip, double entry, bool repeat, double clipStartBeat, double a, double b, double originBeat,
+                     double samplesPerBeat, int numSamples, std::vector<MidiEvent>& out, bool chase, bool closeAtEnd)
+{
+    renderWindowFrom (clip, entry, repeat, clipStartBeat, a, b, originBeat, samplesPerBeat, numSamples, out, chase, closeAtEnd);
 }
 
 void sortEvents (std::vector<MidiEvent>& events)
