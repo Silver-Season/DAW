@@ -72,7 +72,7 @@ public:
     void resized() override;
     void paint (juce::Graphics&) override;
 
-    static constexpr int kContentHeight = 372;
+    static constexpr int kContentHeight = 398;
 
 private:
     class NameField;

@@ -95,14 +95,16 @@ public:
           pencilChip (Strings::editor::pencil, Strings::help::editorPencil, true),
           previewChip (Strings::editor::preview, Strings::help::editorPreview, true),
           quantChip (Strings::editor::menuQuantise, Strings::help::editorQuantise, false),
-          quantOptionsChip (juce::String::fromUTF8 ("\xe2\x80\xa6"), Strings::help::editorQuantise, false)
+          quantOptionsChip (juce::String::fromUTF8 ("\xe2\x80\xa6"), Strings::help::editorQuantise, false),
+          halveChip (Strings::editor::halveTime, Strings::help::editorHalveTime, false),
+          doubleChip (Strings::editor::doubleTime, Strings::help::editorDoubleTime, false)
     {
         const char* labels[4] = { "\xe2\x88\x92" "12", "\xe2\x88\x92" "1", "+1", "+12" };
         for (int i = 0; i < 4; ++i)
             transposeChips[i] = std::make_unique<Chip> (juce::String::fromUTF8 (labels[i]), Strings::help::editorTranspose, false);
 
         for (auto* c : std::initializer_list<juce::Component*> { &nameField, &loopChip, &snapChip, &gridChip, &ownScaleChip, &scaleChip, &scaleOnlyChip,
-                                                                  &foldChip, &pencilChip, &previewChip, &quantChip, &quantOptionsChip, &loopStartField,
+                                                                  &foldChip, &pencilChip, &previewChip, &quantChip, &quantOptionsChip, &halveChip, &doubleChip, &loopStartField,
                                                                   &loopEndField, &startField })
             addAndMakeVisible (c);
         for (auto& c : transposeChips)
@@ -142,6 +144,8 @@ public:
         };
         quantChip.onClick = [this] { owner.quantizeSelected(); };
         quantOptionsChip.onClick = [this] { owner.showQuantizeWindow(); };
+        halveChip.onClick = [this] { owner.scaleClipTime (0.5); };
+        doubleChip.onClick = [this] { owner.scaleClipTime (2.0); };
         const int steps[4] = { -12, -1, 1, 12 };
         for (int i = 0; i < 4; ++i)
             transposeChips[i]->onClick = [this, step = steps[i]] { owner.transposeSelected (step, std::abs (step) == 1 && owner.v.scaleOnly); };
@@ -229,6 +233,7 @@ public:
         quantChip.setBounds (kMargin, y, w - 34, kRow);
         quantOptionsChip.setBounds (kMargin + w - 30, y, 30, kRow);
         next();
+        halves (halveChip, doubleChip);
         labelY[1] = y;
         y += 14;
         const int cw = (w - 3 * 4) / 4;
@@ -290,7 +295,7 @@ private:
 
     PianoRoll& owner;
     NameField nameField;
-    Chip loopChip, snapChip, gridChip, ownScaleChip, scaleChip, scaleOnlyChip, foldChip, pencilChip, previewChip, quantChip, quantOptionsChip;
+    Chip loopChip, snapChip, gridChip, ownScaleChip, scaleChip, scaleOnlyChip, foldChip, pencilChip, previewChip, quantChip, quantOptionsChip, halveChip, doubleChip;
     std::unique_ptr<Chip> transposeChips[4];
     NumberField loopStartField, loopEndField, startField;
     int labelY[2] { 0, 0 };

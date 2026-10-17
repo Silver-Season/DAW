@@ -857,6 +857,44 @@ void testStopTrackAndEdits()
     r.runner.run (2);
     check (! r.f.engine.anyTrackInSession(), "and Back to arrangement clears it at once");
 }
+
+// x2 and /2 of the clip editor (live-test request after stage 3)
+void testScaleClipTime()
+{
+    std::printf ("[arrangement test] x2 and /2 stretch a clip, its notes and its place on the timeline\n");
+    {
+        TwoTracks p; // a slot clip
+        auto slot = p.m.createClip (p.a, 0, 4.0, "Riff");
+        slot.setNotes ({ { 0.0, 1.0, 60, 100 }, { 2.0, 0.5, 64, 90 } }, &p.m.undo);
+        slot.setLoopStart (1.0, &p.m.undo);
+        slot.setControllers ({ { 3.0, 0xB0, 1, 64 } }, &p.m.undo);
+        p.m.undo.clearUndoHistory();
+        p.m.undo.beginNewTransaction ("x2");
+        arrangement::scaleClipTime (p.m, slot, 2.0);
+        check (eq (slot.lengthBeats(), 8.0) && eq (slot.loopStart(), 2.0) && eq (slot.note (1).start, 4.0) && eq (slot.note (1).length, 1.0)
+                   && eq (slot.controllers()[0].time, 6.0),
+               "x2: length, loop start, notes and controllers twice as long");
+        p.m.undo.beginNewTransaction ("/2");
+        arrangement::scaleClipTime (p.m, slot, 0.5);
+        p.m.undo.beginNewTransaction ("/2 again");
+        arrangement::scaleClipTime (p.m, slot, 0.5);
+        check (eq (slot.lengthBeats(), 2.0) && eq (slot.note (1).start, 1.0) && eq (slot.note (1).length, 0.25), "/2 twice after x2: half of the original");
+        p.m.undo.undo();
+        p.m.undo.undo();
+        check (eq (slot.lengthBeats(), 8.0) && eq (slot.note (1).start, 4.0), "each press is one undo step");
+    }
+    {
+        TwoTracks p; // an arrangement clip stretches on the timeline and covers the clip after it
+        const auto first = place (p.m, p.a, 0.0, 4.0, { { 3.0, 1.0, 60, 100 } }, 4.0);
+        place (p.m, p.a, 4.0, 8.0);
+        p.m.undo.clearUndoHistory();
+        undoable (p.m, "x2 on the timeline", [&] { arrangement::scaleClipTime (p.m, first.clip(), 2.0); });
+        const auto clips = p.a.arrangementClips();
+        check (clips.size() == 2 && eq (clips[0].length(), 8.0) && eq (clips[0].clip().note (0).start, 6.0) && eq (clips[1].start(), 8.0)
+                   && eq (clips[1].end(), 12.0) && noOverlaps (p.m),
+               "the clip is 8 beats long now, the next one is trimmed to start after it");
+    }
+}
 } // namespace
 
 void tests::runArrangementTests()
@@ -874,4 +912,5 @@ void tests::runArrangementTests()
     testCountIn();
     testSessionAgainstArrangement();
     testStopTrackAndEdits();
+    testScaleClipTime();
 }

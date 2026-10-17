@@ -153,6 +153,7 @@ private:
     void nudgeSelected (double dBeats, int dSemitones);
     void resizeSelected (double dBeats);
     void loopAroundSelection();
+    void scaleClipTime (double factor); // ×2 / ÷2: the whole clip, and its place on the timeline for an arrangement clip
     void extendClipFor (double endBeat); // inside the caller's transaction
     void flashLoop();
     void setLoopEnabled (bool);
@@ -180,6 +181,10 @@ private:
     int lastVelocity = 100;
     juce::uint32 loopFlashUntil = 0;
     int shownNotes = -1;
+    std::vector<juce::ValueTree> playingNotes; // the notes under the playing cursor, drawn lit
+    std::array<bool, 128> playingPitches {};
+    void updatePlayingNotes (double cursorBeat);
+    bool isPlayingNote (const juce::ValueTree& n) const { return std::find (playingNotes.begin(), playingNotes.end(), n) != playingNotes.end(); }
 
     struct Pending
     {
