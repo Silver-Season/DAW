@@ -212,6 +212,8 @@ public:
     int width() const { return get<int> (ids::width, 120); }
     // Semitones added to every note that reaches the instrument, live ones included (-48..+48).
     int transpose() const { return get<int> (ids::transpose, 0); }
+    // Height of the lane in the Arrangement View in pixels; 0 = not set (the view picks one).
+    int arrangementHeight() const { return get<int> (ids::arrHeight, 0); }
 
     void setName (const juce::String& v, juce::UndoManager* um) const { set (ids::name, v, um); }
     void setColour (int v, juce::UndoManager* um) const { set (ids::colour, v, um); }
@@ -225,6 +227,7 @@ public:
     void setRecordSource (const juce::String& v, juce::UndoManager* um) const { set (ids::recordSource, v, um); }
     void setWidth (int v, juce::UndoManager* um) const { set (ids::width, v, um); }
     void setTranspose (int v, juce::UndoManager* um) const { set (ids::transpose, v, um); }
+    void setArrangementHeight (int v, juce::UndoManager* um) const { set (ids::arrHeight, v, um); }
 
     juce::ValueTree devicesNode() const { return state.getChildWithName (ids::DEVICES); }
     juce::ValueTree slotsNode() const { return state.getChildWithName (ids::SLOTS); }

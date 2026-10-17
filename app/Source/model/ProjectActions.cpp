@@ -206,6 +206,24 @@ void ProjectActions::setClipColour (int64_t trackId, int scene, int paletteIndex
     clip.setColour (juce::jlimit (0, 15, paletteIndex), &model.undo);
 }
 
+void ProjectActions::renameClipById (int64_t clipId, const juce::String& name)
+{
+    const auto clip = model.findClip (clipId);
+    if (! clip.isValid() || name.trim().isEmpty() || name == clip.name())
+        return;
+    begin (Strings::undoRenameClip);
+    clip.setName (name.trim(), &model.undo);
+}
+
+void ProjectActions::setClipColourById (int64_t clipId, int paletteIndex)
+{
+    const auto clip = model.findClip (clipId);
+    if (! clip.isValid() || clip.colour() == paletteIndex)
+        return;
+    begin (Strings::undoClipColour);
+    clip.setColour (juce::jlimit (0, 15, paletteIndex), &model.undo);
+}
+
 bool ProjectActions::duplicateClip (int64_t trackId, int scene)
 {
     const auto track = model.findTrack (trackId);

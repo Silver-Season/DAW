@@ -42,11 +42,10 @@ public:
     {
         if (e.mods.isPopupMenu() || e.getNumberOfClicks() != 1 || e.x > 26 || e.getDistanceFromDragStart() > 3)
             return;
-        const auto track = owner.trackOfClip();
-        const int scene = owner.sceneOfClip();
-        auto menu = makePaletteMenu (owner.clip().colour(), [safe = juce::Component::SafePointer<PianoRoll> (&owner), track, scene] (int index) {
+        const auto id = owner.clipId();
+        auto menu = makePaletteMenu (owner.clip().colour(), [safe = juce::Component::SafePointer<PianoRoll> (&owner), id] (int index) {
             if (safe != nullptr)
-                safe->actions.setClipColour (track, scene, index);
+                safe->actions.setClipColourById (id, index);
         });
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this));
     }
@@ -71,7 +70,7 @@ private:
         removeChildComponent (dying);
         juce::MessageManager::callAsync ([dying] { delete dying; });
         if (text.isNotEmpty())
-            owner.actions.renameClip (owner.trackOfClip(), owner.sceneOfClip(), text);
+            owner.actions.renameClipById (owner.clipId(), text);
         repaint();
     }
 

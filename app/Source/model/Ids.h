@@ -78,6 +78,7 @@ DAW_ID (monitor)
 DAW_ID (recordSource)
 DAW_ID (width)
 DAW_ID (transpose)
+DAW_ID (arrHeight)
 
 // device
 DAW_ID (kind)
