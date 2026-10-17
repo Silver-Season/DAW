@@ -2,6 +2,7 @@
 
 #include "../model/ProjectModel.h"
 #include "AudioEngine.h"
+#include "ArrangementRecorder.h"
 
 #include "daw/engine/Capture.h"
 #include "daw/engine/Recording.h"
@@ -22,10 +23,18 @@ public:
     SessionRecorder (AudioEngine&, ProjectModel&);
     ~SessionRecorder() override;
 
+    // Recording onto the Arrangement timeline (task 3.4). It shares the live events this class drains from the engine.
+    ArrangementRecorder& arrangement() { return arr; }
+    const ArrangementRecorder& arrangement() const { return arr; }
+
     void startPolling() { startTimerHz (30); }
     void poll();
     // Forgets recordings in flight (the project was replaced: its track ids mean other tracks now).
-    void reset() { recs.clear(); }
+    void reset()
+    {
+        recs.clear();
+        arr.reset();
+    }
 
     //==========================================================================
     // Recording into slots
@@ -116,6 +125,7 @@ private:
 
     AudioEngine& engine;
     ProjectModel& model;
+    ArrangementRecorder arr;
     std::map<int64_t, Rec> recs; // by track
     daw::engine::CaptureBuffer capture_;
     std::vector<daw::engine::InputEvent> scratch;

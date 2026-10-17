@@ -196,6 +196,8 @@ void AudioEngine::applyProjectProperties()
     arrLoopEnd = model->arrangementLoopEnd();
     arrLoopOn = model->arrangementLoopOn();
     arrPlayStart = model->arrangementPlayStart();
+    punchInOn = model->punchIn();
+    punchOutOn = model->punchOut();
     countInBars = model->countInBars();
     overdubOn = model->overdub();
     recordFixedBars = model->recordFixedBars();
@@ -237,7 +239,7 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
             || property == ids::metronomeVolumeDb || property == ids::metronomeOnlyRecording || property == ids::metronomeSound
             || property == ids::countInBars || property == ids::overdub || property == ids::recordFixedBars
             || property == ids::arrangementLoopStart || property == ids::arrangementLoopEnd || property == ids::arrangementLoopOn
-            || property == ids::arrangementPlayStart)
+            || property == ids::arrangementPlayStart || property == ids::punchIn || property == ids::punchOut)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             applyProjectProperties();

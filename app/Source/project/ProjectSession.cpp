@@ -1,6 +1,7 @@
 #include "ProjectSession.h"
 
 #include "../Strings.h"
+#include "../model/TrackTransfer.h"
 
 namespace project
 {
@@ -304,6 +305,39 @@ juce::Result ProjectSession::restoreVersion (int number)
     const bool isNamed = named;
     auto tree = loaded.tree;
     adopt (tree, dir, isNamed, true); // the older state is not the saved one until the user saves it
+    return juce::Result::ok();
+}
+
+std::unique_ptr<ProjectModel> ProjectSession::loadVersionModel (int number, juce::String& error)
+{
+    flush();
+    if (projectFolder == juce::File())
+    {
+        error = "no history";
+        return nullptr;
+    }
+    const auto loaded = loadVersion (projectFolder, number);
+    if (! loaded.ok())
+    {
+        error = loaded.error;
+        return nullptr;
+    }
+    return std::make_unique<ProjectModel> (loaded.tree);
+}
+
+juce::Result ProjectSession::takeTrackFromVersion (int number, int64_t trackId)
+{
+    juce::String error;
+    const auto older = loadVersionModel (number, error);
+    if (older == nullptr)
+        return juce::Result::fail (error);
+    if (! older->findTrack (trackId).isValid())
+        return juce::Result::fail ("no such track");
+    model.undo.beginNewTransaction (Strings::arrRec::undoTakeTrack);
+    const auto added = transfer::importTrack (model, *older, trackId, "v" + juce::String (number));
+    if (! added.isValid())
+        return juce::Result::fail ("no such track");
+    noteEdited();
     return juce::Result::ok();
 }
 

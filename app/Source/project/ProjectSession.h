@@ -51,6 +51,12 @@ public:
     bool setVersionLabel (int number, const juce::String& label);
     // Saves the current state as a "restore" version, then loads the chosen one.
     juce::Result restoreVersion (int number);
+    // Task 3.5. Loads a version into memory as a model of its own (the engine never sees it), nullptr with `error` set if
+    // it cannot be read. The model can be asked for its tracks (transfer::listTracks).
+    std::unique_ptr<ProjectModel> loadVersionModel (int number, juce::String& error);
+    // Adds the track `trackId` of version `number` to the open project as a new track named "<name> (v<number>)": devices,
+    // session clips and arrangement clips with fresh ids, one undo transaction.
+    juce::Result takeTrackFromVersion (int number, int64_t trackId);
     // "v14 · now", "v14 · 5 min"
     juce::String versionButtonText();
 

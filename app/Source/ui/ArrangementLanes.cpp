@@ -172,7 +172,15 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
             g.setFont (t.uiFont (11.0f, 500));
             const bool looping = c.loop() && c.clip().isValid() && clipLength > c.clip().lengthBeats() - c.clip().loopStart() + kEpsilon;
             auto text = r.toNearestInt().withTrimmedLeft (6).withHeight (15).withTrimmedRight (looping ? 16 : 4);
-            g.drawText (c.clip().isValid() ? c.clip().name() : juce::String(), text, juce::Justification::centredLeft, true);
+            auto label = c.clip().isValid() ? c.clip().name() : juce::String();
+            if (const auto takes = arrangement::takesOf (c); takes.size() > 1 && r.getWidth() > 90.0f)
+            {
+                int number = 0;
+                for (const auto& take : takes)
+                    number = take.active ? take.number : number;
+                label += "  " + Strings::arrRec::takeBadge (number, (int) takes.size());
+            }
+            g.drawText (label, text, juce::Justification::centredLeft, true);
             if (looping)
             {
                 g.setColour (t.clipInk.withAlpha (0.8f * a));
@@ -622,6 +630,19 @@ void ArrangementLanes::showClipMenu (juce::Point<int> screenPosition)
             if (c.clip().isValid())
                 c.clip().setColour (juce::jlimit (0, 15, index), &safe->view.model.undo);
     }));
+    if (one)
+        if (const auto takes = arrangement::takesOf (selected.front()); takes.size() > 1)
+        {
+            // Clips recorded in a loop keep every pass: "Дубли ▸ Дубль 1 / 2 / 3"
+            juce::PopupMenu takeMenu;
+            const auto clipId = selected.front().id();
+            for (const auto& take : takes)
+                takeMenu.addItem (Strings::arrRec::take (take.number), true, take.active, [safe, clipId, number = take.number] {
+                    if (safe != nullptr)
+                        safe->view.switchTake (clipId, number);
+                });
+            menu.addSubMenu (Strings::arrRec::menuTakes, takeMenu);
+        }
     menu.addSeparator();
     add (A::menuDuplicate, true, shortcutText ('d'), [safe] {
         if (safe != nullptr)

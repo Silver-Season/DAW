@@ -178,6 +178,16 @@ inline juce::String restoreTitle (int number) { return utf8 ("Вернуться
 inline const juce::String restoreText = utf8 ("Текущее состояние сохранится отдельной версией, ничего не пропадёт. Но история отмены (Cmd+Z) очистится: сам возврат отменить нельзя, только вернуться к версии «до возврата».");
 inline const juce::String restoreOk = utf8 ("Вернуться");
 inline const juce::String restored = utf8 ("Проект возвращён к выбранной версии");
+// Taking a track from a version (docs/spec/03-arrangement.md, task 3.5)
+inline const juce::String takeTrackButton = utf8 ("Забрать дорожку…");
+inline juce::String pickTrack (int number) { return utf8 ("Дорожки версии v") + juce::String (number); }
+inline const juce::String noTracks = utf8 ("В этой версии нет дорожек");
+inline juce::String trackLabel (const juce::String& name, int devices, int sessionClips, int arrangementClips)
+{
+    return name + utf8 ("   ·   устройств ") + juce::String (devices) + utf8 (", клипов ") + juce::String (sessionClips) + utf8 (" + ")
+           + juce::String (arrangementClips) + utf8 (" на шкале");
+}
+inline juce::String trackTaken (const juce::String& name, int number) { return utf8 ("Дорожка «") + name + utf8 ("» взята из версии v") + juce::String (number); }
 } // namespace versions
 
 // Settings window (task 1.9)
@@ -642,6 +652,35 @@ inline juce::String captured (int bars, int notes, const juce::String& track, co
 }
 } // namespace recording
 
+// Recording onto the Arrangement timeline, takes and taking a track from a version (docs/spec/03-arrangement.md, 3.4 and 3.5)
+namespace arrRec
+{
+inline const juce::String undoRecord = utf8 ("Запись на шкалу");
+inline const juce::String undoSwitchTake = utf8 ("Выбрать дубль");
+inline const juce::String undoTakeTrack = utf8 ("Забрать дорожку из версии");
+inline const juce::String clipName = utf8 ("Запись");
+inline const juce::String punchIn = utf8 ("IN");
+inline const juce::String punchOut = utf8 ("OUT");
+inline const juce::String menuTakes = utf8 ("Дубли");
+inline juce::String take (int number) { return utf8 ("Дубль ") + juce::String (number); }
+inline const juce::String punchInOn = utf8 ("Punch-in включён: запись начнётся с начала петли");
+inline const juce::String punchOutOn = utf8 ("Punch-out включён: запись закончится в конце петли");
+inline const juce::String punchOff = utf8 ("Punch выключен");
+inline const juce::String noTrack = utf8 ("Нечего записывать: в проекте нет MIDI-дорожки");
+inline juce::String recorded (int clips, int takes)
+{
+    auto text = utf8 ("Записано на шкалу: ") + recording::plural (clips, "клип", "клипа", "клипов");
+    if (takes > 0)
+        text += utf8 (", ") + recording::plural (takes, "дубль", "дубля", "дублей");
+    return text;
+}
+inline juce::String takeBadge (int active, int total) { return utf8 ("Д ") + juce::String (active) + "/" + juce::String (total); }
+inline const juce::String menuToArrangement = utf8 ("Записать на шкалу (F9)");
+inline const juce::String menuToSlot = utf8 ("Записать в слот сессии");
+inline const juce::String commandRecord = utf8 ("Запись на шкалу");
+inline juce::String takeSelected (int number) { return utf8 ("Показан ") + utf8 ("дубль ") + juce::String (number); }
+} // namespace arrRec
+
 namespace help
 {
 inline juce::String make (const juce::String& title, const juce::String& text) { return title + "\n" + text; }
@@ -654,8 +693,10 @@ inline const juce::String signature = make (utf8 ("Размер"), utf8 ("Раз
 inline const juce::String metronome = make (utf8 ("Метроном"), utf8 ("Щелчок включает метроном проекта. Правая кнопка: громкость, «Только во время записи», отсчёт, звук клика."));
 inline const juce::String play = make (utf8 ("Играть"), utf8 ("Запускает и останавливает воспроизведение. Пробел делает то же самое."));
 inline const juce::String stop = make (utf8 ("Стоп"), utf8 ("Останавливает воспроизведение и все клипы. Повторное нажатие возвращает в начало."));
-inline const juce::String record = make (utf8 ("Запись"), utf8 ("Запись в выбранную сцену на взведённых дорожках; повторный щелчок останавливает. Правая кнопка: фиксированная длина и квантизация записи."));
-inline const juce::String overdub = make (utf8 ("Overdub"), utf8 ("Включён: запись на играющий клип добавляет ноты слоями, старые не стираются. Каждый круг отменяется отдельно."));
+inline const juce::String record = make (utf8 ("Запись"), utf8 ("В Arrangement, а также в Session View при играющем транспорте: запись на шкалу (взведённые дорожки пишут ноты, запуски клипов сессии записываются как клипы). В Session View при остановленном транспорте: запись в пустой слот выбранной сцены. Повторный щелчок останавливает. Правая кнопка: куда писать, фиксированная длина, квантизация. F9 всегда пишет на шкалу."));
+inline const juce::String punchIn = make (utf8 ("Punch-in"), utf8 ("Запись на шкалу начинается только с начала скобки петли. Скобку тянут над линейкой."));
+inline const juce::String punchOut = make (utf8 ("Punch-out"), utf8 ("Запись на шкалу заканчивается в конце скобки петли, воспроизведение идёт дальше. Вместе с Punch-in запись идёт только внутри скобки."));
+inline const juce::String overdub = make (utf8 ("Overdub"), utf8 ("Включён: запись на играющий клип добавляет ноты слоями, старые не стираются. Каждый круг отменяется отдельно. На шкале ноты попадают в клипы под ними вместо замены."));
 inline const juce::String position = make (utf8 ("Позиция"), utf8 ("Такты, доли и шестнадцатые от начала воспроизведения."));
 inline const juce::String loop = make (utf8 ("Петля аранжировки"), utf8 ("Включает и выключает петлю на шкале Arrangement. Границы петли тянутся по скобке над линейкой, Cmd+L ставит петлю по выделению."));
 inline const juce::String followPlayhead = make (utf8 ("Следовать за курсором"), utf8 ("Когда горит, вид шкалы перелистывается вслед за курсором воспроизведения (Cmd+Shift+F)."));
