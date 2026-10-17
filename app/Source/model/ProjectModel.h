@@ -76,6 +76,35 @@ public:
     double tuningA4() const { return juce::jlimit (kMinTuning, kMaxTuning, (double) root.getProperty (ids::tuningA4, kDefaultTuning)); }
     void setTuningA4 (double hz) { root.setProperty (ids::tuningA4, juce::jlimit (kMinTuning, kMaxTuning, hz), &undo); }
 
+    // Transport and recording preferences (docs/spec/02, tasks 2.1 to 2.3). Written without undo, like view state: a
+    // click of the metronome button is not an edit of the music. (A project with changed preferences still counts as
+    // changed, because ProjectSession compares the serialised tree, not only the undo history.)
+    static constexpr double kMinMetronomeDb = -60.0; // at or below: silent
+    bool metronome() const { return (bool) root.getProperty (ids::metronome, false); }
+    void setMetronome (bool on) { root.setProperty (ids::metronome, on, nullptr); }
+    double metronomeVolumeDb() const { return juce::jlimit (kMinMetronomeDb, 0.0, (double) root.getProperty (ids::metronomeVolumeDb, -6.0)); }
+    void setMetronomeVolumeDb (double db) { root.setProperty (ids::metronomeVolumeDb, juce::jlimit (kMinMetronomeDb, 0.0, db), nullptr); }
+    bool metronomeOnlyRecording() const { return (bool) root.getProperty (ids::metronomeOnlyRecording, false); }
+    void setMetronomeOnlyRecording (bool on) { root.setProperty (ids::metronomeOnlyRecording, on, nullptr); }
+    // 0, 1, 2 or 4 bars of count-in before a recording that starts a stopped transport.
+    int countInBars() const
+    {
+        const int v = (int) root.getProperty (ids::countInBars, 1);
+        return v >= 4 ? 4 : (v >= 2 ? 2 : (v >= 1 ? 1 : 0));
+    }
+    void setCountInBars (int bars) { root.setProperty (ids::countInBars, bars, nullptr); }
+    juce::String metronomeSound() const { return root.getProperty (ids::metronomeSound, "classic").toString() == "wood" ? "wood" : "classic"; }
+    void setMetronomeSound (const juce::String& sound) { root.setProperty (ids::metronomeSound, sound == "wood" ? "wood" : "classic", nullptr); }
+    // OVR: recording on a playing clip adds notes instead of replacing the clip.
+    bool overdub() const { return (bool) root.getProperty (ids::overdub, false); }
+    void setOverdub (bool on) { root.setProperty (ids::overdub, on, nullptr); }
+    // Grid of the quantisation applied to recorded notes, in beats (0 = off, 0.25 = 1/16).
+    double recordQuantise() const { return juce::jlimit (0.0, 4.0, (double) root.getProperty (ids::recordQuantise, 0.0)); }
+    void setRecordQuantise (double grid) { root.setProperty (ids::recordQuantise, juce::jlimit (0.0, 4.0, grid), nullptr); }
+    // Recordings stop by themselves after this many bars (0 = off).
+    int recordFixedBars() const { return juce::jlimit (0, 64, (int) root.getProperty (ids::recordFixedBars, 0)); }
+    void setRecordFixedBars (int bars) { root.setProperty (ids::recordFixedBars, bars, nullptr); }
+
     juce::String author() const { return root.getProperty (ids::author).toString(); }
     void setAuthor (const juce::String& v) { root.setProperty (ids::author, v, &undo); }
     juce::String projectNotes() const { return root.getProperty (ids::notes).toString(); }

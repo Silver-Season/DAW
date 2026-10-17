@@ -77,8 +77,13 @@ public:
         set (ids::scaleMode, mode, um);
     }
 
-    // Notes are kept sorted by start, then pitch. Callers never sort.
-    int numNotes() const { return state.getNumChildren(); }
+    // Notes are kept sorted by start, then pitch. Callers never sort. They are the NOTE children, which come first;
+    // the optional CONTROLLERS node is always the last child (so `state.getChild (i)` is a note for i < numNotes()).
+    int numNotes() const
+    {
+        const int n = state.getNumChildren();
+        return n > 0 && state.getChild (n - 1).hasType (ids::CONTROLLERS) ? n - 1 : n;
+    }
     daw::engine::Note note (int index) const;
     std::vector<daw::engine::Note> notes() const;
     // Returns the new NOTE node: a handle that stays valid while the note is moved, resized or re-sorted.
@@ -86,6 +91,10 @@ public:
     void removeNote (int index, juce::UndoManager*) const;
     void updateNote (int index, const daw::engine::Note&, juce::UndoManager*) const; // re-sorts if needed
     void setNotes (const std::vector<daw::engine::Note>&, juce::UndoManager*) const;
+
+    // Recorded controller movements (modulation wheel, sustain, pitch bend, pressure), sorted by time.
+    std::vector<daw::engine::ControllerEvent> controllers() const;
+    void setControllers (const std::vector<daw::engine::ControllerEvent>&, juce::UndoManager*) const; // empty removes the node
 
     // The same through NOTE nodes, which do not change identity when the note moves. A gesture that drags
     // notes updates the nodes in place, so a selection (a list of nodes) survives the sorting.

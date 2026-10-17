@@ -172,6 +172,9 @@ void Settings::setFirstRunDone() { props->setValue ("firstRunDone", true); }
 bool Settings::midiInputPlays (const juce::String& id) const { return props->getBoolValue ("midiPlays/" + id, true); }
 void Settings::setMidiInputPlays (const juce::String& id, bool on) { props->setValue ("midiPlays/" + id, on); }
 
+double Settings::recordCorrectionMs() const { return juce::jlimit (-50.0, 50.0, props->getDoubleValue ("recordCorrectionMs", 0.0)); }
+void Settings::setRecordCorrectionMs (double ms) { props->setValue ("recordCorrectionMs", juce::jlimit (-50.0, 50.0, ms)); }
+
 //==============================================================================
 // "audioDevice" is the key the phase-0 build already used, so existing user settings keep working.
 std::unique_ptr<juce::XmlElement> Settings::audioDeviceState() const { return props->getXmlValue ("audioDevice"); }

@@ -515,6 +515,28 @@ inline const juce::String width = utf8 ("Ширина");
 } // namespace macro
 
 // Info bar: title and description of an element under the mouse ("Название — что делает").
+namespace recording
+{
+// Russian plural: 1 такт, 2 такта, 5 тактов
+inline juce::String plural (int n, const char* one, const char* few, const char* many)
+{
+    const int mod100 = std::abs (n) % 100, mod10 = std::abs (n) % 10;
+    const char* word = (mod100 >= 11 && mod100 <= 14) ? many : (mod10 == 1 ? one : (mod10 >= 2 && mod10 <= 4 ? few : many));
+    return juce::String (n) + " " + utf8 (word);
+}
+inline const juce::String undoRecordClip = utf8 ("Запись клипа");
+inline const juce::String undoOverdub = utf8 ("Overdub");
+inline const juce::String undoCaptureMidi = utf8 ("Захват MIDI");
+inline const juce::String captureNothing = utf8 ("Нечего захватывать: сыграйте что-нибудь на MIDI-клавиатуре");
+inline const juce::String captureNoTrack = utf8 ("Выберите MIDI-дорожку, на которую захватить фразу");
+// "Захвачено 8 тактов, 112 нот → Arp, сцена Drop"
+inline juce::String captured (int bars, int notes, const juce::String& track, const juce::String& scene)
+{
+    return utf8 ("Захвачено ") + plural (bars, "такт", "такта", "тактов") + ", " + plural (notes, "нота", "ноты", "нот") + utf8 (" → ") + track
+           + utf8 (", сцена ") + scene;
+}
+} // namespace recording
+
 namespace help
 {
 inline juce::String make (const juce::String& title, const juce::String& text) { return title + "\n" + text; }
