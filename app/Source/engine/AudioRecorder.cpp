@@ -210,7 +210,7 @@ void AudioRecorder::writeJob (Job& job)
         if (n == 0 && state == RecordStream::done)
         {
             // A gap that never reached the queue can only be at the end: the file is padded to its length.
-            const int64_t missing = stream.totalFrames.load() - stream.getFramesRead();
+            const int64_t missing = stream.totalFrames.load() - job.framesOnDisk;
             if (missing > 0)
             {
                 n = (int) juce::jmin ((int64_t) scratch.getNumSamples(), missing);

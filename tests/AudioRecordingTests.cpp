@@ -139,26 +139,14 @@ void testStreamGaps()
     stream.write (p1, 600);
     stream.write (p2, 600); // 424 fit, 176 are lost
     check (stream.droppedFrames.load() == 176, "176 frames lost, got " + juce::String (stream.droppedFrames.load()));
-    std::vector<float> dest (4096, -1.0f);
-    float* d[1] { dest.data() };
-    int n = stream.read (d, 4096);
-    check (n == 1024, "everything that fit is read: " + juce::String (n));
+    check (! stream.request (RecordStream::Mode::slot, 1), "a busy stream cannot be armed again");
+    std::vector<float> all, chunk (4096);
+    float* c[1] { chunk.data() };
+    int got = stream.read (c, 4096);
+    all.insert (all.end(), chunk.begin(), chunk.begin() + got);
     stream.write (p1, 100); // after the gap
-    n += stream.read (d, 4096); // the silence first, then the new frames
-    std::vector<float> all;
-    {
-        RecordStream s2 (1, 1024);
-        s2.request (RecordStream::Mode::slot, 1);
-        s2.write (p1, 600);
-        s2.write (p2, 600);
-        std::vector<float> chunk (4096);
-        float* c[1] { chunk.data() };
-        int got = s2.read (c, 4096);
-        all.insert (all.end(), chunk.begin(), chunk.begin() + got);
-        s2.write (p1, 100);
-        got = s2.read (c, 4096);
-        all.insert (all.end(), chunk.begin(), chunk.begin() + got);
-    }
+    got = stream.read (c, 4096);
+    all.insert (all.end(), chunk.begin(), chunk.begin() + got);
     check (all.size() == 1300, "600 + 600 + 100 frames come out, got " + juce::String ((int) all.size()));
     if (all.size() == 1300)
     {
@@ -167,7 +155,6 @@ void testStreamGaps()
         check (juce::exactlyEqual (all[1024], 0.0f) && juce::exactlyEqual (all[1199], 0.0f), "the gap is silent");
         check (juce::exactlyEqual (all[1200], 1.0f) && juce::exactlyEqual (all[1299], 1.0f), "what came after the gap is in place");
     }
-    check (! stream.request (RecordStream::Mode::slot, 1), "a busy stream cannot be armed again");
 }
 
 // Spec test 4: impulses on the beats, recorded into a slot through a device with latency, land on the beats of the clip.

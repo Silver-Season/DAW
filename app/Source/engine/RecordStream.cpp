@@ -4,11 +4,11 @@
 #include <cstring>
 
 RecordStream::RecordStream (int maxCh, int capacityFrames)
-    : maxChannels (juce::jlimit (1, 2, maxCh)), capacity (juce::jmax (1024, capacityFrames)), fifo (capacity)
+    : maxChannels (juce::jlimit (1, 2, maxCh)), capacity (juce::jmax (1024, capacityFrames)), fifo (capacity + 1) // a fifo of n holds n - 1
 {
-    storage.calloc ((size_t) maxChannels * (size_t) capacity);
+    storage.calloc ((size_t) maxChannels * (size_t) (capacity + 1));
     for (int c = 0; c < 2; ++c)
-        planes[(size_t) c] = storage.get() + (size_t) juce::jmin (c, maxChannels - 1) * (size_t) capacity;
+        planes[(size_t) c] = storage.get() + (size_t) juce::jmin (c, maxChannels - 1) * (size_t) (capacity + 1);
 }
 
 bool RecordStream::request (Mode m, int channels)
