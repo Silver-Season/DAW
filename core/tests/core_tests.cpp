@@ -4,7 +4,9 @@
 #include "daw/dsp/Envelope.h"
 #include "daw/dsp/Wavetable.h"
 #include "daw/dsp/WavetableOscillator.h"
+#include "daw/engine/Capture.h"
 #include "daw/engine/Clip.h"
+#include "daw/engine/Recording.h"
 #include "daw/engine/Quantize.h"
 #include "daw/music/Scales.h"
 #include "daw/project/VersionHistory.h"
@@ -596,6 +598,241 @@ int main()
         }
         check (ons == 2 && offs == 2, "a one-shot clip plays its notes once");
         check (player.playingSlot() == engine::ClipPlayer::kNoClip, "and ends after the first pass");
+    });
+
+
+    test ("Note assembly: earliest open note closes, hanging notes close at the end", [] {
+        using namespace daw::engine;
+        NoteAssembler a;
+        a.noteOn (0.0, 60, 100);
+        a.noteOn (1.0, 60, 90);   // the same pitch again, before the first one ended
+        a.noteOff (2.0, 60);      // closes the EARLIEST one
+        check (a.notes().size() == 1 && a.notes()[0].start == 0.0 && std::abs (a.notes()[0].length - 2.0) < 1e-9 && a.notes()[0].velocity == 100,
+               "a note-off closes the earliest open note of the pitch");
+        const uint8_t offAsOn[3] { 0x90, 60, 0 };
+        a.feed (3.0, offAsOn, 3); // note-on with velocity 0
+        check (a.notes().size() == 2 && std::abs (a.notes()[1].length - 2.0) < 1e-9 && a.notes()[1].velocity == 90, "note-on with velocity 0 is a note-off");
+        a.noteOn (3.5, 64, 80);
+        a.noteOff (3.6, 70); // nothing open at that pitch: ignored
+        a.closeAll (4.0);
+        check (a.notes().size() == 3 && std::abs (a.notes()[2].start - 3.5) < 1e-9 && std::abs (a.notes()[2].length - 0.5) < 1e-9 && a.openNotes().empty(),
+               "a hanging note is closed at the end");
+        const uint8_t cc1[3] { 0xB0, 1, 20 }, cc1Again[3] { 0xB0, 1, 20 }, cc7[3] { 0xB0, 7, 50 }, bend[3] { 0xE0, 0, 96 }, pressure[2] { 0xD0, 33 };
+        NoteAssembler c;
+        c.feed (0.5, cc1, 3);
+        c.feed (0.6, cc1Again, 3); // same value: not stored twice
+        c.feed (0.7, cc7, 3);      // volume is not recorded
+        c.feed (1.0, bend, 3);
+        c.feed (1.5, pressure, 2);
+        check (c.controllers().size() == 3 && c.controllers()[1].status == 0xE0 && c.controllers()[2].status == 0xD0 && c.controllers()[2].data1 == 33,
+               "modwheel, bend and pressure are collected; repeats and other controllers are not");
+    });
+
+    test ("Controllers play back at the recorded positions", [] {
+        using namespace daw;
+        engine::MidiClip clip;
+        clip.lengthBeats = 4.0;
+        clip.controllers = { { 0.5, 0xB0, 1, 10 }, { 1.25, 0xB0, 64, 127 }, { 2.0, 0xE0, 0x00, 0x60 }, { 3.5, 0xD0, 40, 0 } };
+        const double spb = 24000.0; // 120 BPM at 48 kHz
+        const int block = 512;
+        std::vector<std::pair<int64_t, MidiEvent>> got;
+        std::vector<MidiEvent> out;
+        for (int b = 0; b < 4 * 24000 / block + 1; ++b)
+        {
+            out.clear();
+            engine::renderClip (clip, 0.0, b * block / spb, (b + 1) * block / spb, spb, block, out);
+            for (const auto& e : out)
+                got.push_back ({ (int64_t) b * block + e.sampleOffset, e });
+        }
+        check (got.size() == 4, "all four controller events play once: " + std::to_string (got.size()));
+        bool exact = got.size() == 4;
+        for (size_t i = 0; exact && i < got.size(); ++i)
+            exact = std::llabs (got[i].first - std::llround (clip.controllers[i].time * spb)) <= 1 && got[i].second.status == clip.controllers[i].status
+                    && got[i].second.data1 == clip.controllers[i].data1 && got[i].second.data2 == clip.controllers[i].data2;
+        check (exact, "values and positions are the recorded ones (within one sample)");
+
+        // Stopping a clip that moved sustain and pitch bend puts both back
+        engine::ClipPlayer player;
+        player.launch (0, &clip, 0.0, 0.0);
+        std::vector<MidiEvent> ev;
+        player.process (0.0, 4.0, 100.0, 400, ev);
+        ev.clear();
+        player.stop (4.0, 0.0);
+        player.process (4.0, 4.5, 100.0, 50, ev);
+        bool sustainOff = false, bendCentre = false;
+        for (const auto& e : ev)
+        {
+            sustainOff = sustainOff || (e.status == 0xB0 && e.data1 == 64 && e.data2 == 0);
+            bendCentre = bendCentre || (e.status == 0xE0 && e.data1 == 0 && e.data2 == 0x40);
+        }
+        check (sustainOff && bendCentre, "a stopped clip releases sustain and centres the pitch wheel");
+    });
+
+    test ("ClipPlayer: count-in blocks and aligned launches", [] {
+        using namespace daw;
+        engine::MidiClip clip;
+        clip.lengthBeats = 4.0;
+        clip.notes = { { 0.0, 1.0, 60, 100 }, { 1.0, 1.0, 62, 100 } };
+        const double spb = 100.0;
+        engine::ClipPlayer player;
+        std::vector<MidiEvent> out;
+        player.launch (0, &clip, 0.0, 0.0);
+        player.process (-1.0, -0.5, spb, 50, out);
+        check (out.empty() && player.playingSlot() == engine::ClipPlayer::kNoClip, "nothing starts before beat 0");
+        player.process (-0.25, 0.25, spb, 50, out);
+        bool ok = out.size() == 1 && out[0].sampleOffset == 25 && out[0].data1 == 60;
+        check (ok, "the clip starts at beat 0 with the offset measured from the real block start");
+
+        // An aligned launch that reaches the player a little late: the note on the downbeat is not lost
+        engine::ClipPlayer late;
+        out.clear();
+        late.launchAt (0, &clip, 8.0);
+        late.process (8.1, 8.2, spb, 10, out);
+        check (out.size() == 1 && out[0].sampleOffset == 0 && (out[0].status & 0xF0) == 0x90 && out[0].data1 == 60, "a note 0.1 beat late is played at the first sample");
+        check (std::abs (late.playingStartBeat() - 8.0) < 1e-12, "and the loop stays on the original beat");
+        out.clear();
+        late.process (8.9, 9.1, spb, 20, out);
+        check (out.size() == 2 && (out[0].status & 0xF0) == 0x80 && out[0].sampleOffset == 10 && out[1].data1 == 62, "later notes render at their own positions");
+
+        engine::ClipPlayer tooLate;
+        out.clear();
+        tooLate.launchAt (0, &clip, 8.0);
+        tooLate.process (8.4, 8.5, spb, 10, out);
+        check (out.empty() && tooLate.playingSlot() == 0, "more than a quarter beat late: no catch-up");
+
+        engine::ClipPlayer inTime;
+        out.clear();
+        inTime.launchAt (0, &clip, 8.0);
+        inTime.process (7.95, 8.05, spb, 10, out);
+        check (out.size() == 1 && out[0].sampleOffset == 5, "a launch in the future is exact");
+    });
+
+    test ("Capture buffer keeps ten minutes", [] {
+        using namespace daw::engine;
+        CaptureBuffer buffer;
+        for (int i = 0; i < 1000; ++i)
+        {
+            InputEvent e;
+            e.engineSample = i * 100;
+            buffer.push (e);
+        }
+        check (buffer.size() == 1000 && buffer[0].engineSample == 0 && buffer[999].engineSample == 99900, "events are kept in order");
+        buffer.evictOlderThan (50000);
+        check (buffer.size() == 500 && buffer[0].engineSample == 50000, "old events are dropped");
+        CaptureBuffer full;
+        for (size_t i = 0; i < CaptureBuffer::kCapacity + 10; ++i)
+        {
+            InputEvent e;
+            e.engineSample = (int64_t) i;
+            full.push (e);
+        }
+        check (full.size() == CaptureBuffer::kCapacity && full[0].engineSample == 10, "a full buffer drops the oldest");
+    });
+
+    test ("Tempo estimate and phrase capture", [] {
+        using namespace daw::engine;
+        const double sr = 48000.0;
+        uint32_t lcg = 12345;
+        const auto jitter = [&lcg] (double maxMs) {
+            lcg = lcg * 1664525u + 1013904223u;
+            return ((double) (lcg >> 8) / (double) (1u << 24) * 2.0 - 1.0) * maxMs / 1000.0;
+        };
+        const auto note = [] (std::vector<InputEvent>& v, int64_t sample, double beat, bool playing, int pitch, int velocity) {
+            InputEvent on;
+            on.engineSample = sample;
+            on.beat = beat;
+            on.playing = playing;
+            on.size = 3;
+            on.bytes[0] = 0x90;
+            on.bytes[1] = (uint8_t) pitch;
+            on.bytes[2] = (uint8_t) velocity;
+            v.push_back (on);
+        };
+        const auto off = [] (std::vector<InputEvent>& v, int64_t sample, double beat, bool playing, int pitch) {
+            InputEvent e;
+            e.engineSample = sample;
+            e.beat = beat;
+            e.playing = playing;
+            e.size = 3;
+            e.bytes[0] = 0x80;
+            e.bytes[1] = (uint8_t) pitch;
+            v.push_back (e);
+        };
+
+        // 6 bars played while the transport ran, starting in the middle of bar 3 (beats 8..): the clip is 8 bars long
+        // and starts on the bar line of the first note
+        {
+            std::vector<InputEvent> ev;
+            const int count = 23;
+            for (int i = 0; i < count; ++i)
+            {
+                const double beat = 9.5 + i; // 9.5 .. 31.5
+                const int pitch = 40 + (i * 7) % 29;
+                note (ev, (int64_t) (beat * 24000.0), beat, true, pitch, 90);
+                off (ev, (int64_t) ((beat + 0.5) * 24000.0), beat + 0.5, true, pitch);
+            }
+            const auto r = capturePhrase (ev, 0, 100000000, sr, 4.0, 120.0);
+            check (r.ok && r.transportWasPlaying && r.numBars == 8 && std::abs (r.lengthBeats - 32.0) < 1e-9, "a 6-bar phrase gives an 8-bar clip");
+            check (r.ok && r.numNotes == count && std::abs (r.notes.front().start - 1.5) < 1e-9, "it starts on the bar line of the first note");
+        }
+
+        // 16th notes at 128 BPM with +-10 ms of jitter, transport stopped
+        {
+            std::vector<double> onsets;
+            std::vector<InputEvent> ev;
+            const double step = 60.0 / 128.0 / 4.0;
+            for (int i = 0; i < 64; ++i)
+            {
+                const double t = 2.0 + i * step + jitter (10.0);
+                onsets.push_back (t);
+                const int pitch = 48 + (i * 5) % 24;
+                note (ev, (int64_t) (t * sr), 0.0, false, pitch, 100);
+                off (ev, (int64_t) ((t + 0.05) * sr), 0.0, false, pitch);
+            }
+            const auto est = estimateTempo (onsets, 100.0);
+            std::printf ("    estimated tempo %.3f\n", est.bpm);
+            check (est.confident && std::abs (est.bpm - 128.0) < 0.5, "the tempo of jittery 16ths is found within half a BPM");
+            const auto r = capturePhrase (ev, 0, 100000000, sr, 4.0, 100.0);
+            check (r.ok && ! r.transportWasPlaying && r.tempoFromPhrase && std::abs (r.bpm - 128.0) < 0.5, "the phrase brings its own tempo");
+            check (r.ok && r.numBars == 4 && std::abs (r.lengthBeats - 16.0) < 1e-9 && r.numNotes == 64, "and makes a 4-bar clip");
+            // Too little to go on: the tempo of the project stays
+            std::vector<double> few { 1.0, 1.31, 1.9 };
+            check (! estimateTempo (few, 100.0).confident && std::abs (estimateTempo (few, 100.0).bpm - 100.0) < 1e-9, "three notes do not make a tempo");
+            // Random-ish gaps do not either
+            std::vector<double> loose { 0.0, 0.41, 0.97, 1.30, 2.11, 2.50, 3.33, 3.61, 4.58, 5.02 };
+            check (! estimateTempo (loose, 100.0).confident, "unevenly spaced notes keep the project tempo");
+        }
+
+        // The same four bars played twice: one round is captured
+        {
+            std::vector<InputEvent> ev;
+            for (int round = 0; round < 2; ++round)
+                for (int i = 0; i < 16; ++i)
+                {
+                    const double beat = 8.0 + round * 16.0 + i; // from the bar line of beat 8
+                    const int pitch = 50 + (i * 3) % 17;
+                    note (ev, (int64_t) (beat * 24000.0), beat, true, pitch, 100);
+                    off (ev, (int64_t) ((beat + 0.5) * 24000.0), beat + 0.5, true, pitch);
+                }
+            const auto r = capturePhrase (ev, 0, 100000000, sr, 4.0, 120.0);
+            check (r.ok && r.numBars == 4 && r.numNotes == 16 && std::abs (r.lengthBeats - 16.0) < 1e-9, "a phrase played twice gives one 4-bar round");
+        }
+
+        // A pause longer than four seconds ends the phrase; an older phrase is not taken along
+        {
+            std::vector<InputEvent> ev;
+            note (ev, 0, 0.0, false, 60, 100);
+            off (ev, 1000, 0.0, false, 60);
+            note (ev, (int64_t) (10.0 * sr), 0.0, false, 64, 100);
+            off (ev, (int64_t) (10.5 * sr), 0.0, false, 64);
+            const auto r = capturePhrase (ev, 0, (int64_t) (11.0 * sr), sr, 4.0, 120.0);
+            check (r.ok && r.numNotes == 1 && r.notes[0].pitch == 64, "only the last phrase is captured");
+            // events of another track are not mixed in; with none on the target the events without a track are used
+            for (auto& e : ev)
+                e.trackId = 7;
+            check (! capturePhrase (ev, 3, (int64_t) (11.0 * sr), sr, 4.0, 120.0).ok, "events that went to another track are not taken");
+            check (capturePhrase (ev, 7, (int64_t) (11.0 * sr), sr, 4.0, 120.0).ok, "the target track's own events are");
+        }
     });
 
     std::printf ("\n%d checks, %d failures\n", checks, failures);
