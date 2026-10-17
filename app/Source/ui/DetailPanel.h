@@ -46,10 +46,16 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
 
 private:
     void updateEditor();
+    // The rows of the summary card that open a menu (input, monitoring) and the input meter of an audio track.
+    juce::Rectangle<int> cardRow (int index) const;
+    juce::Rectangle<int> meterBounds() const;
 
+    AudioEngine& engine;
     ProjectModel& model;
     ProjectActions& actions;
     SelectionState& selection;
@@ -61,6 +67,8 @@ private:
     bool editorOn = false, editorShown = false, audioShown = false;
     int64_t shownTrack = -1;
     juce::String shownSummary;
+    float inputLevel = 0.0f; // shown peak of the input, falls off between ticks
+    bool inputClipShown = false;
 };
 
 // Devices of one track, left to right, with arrows between them and a drop zone at the end.

@@ -429,6 +429,24 @@ inline const juce::String monitorOff = utf8 ("Выкл");
 inline const juce::String showOtherParam = utf8 ("Показать другой параметр…");
 } // namespace detail
 
+// Inputs and monitoring of a track (docs/spec/05-audio-recording.md, task 5.3)
+namespace audioInput
+{
+inline juce::String mono (int channel) { return utf8 ("Вход ") + juce::String (channel + 1); }
+inline juce::String stereo (int left, int right) { return utf8 ("Входы ") + juce::String (left + 1) + "/" + juce::String (right + 1); }
+inline const juce::String separator = utf8 (" · ");
+inline const juce::String resample = utf8 ("Ресемплинг");
+inline const juce::String none = utf8 ("Нет");
+inline const juce::String monoInputs = utf8 ("Моно");
+inline const juce::String noInputs = utf8 ("У звуковой карты нет открытых входов (Настройки → Звук)");
+inline const juce::String monitorAutoLong = utf8 ("Авто: слышно, когда дорожка взведена и клип не играет");
+inline const juce::String monitorInLong = utf8 ("Вкл: слышно всегда");
+inline const juce::String monitorOffLong = utf8 ("Выкл: не слышно");
+inline const juce::String undoInput = utf8 ("Вход дорожки");
+inline const juce::String undoMonitor = utf8 ("Мониторинг дорожки");
+inline const juce::String meterHelp = utf8 ("Уровень входа. Красный: был перегруз выше −0,5 дБ, щелчок сбрасывает.");
+} // namespace audioInput
+
 // Scales (task 2.7). The names of the scales are in core (daw/music/Scales.h).
 inline const juce::String rootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 inline const juce::String scaleNone = utf8 ("Выкл");
@@ -758,6 +776,7 @@ inline juce::String browserCategory (const juce::String& name) { return make (na
 
 inline const juce::String trackHeader = make (utf8 ("Заголовок дорожки"), utf8 ("Щелчок выделяет дорожку, двойной щелчок переименовывает, правая кнопка открывает меню. Правый край тянется, меняя ширину столбца."));
 inline const juce::String clipSlot = make (utf8 ("Клип"), utf8 ("Щелчок выбирает клип, треугольник слева запускает. Двойной щелчок по пустому слоту создаёт клип. Клип можно перетащить в другой слот (Alt: копия)."));
+inline const juce::String recordAudioSlot = make (utf8 ("Кружок записи звука"), utf8 ("Щелчок записывает вход дорожки в этот слот с ближайшей границы запуска. Вход и мониторинг выбираются в карточке дорожки внизу."));
 inline const juce::String emptyAudioSlot = make (utf8 ("Пустой слот аудиодорожки"), utf8 ("Перетащите сюда звуковой файл из браузера или из Finder. Cmd при отпускании нескольких файлов кладёт каждый на свою дорожку."));
 inline const juce::String emptySlot =make (utf8 ("Пустой слот"), utf8 ("Щелчок останавливает дорожку, двойной щелчок создаёт пустой MIDI-клип на такт."));
 inline const juce::String sceneLaunch = make (utf8 ("Запуск сцены"), utf8 ("Запускает все клипы этой сцены. Двойной щелчок по названию переименовывает."));

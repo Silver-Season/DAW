@@ -2,6 +2,7 @@
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "InputMenus.h"
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
 #include "daw/dsp/Wavetable.h"
@@ -866,7 +867,7 @@ private:
 };
 
 //==============================================================================
-DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : model (m), actions (a), selection (s)
+DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : engine (e), model (m), actions (a), selection (s)
 {
     recordSwitch = std::make_unique<RecordSourceSwitch>();
     recordSwitch->onChoose = [this] (const juce::String& source) {
@@ -963,14 +964,70 @@ void DetailPanel::tick()
     recordSwitch->setVisible (cardShown);
     recordSwitch->setSource (track.isValid() ? track.recordSource() : juce::String ("midi"));
     const auto summary = track.isValid() ? track.name() + "|" + juce::String (track.colour()) + "|" + track.input() + "|" + track.monitor()
-                                               + "|" + juce::String (track.numDevices())
+                                               + "|" + juce::String (track.numDevices()) + "|" + juce::String ((int) track.isAudio())
                                          : juce::String();
     if (summary != shownSummary)
     {
         shownSummary = summary;
         repaint (getLocalBounds().removeFromLeft (kInfoWidth));
     }
+
+    // The input meter of an audio track: peak hold that falls 1.5 dB per tick, red after a clip until clicked.
+    if (cardShown && track.isAudio())
+        if (auto* rt = engine.findRuntime (track.id()))
+        {
+            const float peak = rt->inputMeter.exchange (0.0f);
+            const float level = juce::jmax (peak, inputLevel * 0.84f);
+            const bool clip = rt->inputClipped.load();
+            if (std::abs (level - inputLevel) > 1.0e-4f || clip != inputClipShown)
+            {
+                inputLevel = level;
+                inputClipShown = clip;
+                repaint (meterBounds().expanded (2));
+            }
+        }
 }
+
+juce::Rectangle<int> DetailPanel::cardRow (int index) const
+{
+    // the summary card: 13 px margin, the "Дорожка" caption (16), the name (22), a gap (6), then rows of 22
+    return { 14, 13 + 16 + 22 + 6 + index * 22, kInfoWidth - 28, 22 };
+}
+
+juce::Rectangle<int> DetailPanel::meterBounds() const
+{
+    return cardRow (0).removeFromBottom (3).translated (0, 1);
+}
+
+void DetailPanel::mouseMove (const juce::MouseEvent& e)
+{
+    const auto track = model.findTrack (shownTrack);
+    const bool overMenu = ! editorShown && track.isValid() && (cardRow (0).contains (e.getPosition()) || cardRow (1).contains (e.getPosition()));
+    setMouseCursor (overMenu ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
+void DetailPanel::mouseDown (const juce::MouseEvent& e)
+{
+    const auto track = model.findTrack (shownTrack);
+    if (editorShown || ! track.isValid())
+        return;
+    if (track.isAudio() && meterBounds().expanded (0, 3).contains (e.getPosition()))
+    {
+        if (auto* rt = engine.findRuntime (track.id()))
+            rt->inputClipped = false;
+        return;
+    }
+    if (cardRow (0).contains (e.getPosition()))
+        inputmenus::showInputMenu (engine, model, track, *this);
+    else if (cardRow (1).contains (e.getPosition()))
+        inputmenus::showMonitorMenu (model, track, *this);
+}
+
+namespace
+{
+// The small arrow that says "this opens a menu"
+juce::String utf8Arrow() { return juce::String::fromUTF8 (" \xe2\x96\xbe"); }
+} // namespace
 
 void DetailPanel::paint (juce::Graphics& g)
 {
@@ -1011,13 +1068,19 @@ void DetailPanel::paint (juce::Graphics& g)
         g.setFont (t.uiFont (12.5f, 600));
         g.drawText (value, row, juce::Justification::centredLeft, true);
     };
-    const auto input = track.input();
-    line (Strings::detail::input, input == "keyboard" ? Strings::detail::inputKeyboard
-                                  : input == "none"  ? Strings::detail::inputNone
-                                  : input.startsWith ("midi:") ? Strings::detail::inputDevice
-                                                               : Strings::detail::inputAllMidi);
-    const auto monitor = track.monitor();
-    line (Strings::detail::monitor, monitor == "in" ? Strings::detail::monitorIn : (monitor == "off" ? Strings::detail::monitorOff : Strings::detail::monitorAuto));
+    line (Strings::detail::input, inputmenus::inputLabel (engine, track) + utf8Arrow());
+    if (track.isAudio())
+    {
+        // under the input row: the level of the input, there before anything records
+        const auto m = meterBounds().toFloat();
+        g.setColour (t.panel2);
+        g.fillRoundedRectangle (m, 1.5f);
+        const float db = juce::Decibels::gainToDecibels (inputLevel, -60.0f);
+        const float fill = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
+        g.setColour (inputClipShown ? t.record : (db > -6.0f ? t.warning : t.accent));
+        g.fillRoundedRectangle (m.withWidth (m.getWidth() * fill), 1.5f);
+    }
+    line (Strings::detail::monitor, inputmenus::monitorLabel (track) + utf8Arrow());
     line (Strings::detail::chain, Strings::detail::devices (track.numDevices()));
     g.setColour (t.dimText);
     g.setFont (t.uiFont (12.5f));
