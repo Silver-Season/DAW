@@ -172,4 +172,5 @@ void runAudioTests();
 void runAudioUiTests();
 void runSessionAudioUiTests();
 void runAudioRecordingTests();
+void runBuiltInEffectTests();
 } // namespace tests

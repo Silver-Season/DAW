@@ -1,5 +1,7 @@
 #include "BrowserActions.h"
 
+#include "daw/fx/Effect.h"
+
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "../model/ArrangementEdit.h"
@@ -105,6 +107,15 @@ BrowserActions::DeviceSpec BrowserActions::resolve (const DragItem& item) const
             }
         }
     }
+    else if (item.kind == kinds::builtinFx)
+    {
+        s.valid = daw::fx::createEffect (item.id.toStdString()) != nullptr;
+        s.kind = "fx";
+        s.deviceName = Strings::fx::effectName (item.id);
+        s.pluginDesc = item.id;
+        s.typeId = "fx:" + item.id;
+        s.instrument = false;
+    }
     else if (item.kind == kinds::plugin)
     {
         if (const auto desc = engine.getKnownPlugins().getTypeForIdentifierString (item.id))
@@ -142,6 +153,8 @@ bool BrowserActions::deviceHasType (const DeviceRef& d, const juce::String& type
 {
     if (typeId == "prisma")
         return d.kind() == "prisma";
+    if (typeId.startsWith ("fx:"))
+        return d.kind() == "fx" && d.pluginDesc() == typeId.substring (3);
     if (d.kind() != "plugin" && d.kind() != "missing")
         return false;
     juce::PluginDescription desc;
@@ -168,7 +181,8 @@ bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t t
         return target != DropTarget::device && ! audioTrack; // a chain begins with an instrument
 
     const bool isPreset = item.kind == kinds::prismaPreset || item.kind == kinds::userPreset;
-    if (item.kind == kinds::prisma || item.kind == kinds::prismaPreset || item.kind == kinds::userPreset || item.kind == kinds::plugin)
+    if (item.kind == kinds::prisma || item.kind == kinds::prismaPreset || item.kind == kinds::userPreset || item.kind == kinds::plugin
+        || item.kind == kinds::builtinFx)
     {
         if (item.kind == kinds::userPreset && ! library::UserLibrary::readPreset (juce::File (item.path)).valid)
             return false;
@@ -197,7 +211,7 @@ bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t t
 DeviceRef BrowserActions::addSpec (const TrackRef& track, const DeviceSpec& spec, int index)
 {
     auto d = model.addDevice (track, spec.kind, spec.deviceName, index);
-    if (spec.kind == "plugin")
+    if (spec.kind == "plugin" || spec.kind == "fx")
         d.setPluginDesc (spec.pluginDesc, &model.undo);
     if (spec.state.isNotEmpty())
         d.setStateBase64 (spec.state, &model.undo);

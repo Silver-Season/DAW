@@ -5,6 +5,7 @@
 #include "InputMenus.h"
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
+#include "../engine/BuiltInEffectProcessor.h"
 #include "daw/dsp/Wavetable.h"
 #include "daw/synth/PrismaParams.h"
 
@@ -51,6 +52,9 @@ std::vector<int> macroIndices (const DeviceRef& device, juce::AudioProcessor& pr
     tokens.removeEmptyStrings();
     for (const auto& t : tokens)
         result.push_back (t.getIntValue());
+    if (result.empty())
+        if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (&processor))
+            return fx->defaultMacros();
     if (result.empty())
     {
         const auto& params = processor.getParameters();

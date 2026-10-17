@@ -4,6 +4,7 @@
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
 #include "../Strings.h"
+#include "BuiltInEffectProcessor.h"
 
 namespace
 {
@@ -326,6 +327,17 @@ std::unique_ptr<juce::AudioProcessor> AudioEngine::makeProcessor (const DeviceRe
                 prisma->setStateInformation (block.getData(), (int) block.getSize());
         }
         return prisma;
+    }
+    if (d.kind() == "fx") // a built-in effect: its type id is in pluginDesc
+    {
+        auto fx = std::make_unique<BuiltInEffectProcessor> (d.pluginDesc());
+        if (const auto state = d.stateBase64(); state.isNotEmpty())
+        {
+            juce::MemoryBlock block;
+            if (block.fromBase64Encoding (state))
+                fx->setStateInformation (block.getData(), (int) block.getSize());
+        }
+        return fx;
     }
     return nullptr; // plugins arrive through registerProcessor or startPluginLoad; "missing" devices pass the sound through
 }

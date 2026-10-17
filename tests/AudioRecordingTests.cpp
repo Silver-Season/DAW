@@ -382,3 +382,39 @@ void runAudioRecordingTests()
     testRealTime();
 }
 } // namespace tests
+
+namespace
+{
+// Stage 6 in the app: a built-in effect on a track is a DEVICE kind="fx" that the engine plays and saves.
+void testBuiltInEffectDevice()
+{
+    std::printf ("[6.1] a built-in effect on a track: made by the engine, changes the sound, keeps its parameters\n");
+    SoundRig rig;
+    rig.track.setMonitor ("in", nullptr);
+    auto device = rig.f.model.addDevice (rig.track, "fx", "Utility");
+    device.setPluginDesc ("limiter", nullptr);
+    rig.f.engine.rebuildGraphIfNeeded();
+    auto* p = rig.f.engine.findProcessor (device.id());
+    check (p != nullptr && p->getName().isNotEmpty(), "the engine made the limiter");
+    if (p == nullptr)
+        return;
+    for (auto* param : p->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (param); ranged != nullptr && ranged->paramID == "ceiling")
+            ranged->setValueNotifyingHost (ranged->convertTo0to1 (-6.0f));
+    rig.signal = [] (int, int64_t s) { return 0.9f * (float) std::sin ((double) s * 0.05); };
+    rig.blocks_ (200);
+    check (rig.out.getMagnitude (0, 0, kBlock) < 0.53f, "the limiter holds the input at -6 dB: " + juce::String (rig.out.getMagnitude (0, 0, kBlock)));
+    juce::MemoryBlock state;
+    p->getStateInformation (state);
+    rig.f.engine.captureDeviceStates (device.state);
+    check (device.stateBase64().isNotEmpty(), "the state goes into the model");
+    rig.f.model.removeDevice (device);
+    rig.f.engine.rebuildGraphIfNeeded();
+    rig.f.model.undo.clearUndoHistory();
+}
+} // namespace
+
+namespace tests
+{
+void runBuiltInEffectTests() { testBuiltInEffectDevice(); }
+} // namespace tests

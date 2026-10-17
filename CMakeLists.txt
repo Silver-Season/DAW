@@ -103,6 +103,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioFilePool.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioPreview.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RecordStream.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/BuiltInEffectProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioRecorder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/AudioImport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp

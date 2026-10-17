@@ -1,5 +1,7 @@
 #include "BrowserSources.h"
 
+#include "daw/fx/Effect.h"
+
 #include "../Strings.h"
 
 #include "daw/synth/PrismaParams.h"
@@ -158,13 +160,21 @@ void BrowserSources::refreshPlugins()
         (d.isInstrument ? instruments : effects).push_back (item);
     }
 
-    Item builtin;
-    builtin.category = Category::effects;
-    builtin.name = Strings::browser::builtinEffectsSoon;
-    builtin.group = Strings::browser::builtinGroup;
-    builtin.key = "placeholder:builtin-effects";
-    builtin.placeholder = true;
-    effects.insert (effects.begin(), builtin);
+    // The built-in effects come first, grouped by what they do.
+    std::vector<Item> builtins;
+    for (const auto& t : daw::fx::effectTypes())
+    {
+        Item item;
+        item.category = Category::effects;
+        item.name = Strings::fx::effectName (t.id);
+        item.group = Strings::fx::group + juce::String::fromUTF8 (" \xc2\xb7 ") + Strings::fx::categoryName (t.category);
+        item.key = "fx:" + juce::String (t.id);
+        item.kind = kinds::builtinFx;
+        item.id = t.id;
+        item.instrument = false;
+        builtins.push_back (item);
+    }
+    effects.insert (effects.begin(), builtins.begin(), builtins.end());
 
     data.set (Category::instruments, std::move (instruments));
     data.set (Category::effects, std::move (effects));

@@ -147,6 +147,7 @@ int main()
     if (juce::String (std::getenv ("DAW_TEST_ONLY")) == "recording")
     {
         runAudioRecordingTests();
+        runBuiltInEffectTests();
         std::printf ("\n%d checks, %d failures\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -167,6 +168,7 @@ int main()
     runAudioUiTests();
     runSessionAudioUiTests();
     runAudioRecordingTests();
+    runBuiltInEffectTests();
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
