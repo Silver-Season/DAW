@@ -93,6 +93,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RtCheck.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PreviewPlayer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioFilePool.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioPreview.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/AudioImport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaEditor.cpp)

@@ -7,6 +7,7 @@
 #include "../Settings.h"
 #include "../model/ProjectModel.h"
 #include "AudioFilePool.h"
+#include "AudioPreview.h"
 #include "Metronome.h"
 #include "MidiInputQueue.h"
 #include "PlaybackGraph.h"
@@ -221,8 +222,14 @@ public:
     void previewFactoryPreset (int program);
     void previewPresetState (const juce::MemoryBlock& prismaState);
     void stopPreview();
-    void setPreviewVolumeDb (float db) { preview.setGainDb (db); }
-    bool isPreviewSounding() const { return preview.isSounding(); }
+    void setPreviewVolumeDb (float db)
+    {
+        preview.setGainDb (db);
+        audioPreview.setGain (db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db));
+    }
+    bool isPreviewSounding() const { return preview.isSounding() || audioPreview.isSounding(); }
+    // A sound file of the browser plays once from its start (task 5.6). False if it cannot be read.
+    bool previewAudioFile (const juce::File&);
 
     // 440 Hz at -20 dBFS for one second on the first two outputs (settings, Sound).
     void playTestTone();
@@ -350,6 +357,7 @@ private:
     bool pushCommand (const EngineCommand&);
 
     PreviewPlayer preview;
+    AudioPreview audioPreview;
     std::atomic<int> toneSamplesLeft { 0 };
     int toneSamplesTotal = 0;   // audio thread
     double tonePhase = 0.0;     // audio thread

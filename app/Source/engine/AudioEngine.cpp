@@ -288,17 +288,28 @@ void AudioEngine::updateRecordCompensation()
 
 void AudioEngine::previewFactoryPreset (int program)
 {
+    audioPreview.stop();
     preview.playFactoryProgram (program);
 }
 
 void AudioEngine::previewPresetState (const juce::MemoryBlock& state)
 {
+    audioPreview.stop();
     preview.playState (state.getData(), (int) state.getSize());
 }
 
 void AudioEngine::stopPreview()
 {
     preview.stop();
+    audioPreview.stop();
+}
+
+bool AudioEngine::previewAudioFile (const juce::File& file)
+{
+    preview.stop();
+    auto source = audioPool.acquire (file);
+    audioPreview.play (source);
+    return source != nullptr;
 }
 
 void AudioEngine::playTestTone()
@@ -1292,6 +1303,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         juce::AudioBuffer<float> outView (const_cast<float**> (outputs), 2, numSamples);
         preview.process (outView, numSamples, tempo.load());
+        audioPreview.process (outView, numSamples, rate);
 
         if (const int left = toneSamplesLeft.load (std::memory_order_relaxed); left > 0)
         {

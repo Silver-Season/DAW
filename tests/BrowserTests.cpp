@@ -259,7 +259,9 @@ void testDrops()
                && actions.accepts (drag (kinds::midiFile, {}, "/x.mid"), DropTarget::slot, d.trackA.id())
                && actions.accepts (drag (kinds::midiFile, {}, "/x.mid"), DropTarget::newTrack),
            "a MIDI file is accepted by a slot and by an empty place, not by the chain");
-    check (! actions.accepts (drag (kinds::audioFile, {}, "/x.wav"), DropTarget::newTrack), "sound files go nowhere in this stage");
+    check (actions.accepts (drag (kinds::audioFile, {}, "/x.wav"), DropTarget::newTrack)
+               && ! actions.accepts (drag (kinds::audioFile, {}, "/x.wav"), DropTarget::slot, d.trackA.id()),
+           "stage 5: a sound file makes a new audio track, a MIDI track does not take it");
     check (! actions.accepts (reese, DropTarget::track, 123456), "a track that does not exist accepts nothing");
     check (actions.accepts (drag (kinds::chain, {}, "/x.dawchain", "c"), DropTarget::newTrack) && ! actions.accepts (drag (kinds::chain), DropTarget::device, d.trackA.id(), d.trackA.device (0).id()),
            "a chain: an empty place yes, a single device no");

@@ -261,6 +261,30 @@ void testLoadingFile()
     r.run (1024);
 }
 
+void testPreview()
+{
+    std::printf ("[audio test] pre-listening of a sound file in the browser\n");
+    AudioRig r (256);
+    const auto a = r.folder.getChildFile ("a.wav"), b = r.folder.getChildFile ("b.wav");
+    writeWav (a, sine (24000, 500.0, 0.5f, 44100.0), 44100.0);
+    writeWav (b, sine (48000, 300.0, 0.5f));
+    r.f.engine.setPreviewVolumeDb (0.0f);
+    check (r.f.engine.previewAudioFile (a), "a readable file previews");
+    r.f.engine.getAudioPool().waitForLoads();
+    daw::rt::resetViolations();
+    r.run (4096);
+    float peak = 0.0f;
+    for (auto s : r.left)
+        peak = std::max (peak, std::abs (s));
+    check (std::abs (peak - 0.5f) < 0.02f, "it plays at its level: " + juce::String (peak));
+    check (r.f.engine.previewAudioFile (b) && ! r.f.engine.previewAudioFile (r.folder.getChildFile ("none.wav")), "switching, a missing file");
+    r.f.engine.getAudioPool().waitForLoads();
+    r.left.clear();
+    r.run (48000);
+    check (daw::rt::violationCount() == 0, "no heap use on the audio thread");
+    check (! r.f.engine.isPreviewSounding(), "a missing file stops the preview");
+}
+
 void testSchemaAndTracks()
 {
     std::printf ("[audio test] schema 3, audio tracks, a saved audio clip loads again\n");
@@ -305,5 +329,6 @@ void tests::runAudioTests()
     testSessionPlayback();
     testArrangementPlayback();
     testLoadingFile();
+    testPreview();
     testSchemaAndTracks();
 }
