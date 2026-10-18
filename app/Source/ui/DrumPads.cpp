@@ -25,8 +25,11 @@ struct KnobSpec
 
 const std::vector<KnobSpec>& knobSpecs()
 {
-    static const std::vector<KnobSpec> specs { { PadParam::tune, &Strings::drums::tune },   { PadParam::decay, &Strings::drums::decay },
-                                               { PadParam::cutoff, &Strings::drums::cutoff }, { PadParam::drive, &Strings::drums::drive },
+    // Attack and resonance borrow the effect parameter names, which say the same thing.
+    static const juce::String attack = Strings::fx::paramName ({}, "attack", "Attack"), resonance = Strings::fx::paramName ({}, "resonance", "Resonance");
+    static const std::vector<KnobSpec> specs { { PadParam::tune, &Strings::drums::tune },       { PadParam::attack, &attack },
+                                               { PadParam::decay, &Strings::drums::decay },     { PadParam::drive, &Strings::drums::drive },
+                                               { PadParam::cutoff, &Strings::drums::cutoff },   { PadParam::resonance, &resonance },
                                                { PadParam::volumeDb, &Strings::drums::volume }, { PadParam::pan, &Strings::drums::pan } };
     return specs;
 }
@@ -57,9 +60,9 @@ juce::String textOf (PadParam p, float v)
         case PadParam::volumeDb:
         case PadParam::drive: return juce::String (v, 1) + " dB";
         case PadParam::pan: return std::abs (v) < 0.01f ? juce::String ("C") : (v < 0 ? "L" : "R") + juce::String (juce::roundToInt (std::abs (v) * 100.0f));
+        case PadParam::attack: return juce::String (v, v < 10.0f ? 1 : 0) + " ms";
+        case PadParam::resonance: return juce::String (juce::roundToInt (v * 100.0f)) + " %";
         case PadParam::fine:
-        case PadParam::attack:
-        case PadParam::resonance:
         case PadParam::startOffset:
         case PadParam::reverse:
         case PadParam::velocitySens:
@@ -117,7 +120,7 @@ void DrumPads::resized()
 {
     auto area = getLocalBounds().withTrimmedLeft (getHeight() * 4 / 3 + 8).reduced (4, 6);
     area.removeFromTop (18); // the name of the selected pad
-    const int cols = 3, w = juce::jmin (58, area.getWidth() / cols), h = juce::jmin (54, area.getHeight() / 2);
+    const int cols = 4, w = juce::jmin (58, area.getWidth() / cols), h = juce::jmin (54, area.getHeight() / 2);
     for (size_t i = 0; i < knobs.size(); ++i)
         knobs[i]->knob.setBounds (area.getX() + (int) (i % cols) * w, area.getY() + (int) (i / cols) * h, w, h);
 }

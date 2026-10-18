@@ -13,7 +13,7 @@ namespace
 {
 constexpr int kBraceTop = ArrangementView::kMarkerLaneHeight;
 constexpr int kBarsTop = ArrangementView::kMarkerLaneHeight + ArrangementView::kBraceHeight;
-constexpr int kEdgeGrab = 5;
+constexpr int kEdgeGrab = 7;
 
 juce::Colour markerColour (const MarkerRef& m)
 {

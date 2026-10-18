@@ -19,6 +19,7 @@ constexpr int kDeviceHeaderHeight = 26;
 constexpr int kKnobCellWidth = 54, kKnobCellHeight = 50;
 constexpr int kArrowGap = 26;
 constexpr int kFoldedWidth = 34;
+constexpr int kFoldedHeaderHeight = kDeviceHeaderHeight + 22; // power dot, then the unfold arrow
 
 // The eight knobs of the compact Prisma view (task 1.4): parameter id and caption.
 struct MacroSpec
@@ -258,6 +259,8 @@ public:
 
     juce::String helpAt (juce::Point<int> p) const override
     {
+        if (folded)
+            return powerRect().contains (p) ? Strings::help::devicePower : Strings::help::deviceUnfold;
         if (p.y < kDeviceHeaderHeight)
         {
             if (powerRect().contains (p))
@@ -287,7 +290,7 @@ public:
 
         // header
         g.setColour (t.line);
-        g.fillRect (1, kDeviceHeaderHeight - 1, getWidth() - 2, 1);
+        g.fillRect (1, (folded ? kFoldedHeaderHeight : kDeviceHeaderHeight) - 1, getWidth() - 2, 1);
 
         const auto power = powerRect().toFloat();
         const auto dot = power.withSizeKeepingCentre (10.0f, 10.0f);
@@ -302,12 +305,22 @@ public:
 
         if (folded)
         {
-            // Rotated name in the narrow strip.
+            // The unfold arrow under the power dot, then the rotated name down the narrow strip.
+            const auto box = foldRect();
+            if (hoverPart == Part::fold)
+            {
+                g.setColour (t.panel2);
+                g.fillRoundedRectangle (box.toFloat(), 3.0f);
+            }
+            g.setColour (hoverPart == Part::fold ? t.text : t.dimText);
+            g.fillPath (icons::triangle (juce::Rectangle<float> (6.0f, 6.0f).withCentre (box.toFloat().getCentre()), 1));
+
+            const float cx = (float) getWidth() * 0.5f, top = (float) kFoldedHeaderHeight + 6.0f;
             g.saveState();
-            g.addTransform (juce::AffineTransform::rotation (juce::MathConstants<float>::halfPi, 17.0f, (float) kDeviceHeaderHeight + 4.0f));
-            g.setColour (t.text);
+            g.addTransform (juce::AffineTransform::rotation (juce::MathConstants<float>::halfPi, cx, top));
+            g.setColour (missing ? t.dimText : t.text);
             g.setFont (t.uiFont (12.0f, 600));
-            g.drawText (title, juce::Rectangle<int> (17, kDeviceHeaderHeight + 4 - 8, getHeight() - kDeviceHeaderHeight - 12, 16), juce::Justification::centredLeft, true);
+            g.drawText (title, juce::Rectangle<float> (cx, top - 8.0f, (float) getHeight() - top - 8.0f, 16.0f), juce::Justification::centredLeft, true);
             g.restoreState();
         }
         else
@@ -424,7 +437,9 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
-        if (pressedPart != Part::header || e.getDistanceFromDragStart() < 6)
+        // The header moves the device; a folded strip is all header.
+        const bool grab = pressedPart == Part::header || (folded && pressedPart == Part::fold);
+        if (! grab || e.getDistanceFromDragStart() < 6)
             return;
         dragging = true;
         if (onDragMoved)
@@ -482,7 +497,8 @@ private:
     // The first device of a track is its instrument.
     bool isInstrument() const { return owner.model.findDevice (deviceId).state.getParent().indexOf (owner.model.findDevice (deviceId).state) == 0; }
 
-    juce::Rectangle<int> powerRect() const { return { 4, 3, 20, 20 }; }
+    // Folded, the strip is narrow: the power dot sits in its middle and the unfold arrow under it.
+    juce::Rectangle<int> powerRect() const { return folded ? juce::Rectangle<int> ((getWidth() - 20) / 2, 3, 20, 20) : juce::Rectangle<int> (4, 3, 20, 20); }
     juce::Rectangle<int> sidechainRect() const { return { 12, getHeight() - 20, getWidth() - 24, 16 }; }
 
     void showSidechainMenu()
@@ -507,17 +523,18 @@ private:
     }
     juce::Rectangle<int> closeRect() const { return { getWidth() - 22, 4, 18, 18 }; }
     juce::Rectangle<int> openRect() const { return { getWidth() - 42, 4, 18, 18 }; }
-    juce::Rectangle<int> foldRect() const { return { getWidth() - 62, 4, 18, 18 }; }
+    juce::Rectangle<int> foldRect() const { return folded ? juce::Rectangle<int> ((getWidth() - 18) / 2, kDeviceHeaderHeight + 2, 18, 18) : juce::Rectangle<int> (getWidth() - 62, 4, 18, 18); }
     juce::Rectangle<int> presetRect() const { return { getWidth() - 82, 4, 18, 18 }; }
 
     Part partAt (juce::Point<int> p) const
     {
+        // A click anywhere on a folded strip but the power dot unfolds it.
+        if (folded)
+            return powerRect().contains (p) ? Part::power : Part::fold;
         if (p.y >= kDeviceHeaderHeight)
             return Part::none;
         if (powerRect().contains (p))
             return Part::power;
-        if (folded)
-            return Part::header;
         if (closeRect().contains (p))
             return Part::close;
         if (openRect().contains (p))
@@ -534,7 +551,7 @@ private:
         if (part != hoverPart)
         {
             hoverPart = part;
-            repaint (0, 0, getWidth(), kDeviceHeaderHeight);
+            repaint (0, 0, getWidth(), folded ? kFoldedHeaderHeight : kDeviceHeaderHeight);
         }
     }
 
@@ -622,6 +639,7 @@ public:
         }
         dropZone = { x, pad, 180, h - 2 * pad };
         setSize (juce::jmax (x + 180 + pad, owner.viewport.getMaximumVisibleWidth()), h);
+        repaint(); // the arrows and the drop zone move with the devices (folding changes the widths)
     }
 
     void tick()

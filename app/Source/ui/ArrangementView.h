@@ -42,7 +42,7 @@ class ArrangementView final : public juce::Component,
                               private juce::ScrollBar::Listener
 {
 public:
-    static constexpr int kHeaderWidth = 208, kMarkerLaneHeight = 20, kBraceHeight = 8, kBarRulerHeight = 24;
+    static constexpr int kHeaderWidth = 208, kMarkerLaneHeight = 20, kBraceHeight = 14, kBarRulerHeight = 24;
     static constexpr int kRulerHeight = kMarkerLaneHeight + kBraceHeight + kBarRulerHeight;
     static constexpr int kMinimapHeight = 36, kScrollBar = 10;
     static constexpr int kMinTrackHeight = 24, kMaxTrackHeight = 240, kDefaultTrackHeight = 84;

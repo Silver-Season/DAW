@@ -1022,6 +1022,7 @@ inline const juce::String devicePower = make (utf8 ("Выключатель ус
 inline const juce::String devicePresets = make (utf8 ("Пресеты устройства"), utf8 ("Пресеты этого устройства и сохранение ваших настроек в библиотеку."));
 inline const juce::String devicePresetsInstrument = make (utf8 ("Пресеты инструмента"), utf8 ("Пресеты инструмента, замена инструмента и сохранение ваших настроек в библиотеку."));
 inline const juce::String deviceFold = make (utf8 ("Свернуть"), utf8 ("Сворачивает устройство в узкую полосу."));
+inline const juce::String deviceUnfold = make (utf8 ("Развернуть"), utf8 ("Возвращает устройство из узкой полосы. Щелчок в любом месте полосы."));
 inline const juce::String deviceOpen = make (utf8 ("Открыть в окне"), utf8 ("Полный редактор устройства в отдельном окне."));
 inline const juce::String deviceClose = make (utf8 ("Удалить устройство"), utf8 ("Убирает устройство из цепочки. Cmd+Z возвращает."));
 inline const juce::String deviceHeader = make (utf8 ("Заголовок устройства"), utf8 ("Тяните, чтобы переставить устройство. Delete удаляет выделенное."));
