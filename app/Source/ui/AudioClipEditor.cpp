@@ -372,6 +372,14 @@ private:
                 addAndMakeVisible (f);
 
             reverseChip.onClick = [this] { owner.setReverse (! owner.clip().reverse()); };
+            tempoChip.onClick = [this] {
+                if (const auto c = owner.clip(); c.isValid())
+                {
+                    owner.model.undo.beginNewTransaction (Strings::audioUi::undoFollowTempo);
+                    c.setFollowTempo (! c.followTempo(), &owner.model.undo);
+                }
+            };
+            addAndMakeVisible (tempoChip);
             loopChip.onClick = [this] { owner.setLoopEnabled (! owner.clip().loopEnabled()); };
             snapChip.onClick = [this] {
                 owner.v.snap = ! owner.v.snap;
@@ -444,6 +452,12 @@ private:
             set (fadeInField, c.fadeIn());
             set (fadeOutField, c.fadeOut());
             reverseChip.setOn (c.reverse());
+            {
+                const double fileTempo = owner.model.findAudioFile (c.fileId()).tempo();
+                tempoChip.setEnabled (fileTempo > 0.0);
+                tempoChip.setOn (c.followTempo() && fileTempo > 0.0);
+                tempoChip.setText (fileTempo > 0.0 ? Strings::audioUi::followTempo (fileTempo) : Strings::audioUi::tempoUnknown);
+            }
             loopChip.setOn (c.loopEnabled());
             snapChip.setOn (owner.v.snap);
             gridChip.setText (Strings::audioUi::grid + ": " + owner.gridText());
@@ -501,6 +515,8 @@ private:
             snapChip.setBounds (kMarginProps, y, w / 2 - 2, kRow);
             gridChip.setBounds (kMarginProps + w / 2 + 2, y, w - w / 2 - 2, kRow);
             y += kRow + kGap;
+            tempoChip.setBounds (kMarginProps, y, w, kRow);
+            y += kRow + kGap;
             noteY = y;
             y += 30 + kMarginProps;
             height = y;
@@ -530,6 +546,7 @@ private:
                 g.drawText (*more[i], kMarginProps + 2, braceY + i * (kRow + kGap), w - 80, kRow, juce::Justification::centredLeft, true);
             g.setFont (t.uiFont (11.0f));
             g.drawFittedText (Strings::audioUi::warpSoon, kMarginProps + 2, noteY, w - 4, 30, juce::Justification::topLeft, 2);
+            juce::ignoreUnused (noteY);
         }
 
     private:
@@ -551,6 +568,7 @@ private:
         AudioClipEditor& owner;
         NameField nameField;
         Chip reverseChip, loopChip, snapChip, gridChip;
+        Chip tempoChip { Strings::audioUi::tempoUnknown, Strings::help::audioFollowTempo, true };
         NumberField gainField, transposeField, detuneField, loopStartField, loopEndField, startField, fadeInField, fadeOutField;
         juce::String info, rateWarning;
         int infoY = 0, warningY = -1, labelY = 0, braceY = 0, noteY = 0, height = 0;

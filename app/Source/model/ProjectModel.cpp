@@ -334,7 +334,8 @@ juce::ValueTree ProjectModel::makeAudioClipNode (const TrackRef& track, int64_t 
     c.setProperty (ids::sampleStart, 0.0, nullptr);
     c.setProperty (ids::gainDb, 0.0, nullptr);
     c.setProperty (ids::transpose, 0, nullptr);
-    c.setProperty (ids::warp, false, nullptr); // stage 7
+    // A loop whose tempo is known follows the project tempo from the start (Re-Pitch until stage 7 brings warping).
+    c.setProperty (ids::warp, findAudioFile (fileId).tempo() > 0.0, nullptr);
     return c;
 }
 

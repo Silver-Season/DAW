@@ -89,6 +89,9 @@ public:
     int transpose() const { return juce::jlimit (-48, 48, get<int> (ids::transpose, 0)); } // semitones, by resampling
     int detune() const { return juce::jlimit (-50, 50, get<int> (ids::detune, 0)); }       // cents
     bool reverse() const { return get<bool> (ids::reverse, false); }
+    // Follow the project tempo (the file's tempo must be known): until stage 7 this is Re-Pitch, the pitch moves with it.
+    bool followTempo() const { return get<bool> (ids::warp, false); }
+    void setFollowTempo (bool v, juce::UndoManager* um) const { set (ids::warp, v, um); }
     double fadeIn() const { return juce::jmax (0.0, get<double> (ids::fadeIn, 0.0)); }   // beats, arrangement only
     double fadeOut() const { return juce::jmax (0.0, get<double> (ids::fadeOut, 0.0)); } // beats, arrangement only
     double pitchRatio() const { return std::pow (2.0, transpose() / 12.0 + detune() / 1200.0); }

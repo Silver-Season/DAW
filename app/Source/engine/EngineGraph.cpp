@@ -65,6 +65,7 @@ uint64_t hashClip (const ClipRef& clip)
         h.add (clip.reverse());
         h.add (clip.fadeIn());
         h.add (clip.fadeOut());
+        h.add (clip.followTempo());
     }
     return h.h;
 }
@@ -539,6 +540,8 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
             part->reverse = clip.reverse();
             part->fadeIn = clip.fadeIn();
             part->fadeOut = clip.fadeOut();
+            if (const auto file = model->findAudioFile (clip.fileId()); clip.followTempo() && file.tempo() > 0.0)
+                part->fileFramesPerBeat = file.sampleRate() * 60.0 / file.tempo();
             c->audio = std::move (part);
             c->notes.clear(); // an audio clip has no notes, whatever a hand-edited file says
             c->controllers.clear();
