@@ -216,7 +216,7 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
         juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (r.toNearestInt());
         // the grid goes on under the notes and the waveform, so they can be lined up by eye
-        paintGrid (g, r.toNearestInt(), t.clipInk, 0.3f * a);
+        paintGrid (g, r.toNearestInt(), t.clipInk, 0.22f * a);
         if (audio)
             paintAudio (g, c, r, clipLength, clipOffset, t.clipInk);
         else

@@ -559,9 +559,7 @@ private:
             tempoField.setBounds (kMarginProps, y, w - 2 * 34 - 4, kRow);
             doubleChip.setBounds (kMarginProps + w - 2 * 34 - 2, y, 32, kRow);
             halveChip.setBounds (kMarginProps + w - 34, y, 34, kRow);
-            y += kRow + kGap;
-            noteY = y;
-            y += 30 + kMarginProps;
+            y += kRow + kMarginProps;
             height = y;
         }
 
@@ -587,9 +585,6 @@ private:
                                             &Strings::audioUi::fadeIn, &Strings::audioUi::fadeOut };
             for (int i = 0; i < 5; ++i)
                 g.drawText (*more[i], kMarginProps + 2, braceY + i * (kRow + kGap), w - 80, kRow, juce::Justification::centredLeft, true);
-            g.setFont (t.uiFont (11.0f));
-            g.drawFittedText (Strings::audioUi::warpSoon, kMarginProps + 2, noteY, w - 4, 30, juce::Justification::topLeft, 2);
-            juce::ignoreUnused (noteY);
         }
 
     private:
@@ -660,7 +655,7 @@ private:
         }
         NumberField gainField, transposeField, detuneField, loopStartField, loopEndField, startField, fadeInField, fadeOutField;
         juce::String info, rateWarning;
-        int infoY = 0, warningY = -1, labelY = 0, braceY = 0, noteY = 0, height = 0;
+        int infoY = 0, warningY = -1, labelY = 0, braceY = 0, height = 0;
         bool layoutDirty = true;
     };
 

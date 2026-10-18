@@ -222,7 +222,7 @@ public:
         volume.setSuffix (" dB");
         volume.setFontHeight (11.0f);
         volume.setDragSensitivity (0.2);
-        volume.setWheelStep (0.1);
+        volume.setWheelStep (0.0); // the wheel scrolls the tracks: a volume changed by scrolling past it was a misclick
         volume.setHelpText (Strings::help::arrHeaderVolume);
         volume.onGestureStart = [this] { view.model.undo.beginNewTransaction (Strings::undoTrackVolume); };
         volume.onValueChange = [this] (double db) {

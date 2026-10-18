@@ -113,7 +113,7 @@ public:
     void setSuffix (const juce::String& s) { suffix = s; repaint(); }
     void setDecimals (int d) { decimals = d; repaint(); }
     void setDragSensitivity (double unitsPerPixel) { sensitivity = unitsPerPixel; }
-    void setWheelStep (double step) { wheelStep = step; }
+    void setWheelStep (double step) { wheelStep = step; } // 0: the wheel passes through to the view behind
     void setBoxed (bool b) { boxed = b; repaint(); }
     void setFontHeight (float h) { fontHeight = h; repaint(); }
     void setJustification (juce::Justification j) { justification = j; repaint(); }

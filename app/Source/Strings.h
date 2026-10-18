@@ -1246,7 +1246,6 @@ inline const juce::String reverse = tr ("Reverse", "Обратно");
 inline const juce::String loop = tr ("Loop", "Петля");
 inline const juce::String fadeIn = tr ("Fade in (timeline)", "Фейд-ин (шкала)");
 inline const juce::String fadeOut = tr ("Fade out (timeline)", "Фейд-аут (шкала)");
-inline const juce::String warpSoon = tr ("Stretching without pitch change: stage 7", "Растяжение без смены высоты: этап 7");
 inline juce::String followTempo (double bpm)
 {
     if (isRussian())
