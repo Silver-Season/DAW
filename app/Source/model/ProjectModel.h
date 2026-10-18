@@ -10,7 +10,7 @@
 class ProjectModel
 {
 public:
-    static constexpr int kSchemaVersion = 3; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3); 3: AUDIOFILES (stage 5)
+    static constexpr int kSchemaVersion = 4; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3); 3: AUDIOFILES (stage 5); 4: clip warp tempo and mode (stage 7)
     static constexpr int kMaxUndoTransactions = 500;
 
     juce::ValueTree root;
@@ -218,6 +218,7 @@ public:
     // Adds a FILE to the pool (undoable, in the caller's transaction) and returns it.
     AudioFileRef addAudioFile (const AudioFileInfo&);
     // A new audio clip in a slot, replacing what is there: it plays the whole file from its start, looped, `lengthBeats` long.
+    static juce::String warpModeFor (const AudioFileRef&);
     ClipRef createAudioClip (const TrackRef&, int scene, int64_t fileId, double lengthBeats, const juce::String& name);
     // The CLIP node of a new audio clip, not yet in the tree (for arrangement clips and recordings).
     juce::ValueTree makeAudioClipNode (const TrackRef&, int64_t fileId, double lengthBeats, const juce::String& name);

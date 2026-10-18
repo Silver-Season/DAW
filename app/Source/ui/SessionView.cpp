@@ -519,7 +519,7 @@ public:
                     const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (4.0f).withTrimmedTop (15.0f).withTrimmedBottom (3.0f); // under the name
                     juce::Graphics::ScopedSaveState save (g);
                     g.reduceClipRegion (cell.toNearestInt());
-                    drawAudioWaveform (g, area, *audioSource, clip, 0.0, false, clip.lengthBeats(), view.model.tempo(), t.clipInk.withAlpha (0.7f));
+                    drawAudioWaveform (g, area, *audioSource, clip, 0.0, false, clip.lengthBeats(), clip.contentTempo (view.model.tempo()), t.clipInk.withAlpha (0.7f));
                     if (audioSource->peaksAvailable.load (std::memory_order_acquire) < audioSource->numPeaks)
                         peaksPending = true; // still decoding: repaint on the next tick to show more
                 }
@@ -1036,6 +1036,7 @@ public:
         pan.setBipolar (true);
         pan.setDefaultValue (0.5);
         pan.setHelpText (Strings::help::panKnob);
+        pan.setWheelChangesValue (false);
         pan.valueText = [] (double val) {
             const int p = juce::roundToInt ((val * 2.0 - 1.0) * 50.0);
             return p == 0 ? juce::String ("C") : juce::String (std::abs (p)) + (p < 0 ? "L" : "R");

@@ -190,7 +190,7 @@ struct EngineCommand
 {
     enum class Type : uint8_t
     {
-        launchClip,
+        launchClip,    // trackId, sceneIndex; beat > 0: launch on that grid instead of the launch quantisation
         launchScene,
         resume,
         stopTrack,
@@ -202,7 +202,7 @@ struct EngineCommand
         seek,           // beat: the song position jumps there now
         seekQuantised,  // beat: the song position jumps there at the next launch-quantisation boundary (now if stopped)
         rewind,         // the song position goes to 0
-        backToArrangement, // stops the session clips and gives every track back to the arrangement at the next boundary
+        backToArrangement, // trackId (-1 = all): stops the session clips and gives the track back to the arrangement at the next boundary
         startArrangementRecord, // record onto the timeline (task 3.4): beat = nothing, the engine picks the start
         stopArrangementRecord
     };

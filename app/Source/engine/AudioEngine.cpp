@@ -47,6 +47,7 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
     knownPlugins.addChangeListener (this);
 
     playHead = std::make_unique<PlayHead> (*this);
+    warp.onStretchReady = [this] { graphDirty = true; };
     correctionMs = settings.recordCorrectionMs();
     audioCorrectionMs = settings.audioLatencyCorrectionMs();
     for (int i = 0; i < kMaxInputChannels; ++i)
@@ -249,9 +250,14 @@ bool AudioEngine::rewindSong()
     return pushCommand ({ EngineCommand::Type::rewind, -1, -1 });
 }
 
-bool AudioEngine::backToArrangement()
+bool AudioEngine::backToArrangement (int64_t trackId)
 {
-    return pushCommand ({ EngineCommand::Type::backToArrangement, -1, -1 });
+    return pushCommand ({ EngineCommand::Type::backToArrangement, trackId, -1 });
+}
+
+bool AudioEngine::launchClipOnBar (int64_t trackId, int scene)
+{
+    return pushCommand ({ EngineCommand::Type::launchClip, trackId, scene, juce::jmax (1.0, beatsPerBar.load()) });
 }
 
 bool AudioEngine::startRecord (int64_t trackId, int scene, bool noOverdub)
@@ -570,9 +576,9 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
         if (end < rt.recordEndBeat.load())
             rt.recordEndBeat = end;
     };
-    const auto launch = [&] (const PlaybackGraph::Track& t, int scene, const daw::engine::MidiClip* clip) {
+    const auto launch = [&] (const PlaybackGraph::Track& t, int scene, const daw::engine::MidiClip* clip, double quantiseBeats) {
         recordingEndsWithLaunch (*t.runtime);
-        t.runtime->player.launch (scene, clip, now, q);
+        t.runtime->player.launch (scene, clip, now, quantiseBeats);
         playing = true; // launching a clip starts the transport
     };
 
@@ -653,13 +659,13 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
             case EngineCommand::Type::launchClip:
                 if (auto* t = findTrack (c.trackId))
                     if (auto* clip = slotClip (*t, c.sceneIndex))
-                        launch (*t, c.sceneIndex, clip);
+                        launch (*t, c.sceneIndex, clip, c.beat > 0.0 && playing.load() ? c.beat : q); // beat: a quantisation of its own
                 break;
             case EngineCommand::Type::launchScene:
                 for (const auto& t : graph.tracks)
                 {
                     if (auto* clip = slotClip (t, c.sceneIndex))
-                        launch (t, c.sceneIndex, clip);
+                        launch (t, c.sceneIndex, clip, q);
                     else
                         t.runtime->player.stop (now, q);
                 }
@@ -706,6 +712,8 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 for (const auto& t : graph.tracks)
                 {
                     auto& rt = *t.runtime;
+                    if (c.trackId >= 0 && rt.trackId != c.trackId)
+                        continue; // only the one track
                     if (! rt.inSession.load() && rt.player.playingSlot() == daw::engine::ClipPlayer::kNoClip)
                         continue; // already plays its arrangement
                     rt.player.stop (now, q);
@@ -1680,4 +1688,54 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
     for (const auto& t : graph->tracks)
         anyInSessionNow = anyInSessionNow || t.runtime->inSession.load (std::memory_order_relaxed);
     anyInSession.store (anyInSessionNow, std::memory_order_relaxed);
+}
+
+//==============================================================================
+void AudioEngine::analyseAudioFile (int64_t fileId)
+{
+    if (model == nullptr)
+        return;
+    const auto fileNode = model->findAudioFile (fileId);
+    const auto file = resolveAudioFile (fileNode);
+    if (! fileNode.isValid() || ! file.existsAsFile() || fileNode.tempo() > 0.0)
+        return;
+    warp.analyse (file, [this, fileId] (const WarpService::Analysis& a) {
+        if (model == nullptr)
+            return;
+        auto node = model->findAudioFile (fileId);
+        if (! node.isValid())
+            return;
+        node.state.setProperty (ids::analysed, true, nullptr);
+        if (a.bpm <= 0.0)
+            return;
+        node.state.setProperty (ids::tempo, a.bpm, nullptr);
+        node.state.setProperty (ids::firstBeat, a.firstBeatSeconds, nullptr);
+        // The clips made before the answer came: they start on the first downbeat and follow the project tempo, and
+        // their length becomes the file's length in its own beats (an arrangement clip that showed all of it too).
+        const auto mode = ProjectModel::warpModeFor (node);
+        const double start = a.firstBeatSeconds * node.sampleRate();
+        const double beats = std::max (0.25, ((double) node.lengthSamples() - start) / node.sampleRate() * a.bpm / 60.0);
+        const auto update = [&] (const ClipRef& clip) {
+            if (! clip.isValid() || ! clip.isAudio() || clip.fileId() != fileId || clip.originalTempo() > 0.0)
+                return;
+            const double oldLength = clip.lengthBeats();
+            clip.state.setProperty (ids::originalTempo, a.bpm, nullptr);
+            clip.state.setProperty (ids::warpMode, mode, nullptr);
+            clip.state.setProperty (ids::warp, true, nullptr);
+            if (clip.sampleStart() <= 0.0)
+                clip.state.setProperty (ids::sampleStart, start, nullptr);
+            clip.setLengthBeats (beats, nullptr);
+            if (clip.loopStart() >= beats)
+                clip.setLoopStart (0.0, nullptr);
+            if (auto parent = clip.state.getParent(); parent.hasType (ids::ACLIP) && std::abs ((double) parent.getProperty (ids::length, 0.0) - oldLength) < 1.0e-6)
+                parent.setProperty (ids::length, beats, nullptr);
+        };
+        for (const auto& t : model->tracks())
+        {
+            for (int s = 0; s < t.numSlots(); ++s)
+                update (t.clipAt (s));
+            for (const auto& c : t.arrangementClips())
+                update (c.clip());
+        }
+    });
 }

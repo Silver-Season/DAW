@@ -273,6 +273,8 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             applyProjectProperties();
         }
+        if (property == ids::tempo)
+            graphDirty = true; // warped clips stretch by the ratio of their tempo to the project's
     }
     else if (type == ids::FILE)
         graphDirty = true; // a lost file was found again: its clips get the new source
@@ -510,11 +512,26 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
     used.insert (id);
     auto hash = hashClip (clip);
     std::shared_ptr<daw::engine::AudioSource> source;
+    double stretchRatio = 1.0;
     if (clip.isAudio())
     {
         source = audioSourceFor (clip.fileId());
+        // Warp: a clip that follows the project tempo plays a stretched copy of its file once one is rendered, and the
+        // original resampled meanwhile (Re-Pitch, the same timing).
+        if (clip.followTempo() && clip.warpMode() != "repitch")
+        {
+            const double ratio = clip.originalTempo() / juce::jmax (1.0, model->tempo());
+            if (std::abs (ratio - 1.0) > 1.0e-4)
+                if (auto copy = warp.stretched (source, ratio, clip.warpMode()))
+                {
+                    stretchRatio = ratio;
+                    source = std::move (copy);
+                }
+        }
         const auto p = reinterpret_cast<uintptr_t> (source.get());
         hash ^= (uint64_t) p * 0x9E3779B97F4A7C15ULL; // a relinked or reloaded file is another clip
+        if (clip.followTempo())
+            hash ^= std::hash<double>() (model->tempo() * 1000.0 + clip.originalTempo());
     }
 
     auto& entry = clipCache[id];
@@ -540,8 +557,12 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
             part->reverse = clip.reverse();
             part->fadeIn = clip.fadeIn();
             part->fadeOut = clip.fadeOut();
-            if (const auto file = model->findAudioFile (clip.fileId()); clip.followTempo() && file.tempo() > 0.0)
-                part->fileFramesPerBeat = file.sampleRate() * 60.0 / file.tempo();
+            if (clip.followTempo() && source != nullptr)
+            {
+                // A stretched copy already runs at the project tempo; the original is read at its own.
+                part->sampleStart = clip.sampleStart() * stretchRatio;
+                part->fileFramesPerBeat = source->sampleRate * 60.0 / (std::abs (stretchRatio - 1.0) > 1.0e-9 ? model->tempo() : clip.originalTempo());
+            }
             c->audio = std::move (part);
             c->notes.clear(); // an audio clip has no notes, whatever a hand-edited file says
             c->controllers.clear();
@@ -566,6 +587,12 @@ void AudioEngine::rebuildGraph()
         return;
     graphDirty = false;
     peekedSources.clear(); // what the views remembered may have moved, been found or been lost
+    warp.beginUse();
+    struct EndUse
+    {
+        WarpService& w;
+        ~EndUse() { w.endUse(); }
+    } endUse { warp };
 
     const uint64_t generation = generationCounter.load() + 1;
     auto graph = std::make_unique<PlaybackGraph>();

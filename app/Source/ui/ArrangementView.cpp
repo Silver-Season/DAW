@@ -196,12 +196,12 @@ void ArrangementView::clampView()
     const double minPx = juce::jmax (kMinPxPerBeat, (double) lanesWidth() / total);
     v.pxPerBeat = juce::jlimit (minPx, kMaxPxPerBeat, v.pxPerBeat);
     v.scrollBeats = juce::jlimit (0.0, juce::jmax (0.0, total - visibleBeats()), v.scrollBeats);
-    v.scrollY = juce::jlimit (0, juce::jmax (0, rowsTotalHeight - lanesHeight()), v.scrollY);
+    v.scrollY = juce::jlimit (0, juce::jmax (0, rowsTotalHeight + kAddTrackArea - lanesHeight()), v.scrollY);
 }
 
 void ArrangementView::updateScrollBar()
 {
-    vbar.setRangeLimits (0.0, (double) juce::jmax (rowsTotalHeight, lanesHeight()));
+    vbar.setRangeLimits (0.0, (double) juce::jmax (rowsTotalHeight + kAddTrackArea, lanesHeight()));
     vbar.setCurrentRange ((double) v.scrollY, (double) lanesHeight(), juce::dontSendNotification);
 }
 
@@ -1443,7 +1443,7 @@ bool ArrangementView::isInterestedInDragSource (const SourceDetails& d)
     if (parseSessionClip (d.description, track, scene))
         return true;
     browser::DragItem item;
-    return dropActions != nullptr && browser::parseDrag (d.description, item) && item.kind == browser::kinds::audioFile;
+    return dropActions != nullptr && browser::parseDrag (d.description, item);
 }
 
 void ArrangementView::setDropHint (const DropHint& h)
@@ -1452,6 +1452,15 @@ void ArrangementView::setDropHint (const DropHint& h)
         return;
     drop = h;
     lanesPart->repaint();
+}
+
+ArrangementView::DropHint ArrangementView::browserDropHintAt (const browser::DragItem& item, juce::Point<int> viewPoint) const
+{
+    auto hint = soundDropHintAt (viewPoint);
+    if (! hint.audio || item.kind == browser::kinds::audioFile)
+        return hint;
+    hint.valid = dropActions->acceptsOnTimeline (item, hint.newTracks ? -1 : layoutRows[(size_t) hint.row].trackId);
+    return hint;
 }
 
 ArrangementView::DropHint ArrangementView::soundDropHintAt (juce::Point<int> viewPoint) const
@@ -1484,8 +1493,8 @@ void ArrangementView::itemDragMove (const SourceDetails& d)
     browser::DragItem item;
     if (! parseSessionClip (d.description, trackId, scene))
     {
-        if (dropActions != nullptr && browser::parseDrag (d.description, item) && item.kind == browser::kinds::audioFile)
-            setDropHint (soundDropHintAt (d.localPosition));
+        if (dropActions != nullptr && browser::parseDrag (d.description, item))
+            setDropHint (browserDropHintAt (item, d.localPosition));
         return;
     }
     const auto source = model.findTrack (trackId).clipAt (scene);
@@ -1527,9 +1536,17 @@ void ArrangementView::itemDropped (const SourceDetails& d)
     if (! parseSessionClip (d.description, trackId, scene))
     {
         setDropHint ({});
-        if (dropActions != nullptr && browser::parseDrag (d.description, item) && item.kind == browser::kinds::audioFile)
+        if (dropActions != nullptr && browser::parseDrag (d.description, item))
         {
-            const auto result = dropSoundFiles ({ juce::File (item.path) }, d.localPosition, juce::ModifierKeys::currentModifiers.isCommandDown());
+            browser::DropResult result;
+            if (item.kind == browser::kinds::audioFile)
+                result = dropSoundFiles ({ juce::File (item.path) }, d.localPosition, juce::ModifierKeys::currentModifiers.isCommandDown());
+            else if (const auto hint = browserDropHintAt (item, d.localPosition); hint.audio && hint.valid)
+            {
+                result = dropActions->dropOnTimeline (item, hint.newTracks ? -1 : layoutRows[(size_t) hint.row].trackId, hint.beat);
+                if (result.ok && result.trackId >= 0)
+                    selectionState.selectTrack (result.trackId);
+            }
             if (! result.ok && result.message.isNotEmpty())
                 message (result.message);
         }
@@ -1553,7 +1570,7 @@ bool ArrangementView::isInterestedInFileDrag (const juce::StringArray& files)
     if (dropActions == nullptr)
         return false;
     for (const auto& f : files)
-        if (audioimport::isSoundFile (juce::File (f)))
+        if (audioimport::isSoundFile (juce::File (f)) || juce::File (f).hasFileExtension ("mid;midi"))
             return true;
     return files.isEmpty(); // some systems ask before they know the files
 }
@@ -1570,6 +1587,14 @@ void ArrangementView::filesDropped (const juce::StringArray& files, int x, int y
     for (const auto& f : files)
         if (audioimport::isSoundFile (juce::File (f)))
             sounds.add (juce::File (f));
+        else if (juce::File (f).hasFileExtension ("mid;midi") && dropActions != nullptr)
+        {
+            browser::DragItem item;
+            item.kind = browser::kinds::midiFile;
+            item.path = f;
+            if (const auto hint = browserDropHintAt (item, { x, y }); hint.audio && hint.valid)
+                dropActions->dropOnTimeline (item, hint.newTracks ? -1 : layoutRows[(size_t) hint.row].trackId, hint.beat);
+        }
     if (sounds.isEmpty())
         return;
     const auto result = dropSoundFiles (sounds, { x, y }, juce::ModifierKeys::currentModifiers.isCommandDown());

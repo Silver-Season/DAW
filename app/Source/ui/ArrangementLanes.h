@@ -67,7 +67,8 @@ private:
         autoBend
     };
 
-    void paintGrid (juce::Graphics&, juce::Rectangle<int> area) const;
+    // The bar / beat / grid lines over `area`; over a clip body they are drawn in its ink, fainter (`strength`).
+    void paintGrid (juce::Graphics&, juce::Rectangle<int> area, juce::Colour colour, float strength = 1.0f) const;
     void paintClip (juce::Graphics&, const ArrangementClipRef&, juce::Rectangle<float> r, double clipStart, double clipLength, double clipOffset,
                     float alpha, bool selected, bool inSession, bool muted) const;
     void paintNotes (juce::Graphics&, const ArrangementClipRef&, juce::Rectangle<float> r, double clipStart, double clipLength,

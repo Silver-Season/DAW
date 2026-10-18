@@ -1,5 +1,7 @@
 #include "AudioClipEditor.h"
 
+#include "../model/ClipEdit.h"
+
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "PaletteMenu.h"
@@ -143,6 +145,18 @@ public:
         repaint();
     }
 
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override
+    {
+        const float dx = w.isReversed ? -w.deltaX : w.deltaX, dy = w.isReversed ? -w.deltaY : w.deltaY;
+        const double shown = owner.viewBeats() / owner.zoomFactor();
+        if (e.mods.isShiftDown() || std::abs (dx) > std::abs (dy))
+            owner.scrollBy (-(double) (std::abs (dx) > std::abs (dy) ? dx : dy) * shown * 0.5);
+        else if (std::abs (dy) > 0.0f)
+            owner.zoomAround (e.x, std::pow (2.0, (double) dy * 2.0));
+    }
+
+    void mouseMagnify (const juce::MouseEvent& e, float scale) override { owner.zoomAround (e.x, (double) scale); }
+
 private:
     void paintRuler (juce::Graphics& g, const ClipRef& c)
     {
@@ -233,7 +247,7 @@ private:
         }
 
         const juce::Rectangle<float> area ((float) owner.beatToX (0.0), body.getY() + 4.0f, (float) (view * px), body.getHeight() - 8.0f);
-        drawAudioWaveform (g, area, *source, c, 0.0, false, view, owner.model.tempo(), t.palette (c.colour()));
+        drawAudioWaveform (g, area, *source, c, 0.0, false, view, c.contentTempo (owner.model.tempo()), t.palette (c.colour()));
 
         // what the clip does not play: before the start marker the content is dimmed, after the end there is nothing
         const float startX = (float) owner.beatToX (c.startOffset()), endX = (float) owner.beatToX (c.lengthBeats());
@@ -372,14 +386,32 @@ private:
                 addAndMakeVisible (f);
 
             reverseChip.onClick = [this] { owner.setReverse (! owner.clip().reverse()); };
+            // Warp: on/off, the mode, the tempo of the audio with x2 and /2 for a tempo found an octave off.
             tempoChip.onClick = [this] {
                 if (const auto c = owner.clip(); c.isValid())
                 {
                     owner.model.undo.beginNewTransaction (Strings::audioUi::undoFollowTempo);
-                    c.setFollowTempo (! c.followTempo(), &owner.model.undo);
+                    if (c.originalTempo() <= 0.0) // unknown: start from the project's, the user corrects it with the field
+                        c.setOriginalTempo (owner.model.tempo(), &owner.model.undo);
+                    c.setFollowTempo (! c.warpOn(), &owner.model.undo);
                 }
             };
-            addAndMakeVisible (tempoChip);
+            modeChip.onClick = [this] { showModeMenu(); };
+            doubleChip.onClick = [this] { scaleTempo (2.0); };
+            halveChip.onClick = [this] { scaleTempo (0.5); };
+            for (auto* c : std::initializer_list<juce::Component*> { &tempoChip, &modeChip, &doubleChip, &halveChip, &tempoField })
+                addAndMakeVisible (c);
+            tempoField.setHelpText (Strings::help::audioOriginalTempo);
+            tempoField.setRange (20.0, 999.0, 0.01);
+            tempoField.setDecimals (2);
+            tempoField.setDragSensitivity (0.05);
+            tempoField.setWheelStep (0.1);
+            tempoField.setFontHeight (12.0f);
+            tempoField.onGestureStart = [this] { owner.model.undo.beginNewTransaction (Strings::audioUi::undoClipTempo); };
+            tempoField.onValueChange = [this] (double bpm) {
+                if (const auto c = owner.clip(); c.isValid())
+                    setClipTempo (c, bpm);
+            };
             loopChip.onClick = [this] { owner.setLoopEnabled (! owner.clip().loopEnabled()); };
             snapChip.onClick = [this] {
                 owner.v.snap = ! owner.v.snap;
@@ -453,10 +485,16 @@ private:
             set (fadeOutField, c.fadeOut());
             reverseChip.setOn (c.reverse());
             {
-                const double fileTempo = owner.model.findAudioFile (c.fileId()).tempo();
-                tempoChip.setEnabled (fileTempo > 0.0);
-                tempoChip.setOn (c.followTempo() && fileTempo > 0.0);
-                tempoChip.setText (fileTempo > 0.0 ? Strings::audioUi::followTempo (fileTempo) : Strings::audioUi::tempoUnknown);
+                const auto file = owner.model.findAudioFile (c.fileId());
+                const bool analysing = c.originalTempo() <= 0.0 && ! file.analysed() && file.tempo() <= 0.0;
+                tempoChip.setOn (c.followTempo());
+                tempoChip.setText (analysing ? Strings::audioUi::analysing : Strings::audioUi::warp);
+                modeChip.setText (Strings::audioUi::warpModeName (c.warpMode()));
+                modeChip.setEnabled (c.followTempo());
+                if (! tempoField.isEditing())
+                    tempoField.setValue (c.originalTempo() > 0.0 ? c.originalTempo() : owner.model.tempo());
+                for (auto* comp : std::initializer_list<juce::Component*> { &tempoField, &doubleChip, &halveChip })
+                    comp->setEnabled (c.followTempo());
             }
             loopChip.setOn (c.loopEnabled());
             snapChip.setOn (owner.v.snap);
@@ -515,10 +553,13 @@ private:
             snapChip.setBounds (kMarginProps, y, w / 2 - 2, kRow);
             gridChip.setBounds (kMarginProps + w / 2 + 2, y, w - w / 2 - 2, kRow);
             y += kRow + kGap;
-            tempoChip.setBounds (kMarginProps, y, w, kRow);
+            tempoChip.setBounds (kMarginProps, y, w / 2 - 2, kRow);
+            modeChip.setBounds (kMarginProps + w / 2 + 2, y, w - w / 2 - 2, kRow);
             y += kRow + kGap;
-            noteY = y;
-            y += 30 + kMarginProps;
+            tempoField.setBounds (kMarginProps, y, w - 2 * 34 - 4, kRow);
+            doubleChip.setBounds (kMarginProps + w - 2 * 34 - 2, y, 32, kRow);
+            halveChip.setBounds (kMarginProps + w - 34, y, 34, kRow);
+            y += kRow + kMarginProps;
             height = y;
         }
 
@@ -544,9 +585,6 @@ private:
                                             &Strings::audioUi::fadeIn, &Strings::audioUi::fadeOut };
             for (int i = 0; i < 5; ++i)
                 g.drawText (*more[i], kMarginProps + 2, braceY + i * (kRow + kGap), w - 80, kRow, juce::Justification::centredLeft, true);
-            g.setFont (t.uiFont (11.0f));
-            g.drawFittedText (Strings::audioUi::warpSoon, kMarginProps + 2, noteY, w - 4, 30, juce::Justification::topLeft, 2);
-            juce::ignoreUnused (noteY);
         }
 
     private:
@@ -568,10 +606,56 @@ private:
         AudioClipEditor& owner;
         NameField nameField;
         Chip reverseChip, loopChip, snapChip, gridChip;
-        Chip tempoChip { Strings::audioUi::tempoUnknown, Strings::help::audioFollowTempo, true };
+        Chip tempoChip { Strings::audioUi::warp, Strings::help::audioFollowTempo, true };
+        Chip modeChip { {}, Strings::help::audioWarpMode, false };
+        Chip doubleChip { juce::String::fromUTF8 ("\xc3\x97" "2"), Strings::help::audioTempoDouble, false };
+        Chip halveChip { juce::String::fromUTF8 ("\xc3\xb7" "2"), Strings::help::audioTempoHalve, false };
+        NumberField tempoField;
+
+        // The audio's tempo changes how many beats it lasts: the content stretches with it (its length, loop and
+        // start in beats), so the same sound stays under the same part of the clip.
+        void setClipTempo (const ClipRef& c, double bpm)
+        {
+            const double old = c.originalTempo() > 0.0 ? c.originalTempo() : owner.model.tempo();
+            bpm = juce::jlimit (20.0, 999.0, bpm);
+            if (std::abs (bpm - old) < 1.0e-6)
+                return;
+            clipedit::scaleTime (c, bpm / old, &owner.model.undo);
+            c.setOriginalTempo (bpm, &owner.model.undo);
+        }
+
+        void scaleTempo (double factor)
+        {
+            if (const auto c = owner.clip(); c.isValid() && c.followTempo())
+            {
+                owner.model.undo.beginNewTransaction (Strings::audioUi::undoClipTempo);
+                setClipTempo (c, c.originalTempo() * factor);
+            }
+        }
+
+        void showModeMenu()
+        {
+            const auto c = owner.clip();
+            if (! c.isValid())
+                return;
+            juce::PopupMenu menu;
+            static const char* modes[] = { "beats", "tones", "texture", "repitch", "complex", "complexpro" };
+            for (const auto* m : modes)
+            {
+                const juce::String mode (m);
+                menu.addItem (Strings::audioUi::warpModeName (mode), true, c.warpMode() == mode, [this, mode] {
+                    if (const auto cl = owner.clip(); cl.isValid() && cl.warpMode() != mode)
+                    {
+                        owner.model.undo.beginNewTransaction (Strings::audioUi::undoWarpMode);
+                        cl.setWarpMode (mode, &owner.model.undo);
+                    }
+                });
+            }
+            menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&modeChip));
+        }
         NumberField gainField, transposeField, detuneField, loopStartField, loopEndField, startField, fadeInField, fadeOutField;
         juce::String info, rateWarning;
-        int infoY = 0, warningY = -1, labelY = 0, braceY = 0, noteY = 0, height = 0;
+        int infoY = 0, warningY = -1, labelY = 0, braceY = 0, height = 0;
         bool layoutDirty = true;
     };
 
@@ -628,6 +712,8 @@ void AudioClipEditor::setClip (int64_t id)
     currentClip = id;
     dirty = true;
     shownPeaks = -1;
+    zoom = 1.0;
+    scrollBeats = 0.0;
     tick();
 }
 
@@ -672,7 +758,7 @@ double AudioClipEditor::viewBeats() const
     double fileBeats = 0.0;
     if (const auto f = file(); f.isValid())
     {
-        const double framesPerBeat = f.sampleRate() * 60.0 / juce::jmax (1.0, model.tempo()) * c.pitchRatio();
+        const double framesPerBeat = f.sampleRate() * 60.0 / juce::jmax (1.0, c.contentTempo (model.tempo())) * c.pitchRatio();
         fileBeats = juce::jmax (0.0, (double) f.lengthSamples() - c.sampleStart()) / juce::jmax (1.0, framesPerBeat);
     }
     return juce::jmax (1.0, c.lengthBeats(), fileBeats);
@@ -681,13 +767,30 @@ double AudioClipEditor::viewBeats() const
 double AudioClipEditor::beatToX (double beat) const
 {
     const double usable = juce::jmax (1, waveView->getWidth() - 2 * kMargin);
-    return kMargin + beat / viewBeats() * usable;
+    return kMargin + (beat - scrollBeats) / (viewBeats() / zoom) * usable;
 }
 
 double AudioClipEditor::xToBeat (double x) const
 {
     const double usable = juce::jmax (1, waveView->getWidth() - 2 * kMargin);
-    return (x - kMargin) / usable * viewBeats();
+    return scrollBeats + (x - kMargin) / usable * (viewBeats() / zoom);
+}
+
+void AudioClipEditor::zoomAround (double x, double factor)
+{
+    const double anchor = xToBeat (x);
+    const double usable = juce::jmax (1, waveView->getWidth() - 2 * kMargin);
+    // From the whole content in down to single samples (a 4-bar loop at 20000x is a few pixels per sample).
+    zoom = juce::jlimit (1.0, 20000.0, zoom * factor);
+    scrollBeats = anchor - (x - kMargin) / usable * (viewBeats() / zoom);
+    scrollBy (0.0);
+}
+
+void AudioClipEditor::scrollBy (double beats)
+{
+    const double shown = viewBeats() / zoom;
+    scrollBeats = juce::jlimit (0.0, juce::jmax (0.0, viewBeats() - shown), scrollBeats + beats);
+    waveView->repaint();
 }
 
 //==============================================================================

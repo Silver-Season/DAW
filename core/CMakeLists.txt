@@ -14,6 +14,8 @@ add_library(daw_core STATIC
     src/VersionHistory.cpp
     src/SincInterpolator.cpp
     src/AudioAnalysis.cpp
+    src/TimeStretch.cpp
+    src/Onsets.cpp
     src/gen/Patterns.cpp
     src/gen/Patches.cpp
     src/drums/DrumKit.cpp
@@ -26,6 +28,8 @@ target_sources(daw_core PRIVATE ${DAW_FX_SOURCES})
 target_include_directories(daw_core PUBLIC include)
 target_compile_features(daw_core PUBLIC cxx_std_20)
 set_target_properties(daw_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# Rubber Band stays an implementation detail of TimeStretch.cpp; its headers are not part of core's interface.
+target_link_libraries(daw_core PRIVATE rubberband)
 
 if(MSVC)
     target_compile_options(daw_core PRIVATE /W4)
@@ -57,6 +61,20 @@ if(DAW_BUILD_TESTS)
     add_test(NAME daw_core_audio_tests COMMAND daw_core_audio_tests)
     if(NOT MSVC)
         target_compile_options(daw_core_audio_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    endif()
+
+    add_executable(daw_stretch_tests tests/stretch_tests.cpp)
+    target_link_libraries(daw_stretch_tests PRIVATE daw_core)
+    add_test(NAME daw_stretch_tests COMMAND daw_stretch_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_stretch_tests PRIVATE -Wall -Wextra)
+    endif()
+
+    add_executable(daw_analysis_tests tests/analysis_tests.cpp)
+    target_link_libraries(daw_analysis_tests PRIVATE daw_core)
+    add_test(NAME daw_analysis_tests COMMAND daw_analysis_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_analysis_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
     endif()
 
     # Effect tests: one file per effect registers its cases (FX_TEST), the main runs them all.

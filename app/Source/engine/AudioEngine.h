@@ -7,6 +7,7 @@
 #include "../Settings.h"
 #include "../model/ProjectModel.h"
 #include "AudioFilePool.h"
+#include "WarpService.h"
 #include "AudioPreview.h"
 #include "Metronome.h"
 #include "MidiInputQueue.h"
@@ -94,6 +95,10 @@ public:
     void setProjectFolder (const juce::File&);
     juce::File getProjectFolder() const { return projectFolder; }
     AudioFilePool& getAudioPool() { return audioPool; }
+    WarpService& getWarp() { return warp; }
+    // Finds the tempo of a newly imported file in the background, then lets its clips follow the project tempo
+    // (docs/spec/07-warp.md, task 7.2). Not undoable: it completes what the import started.
+    void analyseAudioFile (int64_t fileId);
     // Where a FILE of the pool is: inside the project folder if its relative path is found there, else its absolute path.
     juce::File resolveAudioFile (const AudioFileRef&) const;
     // The decoded file of a FILE id (loading in the background), null if it is missing. Message thread.
@@ -155,7 +160,10 @@ public:
     bool rewindSong();
     // The orange "Back to arrangement" button: at the next launch-quantisation boundary the session clips stop and every
     // track plays its arrangement again; notes under the position are chased. While stopped it happens at once.
-    bool backToArrangement();
+    // Every track (-1) or one track gives up its Session clips and plays the timeline again, at the next launch boundary.
+    bool backToArrangement (int64_t trackId = -1);
+    // The track switches to Session View: the clip of that slot starts on the next bar line, whatever the launch quantisation.
+    bool launchClipOnBar (int64_t trackId, int scene);
     // True when at least one track plays (or was stopped in) Session View instead of the arrangement: the button lights up.
     bool anyTrackInSession() const { return anyInSession.load(); }
 
@@ -351,6 +359,7 @@ private:
     juce::AudioPluginFormatManager formatManager;
     juce::KnownPluginList knownPlugins;
     AudioFilePool audioPool;
+    WarpService warp { audioPool.formats() };
     juce::File projectFolder;
     std::map<int64_t, std::shared_ptr<daw::engine::AudioSource>> peekedSources; // by FILE id, null = missing; cleared by rebuilds
     juce::MidiKeyboardState keyboardState;

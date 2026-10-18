@@ -332,7 +332,15 @@ void testDrops()
     const auto fxDrag = drag (kinds::plugin, fx.createIdentifierString(), {}, fx.name, false);
     const auto synthDrag = drag (kinds::plugin, synth.createIdentifierString(), {}, synth.name, true);
 
-    check (! actions.accepts (fxDrag, DropTarget::newTrack) && actions.accepts (synthDrag, DropTarget::newTrack), "an effect does not make a new track, an instrument does");
+    check (actions.accepts (fxDrag, DropTarget::newTrack) && actions.accepts (synthDrag, DropTarget::newTrack), "an effect and an instrument both make a new track");
+    {
+        auto& m = d.f.model;
+        const int before = m.numTracks();
+        const auto r = actions.drop (fxDrag, DropTarget::newTrack, -1, -1, -1, -1);
+        check (r.ok && m.numTracks() == before + 1 && m.findTrack (r.trackId).isAudio(), "an effect dropped on empty space makes an audio track that carries it");
+        m.undo.undo();
+        check (m.numTracks() == before, "and is one undo step");
+    }
     check (actions.accepts (fxDrag, DropTarget::track, d.trackA.id()) && ! actions.accepts (fxDrag, DropTarget::device, d.trackA.id(), d.trackA.device (0).id()),
            "an effect goes on a track, not on a device");
 

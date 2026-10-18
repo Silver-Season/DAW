@@ -25,6 +25,8 @@ public:
     double getValue() const { return value; }
     void setDefaultValue (double normalised) { defaultValue = normalised; }
     bool isDragging() const { return gestureOpen; }
+    // Off: the scroll wheel passes through to the view behind (scrolling over a pan knob must not move it).
+    void setWheelChangesValue (bool v) { wheelChangesValue = v; }
 
     std::function<void()> onGestureStart, onGestureEnd;
     std::function<void (double)> onValueChange;
@@ -43,6 +45,7 @@ public:
 private:
     void change (double newValue);
     void beginGesture();
+    bool wheelChangesValue = true;
     void endGesture();
 
     juce::String caption;
@@ -110,7 +113,7 @@ public:
     void setSuffix (const juce::String& s) { suffix = s; repaint(); }
     void setDecimals (int d) { decimals = d; repaint(); }
     void setDragSensitivity (double unitsPerPixel) { sensitivity = unitsPerPixel; }
-    void setWheelStep (double step) { wheelStep = step; }
+    void setWheelStep (double step) { wheelStep = step; } // 0: the wheel passes through to the view behind
     void setBoxed (bool b) { boxed = b; repaint(); }
     void setFontHeight (float h) { fontHeight = h; repaint(); }
     void setJustification (juce::Justification j) { justification = j; repaint(); }

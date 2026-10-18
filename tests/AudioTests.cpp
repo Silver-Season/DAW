@@ -274,7 +274,7 @@ void testSchemaAndTracks()
         root.setProperty (ids::schemaVersion, 2, nullptr);
         const auto result = project::parseProject (project::serialise (root));
         check (result.ok() && result.tree.getChildWithName (ids::AUDIOFILES).isValid(), "a version 2 file gets an AUDIOFILES pool");
-        check ((int) result.tree.getProperty (ids::schemaVersion) == 3, "and version 3");
+        check ((int) result.tree.getProperty (ids::schemaVersion) == ProjectModel::kSchemaVersion, "and the current version");
     }
     auto model = ProjectModel::createEmpty();
     model.insertScene (-1);

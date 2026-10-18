@@ -32,6 +32,7 @@ public:
 private:
     ArrangementView& view;
     std::vector<std::unique_ptr<Row>> rowComponents;
+    std::unique_ptr<MiniButton> addMidi, addAudio; // under the last track
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ArrangementHeaders)
 };

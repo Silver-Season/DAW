@@ -46,6 +46,7 @@ public:
     static constexpr int kRulerHeight = kMarkerLaneHeight + kBraceHeight + kBarRulerHeight;
     static constexpr int kMinimapHeight = 36, kScrollBar = 10;
     static constexpr int kMinTrackHeight = 24, kMaxTrackHeight = 240, kDefaultTrackHeight = 84;
+    static constexpr int kAddTrackArea = 72; // below the last track: the add buttons, and room to drop a new track
     static constexpr double kMinPxPerBeat = 0.2, kMaxPxPerBeat = 600.0;
     static constexpr double kMinGridPixels = 12.0; // grid lines are never closer than this when the grid is adaptive
 
@@ -303,6 +304,7 @@ private:
     void selectionChanged();
     void setDropHint (const DropHint&);
     DropHint soundDropHintAt (juce::Point<int> viewPoint) const;
+    DropHint browserDropHintAt (const browser::DragItem&, juce::Point<int> viewPoint) const;
     int fittedHeight (const TrackRef&) const;
     void message (const juce::String& text) const
     {

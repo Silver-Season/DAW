@@ -99,6 +99,8 @@ Imported importFile (ProjectModel& model, AudioEngine& engine, const juce::File&
     info.tempo = result.fileTempo;
     result.fileId = model.addAudioFile (info).id();
     result.ok = true;
+    if (result.fileTempo <= 0.0)
+        engine.analyseAudioFile (result.fileId); // the tempo comes from the sound itself, in the background
     return result;
 }
 

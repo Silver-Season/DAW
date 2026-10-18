@@ -53,8 +53,23 @@ public:
     double lengthBeats() const { return get<double> (ids::lengthBeats, 4.0); }
     double loopStart() const { return get<double> (ids::loopStart, 0.0); }
     double loopEnd() const { return lengthBeats(); }
-    double startOffset() const { return get<double> (ids::startOffset, 0.0); }
-    bool loopEnabled() const { return get<bool> (ids::loop, true); }
+    // The content of an arrangement clip has no start or loop switch of its own: the ACLIP around it holds them (where
+    // it starts in the content, whether it repeats), so the clip editor and the timeline always show the same thing.
+    double startOffset() const
+    {
+        const auto a = arrangementParent();
+        return a.isValid() ? (double) a.getProperty (ids::offset, 0.0) : get<double> (ids::startOffset, 0.0);
+    }
+    bool loopEnabled() const
+    {
+        const auto a = arrangementParent();
+        return a.isValid() ? (bool) a.getProperty (ids::loop, true) : get<bool> (ids::loop, true);
+    }
+    juce::ValueTree arrangementParent() const
+    {
+        const auto p = state.getParent();
+        return p.hasType (ids::ACLIP) ? p : juce::ValueTree();
+    }
     // "Own scale": off = the clip shows the scale of the project and follows it; on = the clip's own scale below.
     bool ownScale() const { return get<bool> (ids::ownScale, false); }
     int scaleRoot() const { return get<int> (ids::scaleRoot, 0); }
@@ -69,8 +84,20 @@ public:
     }
     void setLoopStart (double v, juce::UndoManager* um) const { set (ids::loopStart, v, um); }
     void setLoopEnd (double v, juce::UndoManager* um) const { setLengthBeats (v, um); }
-    void setStartOffset (double v, juce::UndoManager* um) const { set (ids::startOffset, v, um); }
-    void setLoopEnabled (bool v, juce::UndoManager* um) const { set (ids::loop, v, um); }
+    void setStartOffset (double v, juce::UndoManager* um) const
+    {
+        if (auto a = arrangementParent(); a.isValid())
+            a.setProperty (ids::offset, juce::jmax (0.0, v), um);
+        else
+            set (ids::startOffset, v, um);
+    }
+    void setLoopEnabled (bool v, juce::UndoManager* um) const
+    {
+        if (auto a = arrangementParent(); a.isValid())
+            a.setProperty (ids::loop, v, um);
+        else
+            set (ids::loop, v, um);
+    }
     void setOwnScale (bool v, juce::UndoManager* um) const { set (ids::ownScale, v, um); }
     void setScale (int root, const juce::String& mode, juce::UndoManager* um) const
     {
@@ -89,9 +116,18 @@ public:
     int transpose() const { return juce::jlimit (-48, 48, get<int> (ids::transpose, 0)); } // semitones, by resampling
     int detune() const { return juce::jlimit (-50, 50, get<int> (ids::detune, 0)); }       // cents
     bool reverse() const { return get<bool> (ids::reverse, false); }
-    // Follow the project tempo (the file's tempo must be known): until stage 7 this is Re-Pitch, the pitch moves with it.
-    bool followTempo() const { return get<bool> (ids::warp, false); }
+    // Warp (docs/spec/07-warp.md): the clip plays in the project tempo. `originalTempo` is the tempo of its audio (found by
+    // the analysis, or set by hand, x2, /2); 0 = unknown, and then the clip cannot follow. The mode says how: "repitch"
+    // resamples (the pitch moves with the speed), the others stretch without changing the pitch.
+    bool followTempo() const { return get<bool> (ids::warp, false) && originalTempo() > 0.0; }
+    bool warpOn() const { return get<bool> (ids::warp, false); }
     void setFollowTempo (bool v, juce::UndoManager* um) const { set (ids::warp, v, um); }
+    double originalTempo() const { return get<double> (ids::originalTempo, 0.0); }
+    void setOriginalTempo (double v, juce::UndoManager* um) const { set (ids::originalTempo, juce::jlimit (20.0, 999.0, v), um); }
+    juce::String warpMode() const { return get<juce::String> (ids::warpMode, "complex"); }
+    void setWarpMode (const juce::String& v, juce::UndoManager* um) const { set (ids::warpMode, v, um); }
+    // The tempo its content beats are counted in: its own when it follows the project, else the project's.
+    double contentTempo (double projectTempo) const { return followTempo() ? originalTempo() : projectTempo; }
     double fadeIn() const { return juce::jmax (0.0, get<double> (ids::fadeIn, 0.0)); }   // beats, arrangement only
     double fadeOut() const { return juce::jmax (0.0, get<double> (ids::fadeOut, 0.0)); } // beats, arrangement only
     double pitchRatio() const { return std::pow (2.0, transpose() / 12.0 + detune() / 1200.0); }
@@ -192,6 +228,8 @@ public:
     juce::int64 lengthSamples() const { return (juce::int64) state.getProperty (ids::lengthSamples, 0); }
     juce::String hash() const { return get<juce::String> (ids::hash, {}); }
     double tempo() const { return get<double> (ids::tempo, 0.0); } // known tempo of a loop, 0 = unknown
+    double firstBeatSeconds() const { return get<double> (ids::firstBeat, 0.0); } // where the first downbeat is
+    bool analysed() const { return get<bool> (ids::analysed, false); }
     juce::String name() const { return get<juce::String> (ids::name, {}); }
 
     void setPath (const juce::String& v, juce::UndoManager* um) const { set (ids::path, v, um); }

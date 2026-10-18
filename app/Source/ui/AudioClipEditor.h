@@ -52,10 +52,16 @@ public:
     double snapBeat (double beat, bool bypass) const;
     juce::String gridText() const;
 
-    // Geometry of the waveform part (its own coordinates): the whole content fits the width.
+    // Geometry of the waveform part (its own coordinates): at zoom 1 the whole content fits the width; zoomed in, the
+    // width shows viewBeats() / zoom beats from scrollBeats on.
     double viewBeats() const;
     double beatToX (double beat) const;
     double xToBeat (double x) const;
+    // The wheel (or a pinch) zooms around x, the horizontal wheel or Shift + wheel scrolls; a new clip shows all again.
+    void zoomAround (double x, double factor);
+    void scrollBy (double beats);
+    double zoomFactor() const { return zoom; }
+    double firstVisibleBeat() const { return scrollBeats; }
 
     class Wave;
     class Props;
@@ -86,6 +92,7 @@ private:
     bool dirty = true;
     int64_t shownPeaks = -1;
     View v;
+    double zoom = 1.0, scrollBeats = 0.0;
     double frozenView = 0.0; // the width of the view in beats while a marker is dragged, so it does not rescale under the mouse
 
     std::unique_ptr<Props> props;

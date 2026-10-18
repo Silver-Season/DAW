@@ -23,6 +23,9 @@ if(DAW_BUILD_TESTS)
     enable_testing()
 endif()
 
+# Vendored third-party code (licences and versions in each folder's SOURCE.md).
+add_subdirectory(third_party/rubberband)
+
 add_subdirectory(core)
 
 if(DAW_BUILD_TOOLS)
@@ -111,6 +114,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/BuiltInEffectProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/DrumKitProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/OfflineRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/WarpService.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioRecorder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/AudioImport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp
@@ -151,6 +155,7 @@ if(DAW_BUILD_JUCE)
             tests/AudioUiTests.cpp
             tests/SessionAudioUiTests.cpp
             tests/AudioRecordingTests.cpp
+            tests/WarpTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE

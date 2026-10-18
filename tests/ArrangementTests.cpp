@@ -858,6 +858,53 @@ void testStopTrackAndEdits()
     check (! r.f.engine.anyTrackInSession(), "and Back to arrangement clears it at once");
 }
 
+// Live-test request after the demo song: each track switches between the timeline and Session clips on its own.
+void testPerTrackSwitch()
+{
+    std::printf ("[arrangement test] per-track switch: one track goes live on the next bar, comes back alone\n");
+    Rig r (256, 2);
+    auto a = r.trackList[0], b = r.trackList[1];
+    std::vector<daw::engine::Note> beats;
+    for (int beat = 0; beat < 64; ++beat)
+        beats.push_back ({ (double) beat, 0.25, 60, 100 });
+    place (r.f.model, a, 0.0, 64.0, beats, 64.0);
+    place (r.f.model, b, 0.0, 64.0, beats, 64.0);
+    for (auto t : { a, b })
+    {
+        auto slot = r.f.model.createClip (t, 0, 4.0);
+        slot.setNotes ({ { 0.0, 0.5, 72, 100 } }, nullptr);
+    }
+    r.f.model.setLaunchQuantise (0.0); // no launch quantisation: the switch still waits for the bar
+    r.f.engine.rebuildGraphIfNeeded();
+
+    r.runner.run (2);
+    const int64_t origin = r.f.engine.getEngineSample();
+    const auto S = [&] (double beat) { return origin + (int64_t) std::llround (beat * kSpb); };
+    r.f.engine.play();
+    r.runBeats (1.3);
+    r.f.engine.launchClipOnBar (a.id(), 0);
+    r.runBeats (1.0);
+    check (! r.f.engine.findRuntime (a.id())->inSession.load(), "before the bar line track A still plays the timeline");
+    r.runBeats (2.0);
+    auto* logA = r.log (0);
+    check (! logA->ons (72).empty() && Rig::near (logA->ons (72)[0], S (4.0), 1), "its Session clip starts exactly on the bar (beat 4)");
+    r.f.engine.launchClipOnBar (b.id(), 0);
+    r.runBeats (4.0);
+    check (r.f.engine.findRuntime (b.id())->inSession.load(), "track B is live too");
+
+    // only A comes back (no quantisation: at once); B stays in Session
+    r.f.engine.backToArrangement (a.id());
+    r.runBeats (1.0);
+    check (! r.f.engine.findRuntime (a.id())->inSession.load(), "track A is back on the timeline");
+    check (r.f.engine.findRuntime (b.id())->inSession.load(), "track B still plays its Session clip");
+    const auto before = logA->ons (60).size();
+    r.runBeats (2.0);
+    check (logA->ons (60).size() >= before + 2, "and A plays its timeline notes again");
+    r.f.engine.stop();
+    r.runner.run (3);
+    check (logA->balance (72) == 0 && logA->balance (60) == 0 && r.log (1)->balance (72) == 0, "no hanging notes");
+}
+
 // x2 and /2 of the clip editor (live-test request after stage 3)
 void testScaleClipTime()
 {
@@ -912,5 +959,6 @@ void tests::runArrangementTests()
     testCountIn();
     testSessionAgainstArrangement();
     testStopTrackAndEdits();
+    testPerTrackSwitch();
     testScaleClipTime();
 }

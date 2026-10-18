@@ -171,6 +171,11 @@ void Knob::mouseDoubleClick (const juce::MouseEvent& e)
 
 void Knob::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
 {
+    if (! wheelChangesValue)
+    {
+        juce::Component::mouseWheelMove (e, w); // up to the parent
+        return;
+    }
     if (! isEnabled())
         return;
     const double delta = (double) (w.isReversed ? -w.deltaY : w.deltaY) * (e.mods.isShiftDown() ? 0.05 : 0.5);
@@ -454,6 +459,11 @@ void NumberField::mouseDoubleClick (const juce::MouseEvent&)
 
 void NumberField::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
 {
+    if (wheelStep <= 0.0)
+    {
+        juce::Component::mouseWheelMove (e, w); // up to the parent
+        return;
+    }
     if (editor != nullptr)
         return;
     const double delta = (double) (w.isReversed ? -w.deltaY : w.deltaY) * 10.0 * wheelStep * (e.mods.isShiftDown() ? 0.1 : 1.0);

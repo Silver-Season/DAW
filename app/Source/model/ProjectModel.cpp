@@ -334,9 +334,24 @@ juce::ValueTree ProjectModel::makeAudioClipNode (const TrackRef& track, int64_t 
     c.setProperty (ids::sampleStart, 0.0, nullptr);
     c.setProperty (ids::gainDb, 0.0, nullptr);
     c.setProperty (ids::transpose, 0, nullptr);
-    // A loop whose tempo is known follows the project tempo from the start (Re-Pitch until stage 7 brings warping).
-    c.setProperty (ids::warp, findAudioFile (fileId).tempo() > 0.0, nullptr);
+    // A file whose tempo is known follows the project tempo from the start; one still being analysed gets it when the
+    // analysis is done (AudioEngine::applyAnalysis).
+    const auto file = findAudioFile (fileId);
+    c.setProperty (ids::warp, file.tempo() > 0.0, nullptr);
+    if (file.tempo() > 0.0)
+    {
+        c.setProperty (ids::originalTempo, file.tempo(), nullptr);
+        c.setProperty (ids::sampleStart, file.firstBeatSeconds() * file.sampleRate(), nullptr);
+        c.setProperty (ids::warpMode, warpModeFor (file), nullptr);
+    }
     return c;
+}
+
+juce::String ProjectModel::warpModeFor (const AudioFileRef& file)
+{
+    // A loop of a few bars is most likely drums: Beats keeps its hits sharp. Anything longer is music: Complex.
+    const double bars = file.tempo() > 0.0 ? (double) file.lengthSamples() / file.sampleRate() * file.tempo() / 240.0 : 0.0;
+    return bars > 0.0 && bars <= 8.5 ? "beats" : "complex";
 }
 
 ClipRef ProjectModel::createAudioClip (const TrackRef& track, int scene, int64_t fileId, double lengthBeats, const juce::String& name)

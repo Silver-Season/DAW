@@ -17,14 +17,15 @@ English UI and English repository (branch `claude/english-standalone-87c15d`):
 
 Demo song (branch `claude/project-thread-t76imp`): "Mountain King" after Grieg, built through the model by `tools/demo_song/MountainKing.cpp` (target `daw_demo_song`) and rendered with `OfflineRenderer`; the project is `docs/demo/Mountain King.prisma`. The problems the check found are listed in `docs/demo/README.md`; fixing them is the owner's call.
 
-In progress on other branches, not merged (both stopped on 2026-10-18):
-- `claude/funny-euler-1vls48`: owner's live-test fixes (Arrangement add-track menus, dropping anything from the browser on lanes, clip editor start and loop act on arrangement clips) and warp: `daw::dsp::estimateTempo/detectOnsets` (Onsets.h, `daw_analysis_tests`), Rubber Band v3.3.0 in `third_party/rubberband`, `daw::dsp::Stretcher/stretchOffline` (TimeStretch.h, `daw_stretch_tests`), `engine/WarpService` (tempo analysis of new files and stretched copies in the background, Re-Pitch until ready), CLIP `originalTempo`, `warpMode`, `warp`; "Warp", mode, file tempo, ×2, ÷2 in the clip editor. Not done: engine tests for warp and import analysis, a full test run, screenshots, warp markers and grid nudge (7.3), PR.
-- `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished; merge it into the working branch on top. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion.
-- **Merging either branch after the English UI:** `Strings.h` will conflict. Keep both sides, and turn every new `utf8 ("…")` from those branches into `tr ("English", "…")`, so that the English UI has no Russian left (`daw_engine_tests_ru` and a grep for Cyrillic inside `utf8 (` help).
+Branch `claude/project-thread-0292na` (from `claude/funny-euler-1vls48` with main merged in), PR into main: warp part 1 and the owner's live-test list.
+- Warp (7.1, 7.2): `daw::dsp::estimateTempo/detectOnsets` (Onsets.h; the double-time decision and the beat tracking read the band below 2.5 kHz, so off-beat hats do not double the tempo), Rubber Band v3.3.0 in `third_party/rubberband`, `daw::dsp::Stretcher/stretchOffline`, `engine/WarpService` (tempo analysis of imported files, stretched copies rendered in the background, Re-Pitch until ready; `setRenderInline` for export), CLIP `originalTempo`, `warpMode`, `warp`; schema 4 migrates older warped clips. Tests: `tests/WarpTests.cpp` (`DAW_TEST_ONLY=warp`), `daw_analysis_tests`, `daw_stretch_tests`.
+- Live-test list: 1 per-track Session/timeline switch (`AudioEngine::launchClipOnBar`, `backToArrangement (trackId)`, button in `ArrangementHeaders`); 2 grid inside clips (`ArrangementLanes::paintGrid`); 3 "+ MIDI" / "+ Audio" and a drop area under the last track; 4 add-track menus in the Arrangement; 5 pan ignores the wheel (`Knob::setWheelChangesValue`, `PanDrag`); 6 warp above; 7 waveforms from samples when zoomed in (`Waveform.cpp`), zoom in the audio clip editor.
+- Not done in stage 7: warp markers and grid nudge (7.3), rendering ahead of the cursor in a ring buffer instead of whole copies, tempo changes over time.
+- `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion. When merging it after the English UI, turn every new `utf8 ("…")` in `Strings.h` into `tr ("English", "…")`.
 
 README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
 
-Owner's live-test list after the demo song (2026-10-18), to plan with the owner; the demo check's own list is in `docs/demo/README.md`:
+Owner's live-test list after the demo song (2026-10-18), all seven done on `claude/project-thread-0292na`; the demo check's own list is in `docs/demo/README.md`:
 1. **Per-track Session/Arrangement switch.** Each track chooses on its own whether it plays the timeline or Session clips (sections, live). Switching a track to live starts its loop on the bar.
 2. **Grid inside clips on the timeline.** The bar/beat grid is hidden under clip bodies in the Arrangement, so notes cannot be lined up by eye.
 3. **Drag and drop of a track into the song**, with a choice of an existing track or a new one; more generally a fast way to add a track (a button, or empty space below the last track that accepts drops).
@@ -33,7 +34,7 @@ Owner's live-test list after the demo song (2026-10-18), to plan with the owner;
 6. **Tempo detection of dropped audio is often wrong, and there is still no warp.** Critical (stage 7, branch `claude/funny-euler-1vls48`).
 7. **Waveforms in the Arrangement look bad when zoomed in, and the audio clip editor at the bottom cannot zoom.**
 
-Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), real warp (stage 7), a design pass.
+Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), warp markers (7.3), a design pass.
 
 ## How to continue
 
