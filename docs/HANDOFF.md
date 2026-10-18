@@ -42,7 +42,14 @@ Owner's live-test list after the demo song (2026-10-18), all seven done on `clau
 6. **Tempo detection of dropped audio is often wrong, and there is still no warp.** Critical (stage 7, branch `claude/funny-euler-1vls48`).
 7. **Waveforms in the Arrangement look bad when zoomed in, and the audio clip editor at the bottom cannot zoom.**
 
-Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), the tempo track (7.5), a design pass.
+After the demo song (branch `claude/project-thread-vk84kl`): every item of `docs/demo/README.md` and part of the backlog.
+- Master as a pseudo-track: `ProjectModel::kMasterTrackId` (0), `findTrackOrMaster` (only chain, detail, automation and browser-drop code use it; `findTrack` never returns the master), `TrackRef::isMaster/hasInstrument`. Master automation `PlaybackGraph::masterAutomation`, built by `AudioEngine::automationOf`.
+- Tempo envelope (7.5, tempo part): lane `song:tempo` on the master (`automation::tempoFromNormalised`, 40–240 BPM), applied in the audio callback before the transport advances, read at the middle of the block; `AudioEngine::getCurrentTempo`; the tempo field scales the envelope. Time signature changes are not done.
+- Export: `core` `daw::dsp::measureLoudness` (BS.1770 LUFS, LRA, true peak), LAME 3.100 in `third_party/lame` (`engine/Mp3Writer`), stems via `TrackRuntime::stemBuffer` + `AudioEngine::setStemCapture`, LUFS normalization capped at −1 dBTP, TPDF dither at 16 bit. Tests: `tests/MixTests.cpp` (`DAW_TEST_ONLY=mix`).
+- VST3 folders: `engine/PluginFolders`, Settings → Plug-ins. `.prisma` document type, `project::projectFileFromCommandLine`, `MainComponent::openFromSystem`.
+- Prisma factory presets 8–16 appended (programs are stored by index: new presets only at the end).
+
+Not done yet (by importance): PDC, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), time signature changes, a design pass (another thread).
 
 ## How to continue
 
