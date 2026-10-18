@@ -23,6 +23,9 @@ if(DAW_BUILD_TESTS)
     enable_testing()
 endif()
 
+# Vendored third-party code (licences and versions in each folder's SOURCE.md).
+add_subdirectory(third_party/rubberband)
+
 add_subdirectory(core)
 
 if(DAW_BUILD_TOOLS)
