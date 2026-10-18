@@ -488,6 +488,25 @@ void testDeviceFold()
 }
 
 //==============================================================================
+// Paints the editor into an image; with DAW_SNAPSHOT_DIR set, also writes it there (the README screenshots).
+bool paintEditor (ui::AudioClipEditor& ed, const juce::String& name)
+{
+    ed.tick();
+    juce::Image img (juce::Image::ARGB, ed.getWidth(), ed.getHeight(), true);
+    {
+        juce::Graphics g (img);
+        ed.paintEntireComponent (g, true);
+    }
+    if (const char* dir = std::getenv ("DAW_SNAPSHOT_DIR"); name.isNotEmpty() && dir != nullptr && dir[0] != 0)
+    {
+        juce::File target (juce::File (dir).getChildFile (name));
+        target.deleteFile();
+        juce::FileOutputStream out (target);
+        juce::PNGImageFormat().writeImageToStream (img, out);
+    }
+    return img.isValid();
+}
+
 void testWarpEditor()
 {
     std::printf ("[7.3] audio clip editor: warp markers by dragging the beats of the sound, the decision strip, the menu edits\n");
@@ -534,6 +553,16 @@ void testWarpEditor()
     check (content.warpMarkers().empty(), "undo takes the markers away");
     r.f.model.undo.redo();
 
+    // the onsets arrive from the analysis in the background; the editor paints them (and a screenshot when asked)
+    r.f.engine.getWarp().waitForJobs();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    ed.onsetBeats(); // asks for the analysis
+    r.f.engine.getWarp().waitForJobs();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    ed.tick();
+    check (ed.onsetBeats().size() >= 7, "the onsets of the sound are known: " + juce::String ((int) ed.onsetBeats().size()));
+    check (paintEditor (ed, "warp-editor.png"), "the editor paints its markers");
+
     // the marker itself drags further
     e.drag ({ (int) std::lround (ed.beatToX (2.5)), laneY }, 2.75);
     check (content.warpMarkers().size() == 3 && std::abs (content.warpMarkers()[1].beat - 2.75) < 1.0e-9, "a marker drags");
@@ -571,21 +600,7 @@ void testWarpEditor()
     r.f.model.undo.undo();
     check (r.audioB.numArrangementClips() == clipsBefore, "in one undo step");
 
-    // paints, with the strip and the lane (and a screenshot for the README when asked)
-    ed.tick();
-    juce::Image img (juce::Image::ARGB, 1400, 300, true);
-    {
-        juce::Graphics g (img);
-        ed.paintEntireComponent (g, true);
-    }
-    check (img.isValid(), "the editor paints");
-    if (const char* dir = std::getenv ("DAW_SNAPSHOT_DIR"); dir != nullptr && dir[0] != 0)
-    {
-        juce::FileOutputStream out (juce::File (dir).getChildFile ("warp-editor.png"));
-        out.setPosition (0);
-        out.truncate();
-        juce::PNGImageFormat().writeImageToStream (img, out);
-    }
+    check (paintEditor (ed, {}), "the editor paints");
 }
 } // namespace
 

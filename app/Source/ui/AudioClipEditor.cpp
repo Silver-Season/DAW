@@ -498,12 +498,12 @@ private:
         drawAudioWaveform (g, area, *source, c, 0.0, false, view, c.contentTempo (owner.model.tempo()), t.palette (c.colour()));
 
         // the onsets: thin lines over the wave
-        g.setColour (t.text.withAlpha (0.22f));
+        g.setColour (t.text.withAlpha (0.4f));
         for (const double b : owner.onsetBeats())
         {
             const float x = (float) owner.beatToX (b);
             if (x >= 0.0f && x <= (float) getWidth())
-                g.fillRect (x, body.getY(), 1.0f, 6.0f);
+                g.fillRect (x, body.getY(), 1.0f, 8.0f);
         }
 
         // what the clip does not play: before the start marker the content is dimmed, after the end there is nothing
@@ -1430,7 +1430,7 @@ std::vector<double> AudioClipEditor::uncertainBeats() const
     for (const double t : a->beats)
     {
         const double b = map.beatAt (t * f.sampleRate());
-        if (std::abs (b - std::round (b)) > 0.125)
+        if (std::abs (b - std::round (b)) > 0.125 && (out.empty() || out.back() != std::round (b)))
             out.push_back (std::round (b));
     }
     return out;
