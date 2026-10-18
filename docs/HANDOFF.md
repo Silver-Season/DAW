@@ -20,7 +20,9 @@ In progress on other branches, not merged (both stopped on 2026-10-18):
 - `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished; merge it into the working branch on top. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion.
 - **Merging either branch after the English UI:** `Strings.h` will conflict. Keep both sides, and turn every new `utf8 ("…")` from those branches into `tr ("English", "…")`, so that the English UI has no Russian left (`daw_engine_tests_ru` and a grep for Cyrillic inside `utf8 (` help).
 
-Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), real warp (stage 7), a design pass, English screenshots for the older README sections.
+README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
+
+Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), real warp (stage 7), a design pass.
 
 ## How to continue
 

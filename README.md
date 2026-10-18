@@ -3,9 +3,9 @@
 A digital audio workstation for macOS with its own built-in synthesizers: a session grid for launching clips across tracks and scenes, a linear arrangement timeline, MIDI recording, audio tracks and Prisma, a built-in wavetable synth. Open source under AGPLv3.
 Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-> The interface is in English by default; Russian can be chosen in Settings → Appearance → Language (applies after a restart). All UI strings live in one file, `app/Source/Strings.h`, as English and Russian pairs. Most screenshots below were taken before the English UI and show Russian text.
+> The interface is in English by default; Russian can be chosen in Settings → Appearance → Language (applies after a restart). All UI strings live in one file, `app/Source/Strings.h`, as English and Russian pairs. Screenshots below show the English UI in the Prism theme; the other themes (Neon, Studio, Paper) use the same layout.
 
-![Session View with the English UI, Prism theme](media/english-session-prism.png)
+![Session View, Prism theme](media/session-prism.png)
 
 ## Window, themes and menus (stage 1b)
 
@@ -30,11 +30,9 @@ Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | Cmd+F | search in the browser |
 | M | play from the Mac keyboard |
 
-Session View screenshots: [Prism](media/session-prism.png), [Neon](media/session-neon.png), [Studio](media/session-studio.png), [Paper](media/session-paper.png).
-
 ## Browser, projects and settings (stage 1c)
 
-![Browser and dragging a preset onto a new track](media/browser.png)
+![Browser: sounds from a Places folder dropped onto a new audio track](media/browser.png)
 
 - **Browser**: "Recent", color labels and eight sections on the left (Instruments, Presets, Effects, Plugins, Chains, Sounds, MIDI files, Places). Search filters as you type, in Latin and Cyrillic, ignoring case (and treating the Cyrillic "yo" and "ye" alike). A selected Prisma preset plays a phrase at the project tempo (headphones button at the bottom, −12 dB). Right-click: color label, rename and delete your own preset, show in Finder. Folders for "Places" are added with a button in the browser itself, in Settings, or by dropping a folder from Finder.
 - **Drag and drop**: from the browser onto empty Session View space (new track), onto a track (replaces the instrument), onto a slot (a MIDI file becomes a clip), onto a device in the bottom panel (a preset of the same type is applied), or into a gap in the chain (an effect). MIDI files can be dropped straight from Finder too. Every drop is one history entry, and Cmd+Z undoes it as a whole. Double-click or Enter puts the selected item on the selected track.
@@ -45,7 +43,7 @@ Session View screenshots: [Prism](media/session-prism.png), [Neon](media/session
 - **New project** comes from `User Library/Templates/Default.prisma` (File → Save as default template); the first launch opens a demo.
 - **Settings** (Cmd+,): Audio (driver, input, output, sample rate, buffer size without restart, latency in ms, channel names, 440 Hz test tone, CPU load), MIDI ("Play on tracks" per input, connect and disconnect on the fly), Appearance (theme cards, zoom, animations), Library (User Library folder, "Places", plugin rescan).
 
-![Settings, Audio tab](media/settings-sound.png)
+![Settings, Appearance tab: themes, interface scale and language](media/settings-appearance.png)
 
 | Keys | Action |
 |---|---|
@@ -83,10 +81,6 @@ Session View screenshots: [Prism](media/session-prism.png), [Neon](media/session
 | B | pencil |
 | Cmd+Alt+P / Cmd+Alt+K | project properties / on-screen keyboard |
 
-![Piano roll, Neon theme](media/piano-roll-neon.png)
-![Piano roll, Studio theme](media/piano-roll-studio.png)
-![Piano roll, Paper theme](media/piano-roll-paper.png)
-
 ## Recording, metronome and capture (stage 2, part B)
 
 ![Recording into a slot, Prism theme](media/record-prism.png)
@@ -106,8 +100,6 @@ Session View screenshots: [Prism](media/session-prism.png), [Neon](media/session
 | Cmd+Shift+C | capture the last phrase |
 | Right-click on metronome / record | metronome and count-in settings / record length and quantization |
 
-Recording in the [Neon](media/record-neon.png), [Studio](media/record-studio.png) and [Paper](media/record-paper.png) themes; count-in: [count-in.png](media/count-in.png).
-
 ## Arrangement (stage 3, UI part)
 
 The Arrangement tab shows the song over time: track headers, a marker lane, the loop bracket, a bar ruler, clips, a minimap and the playhead. Clips can be moved, copied (Alt), resized by their edges, split (Cmd+E), joined (Cmd+J) and duplicated (Cmd+D); double-clicking empty space draws a one-bar clip. A Session clip can be dragged onto the Arrangement tab and then onto a track. The orange "Back to Arrangement" button returns tracks that were playing Session clips to the arrangement.
@@ -122,8 +114,6 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 - **IN / OUT** next to the loop button: while on, recording happens only inside the loop bracket (punch-in / punch-out).
 - **Session → Arrangement.** Launching and stopping Session clips while recording to the timeline turns into arrangement clips with the correct phase, all in one undo transaction.
 - **Take a track from a version…** in the versions window: the chosen track of an older version (devices, Session and arrangement clips) is added to the project as "Name (vN)" with new ids, in one transaction. If the version has more scenes, scenes are added to the project.
-
-![Recording to the timeline, takes menu, Prism theme](media/stage3-recording-prism.png)
 
 ## Audio tracks (stage 5, part 1: playback)
 
@@ -149,13 +139,9 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 - **Export** (Cmd+Shift+R): the whole song or the loop to WAV, AIFF or FLAC, with a choice of bit depth, peak normalization (−0.1 or −1 dBFS) and a reverb and delay tail. The render runs offline on a copy of the project.
 - **Loops follow the tempo**: a loop with a known tempo is played at the project tempo by changing its speed and pitch together (Re-Pitch, a switch in the audio clip editor). The top bar shows a spectrum of the master.
 
-![Session: the Drums track with the drum machine and a compressor, Prism theme](media/stage6-session-drums-prism.png)
+![Session: the Effects category of the browser and the Drums track with the drum machine and a compressor, Prism theme](media/stage6-session-drums-prism.png)
 
-![Browser, Effects category, Prism theme](media/stage6-browser-effects-prism.png)
-
-![Arrangement in automation mode: volume and delay envelopes, Prism theme](media/stage6-automation-prism.png)
-
-The same screens in other themes: [Neon](media/stage6-automation-neon.png), [Studio](media/stage6-automation-studio.png), [Paper](media/stage6-automation-paper.png) (automation); `media/stage6-session-drums-<theme>.png` and `media/stage6-browser-effects-<theme>.png`.
+![Arrangement in automation mode: volume envelopes, Prism theme](media/stage6-automation-prism.png)
 
 ## English interface
 
