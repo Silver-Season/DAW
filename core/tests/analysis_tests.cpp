@@ -337,6 +337,37 @@ int main()
         check (analyse (loop, "Drums 90 BPM.wav").bpm == strong.bpm, "an unrelated name does not override a strong estimate");
     });
 
+    test ("a steady track with a break: the tempo of the whole file, the beats stay on the kicks", [] {
+        // 173 BPM, a kick on every beat and loud off-beat hats, with a two-bar break of syncopated hits after bar 4;
+        // the length is not a whole number of bars. Before the whole-file grid fit this read 171.6 BPM and the beats
+        // slipped to the off-beats after the break.
+        const double bpm = 173.0, beat = 60.0 / bpm;
+        std::vector<float> x ((size_t) std::llround (22.204 * kRate), 0.0f);
+        std::mt19937 rng (3);
+        for (int b = 0; b < 64; ++b)
+        {
+            const double t = 0.05 + b * beat;
+            if (b >= 16 && b < 24)
+            {
+                if (b % 3 == 0)
+                    addKick (x, t + 0.75 * beat, 0.8f);
+                addNoiseHit (x, t + 0.25 * beat, 0.3f, 0.03, 0.4, rng);
+                continue;
+            }
+            addKick (x, t, 0.8f);
+            addNoiseHit (x, t + 0.5 * beat, 0.5f, 0.04, 0.0, rng);
+        }
+        const auto e = daw::dsp::estimateTempo (x.data(), (int64_t) x.size(), kRate);
+        check (std::abs (e.bpm - bpm) < 0.02, fmt ("tempo %.3f, want %.0f", e.bpm, bpm));
+        int offBeat = 0;
+        for (auto t : e.beats)
+        {
+            const double k = (t - 0.05) / beat;
+            offBeat += std::abs (k - std::round (k)) * beat > 0.005 ? 1 : 0;
+        }
+        check (e.beats.size() >= 60 && offBeat == 0, fmt ("%.0f beats, %.0f off the kicks", (double) e.beats.size(), offBeat));
+    });
+
     test ("60 s at 44.1 kHz under a second", [] {
         const auto s = drums (128.0, 32, Style::techno16, 0.1, -45.0, 0.0, 0.0, 21);
         const auto start = std::chrono::steady_clock::now();
