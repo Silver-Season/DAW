@@ -14,6 +14,7 @@ add_library(daw_core STATIC
     src/VersionHistory.cpp
     src/SincInterpolator.cpp
     src/AudioAnalysis.cpp
+    src/TimeStretch.cpp
     src/gen/Patterns.cpp
     src/gen/Patches.cpp
     src/drums/DrumKit.cpp
@@ -26,6 +27,8 @@ target_sources(daw_core PRIVATE ${DAW_FX_SOURCES})
 target_include_directories(daw_core PUBLIC include)
 target_compile_features(daw_core PUBLIC cxx_std_20)
 set_target_properties(daw_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# Rubber Band stays an implementation detail of TimeStretch.cpp; its headers are not part of core's interface.
+target_link_libraries(daw_core PRIVATE rubberband)
 
 if(MSVC)
     target_compile_options(daw_core PRIVATE /W4)
