@@ -62,6 +62,13 @@ if(DAW_BUILD_TESTS)
         target_compile_options(daw_core_audio_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
     endif()
 
+    add_executable(daw_stretch_tests tests/stretch_tests.cpp)
+    target_link_libraries(daw_stretch_tests PRIVATE daw_core)
+    add_test(NAME daw_stretch_tests COMMAND daw_stretch_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_stretch_tests PRIVATE -Wall -Wextra)
+    endif()
+
     # Effect tests: one file per effect registers its cases (FX_TEST), the main runs them all.
     file(GLOB DAW_FX_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/fx/*.cpp)
     add_executable(daw_fx_tests ${DAW_FX_TEST_SOURCES})
