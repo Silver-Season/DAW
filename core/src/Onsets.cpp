@@ -471,6 +471,57 @@ double regressPeriod (const Grid& g, double period)
     return (count * sxy - sx * sy) / den;
 }
 
+// The beat period, in seconds, whose grid catches the most onset strength over the whole file, searched within 2 %
+// of `period`. Each onset adds its strength (square root, so a few loud hits do not decide alone) times a Gaussian of
+// its distance to the nearest grid line (8 ms wide) at the best phase. Unlike the beat tracker, one stretch of
+// syncopated or missing beats cannot pull it off: over a whole track a period error of 0.1 % already moves the end
+// of the grid off the hits.
+double gridScore (const std::vector<Peak>& onsets, double period, double* phase = nullptr)
+{
+    constexpr double binSeconds = 0.001, sigma = 0.008;
+    const auto bins = (int) std::ceil (period / binSeconds);
+    if (bins < 8)
+        return 0.0;
+    std::vector<double> hist ((size_t) bins, 0.0);
+    for (const auto& o : onsets)
+    {
+        const double r = std::fmod (o.time, period) / period * bins;
+        hist[(size_t) std::clamp ((int) r, 0, bins - 1)] += std::sqrt (std::max (0.0f, o.strength));
+    }
+    const int reach = (int) std::ceil (3.0 * sigma / binSeconds);
+    std::vector<double> kernel ((size_t) (2 * reach + 1));
+    for (int k = -reach; k <= reach; ++k)
+        kernel[(size_t) (k + reach)] = std::exp (-0.5 * std::pow (k * binSeconds / sigma, 2.0));
+    double best = 0.0;
+    for (int b = 0; b < bins; ++b)
+    {
+        double s = 0.0;
+        for (int k = -reach; k <= reach; ++k)
+            s += hist[(size_t) (((b + k) % bins + bins) % bins)] * kernel[(size_t) (k + reach)];
+        if (s > best)
+        {
+            best = s;
+            if (phase != nullptr)
+                *phase = (b + 0.5) * period / bins;
+        }
+    }
+    return best;
+}
+
+double fitPeriod (const std::vector<Peak>& onsets, double period)
+{
+    if (onsets.size() < 8 || period <= 0.0)
+        return period;
+    double best = period, bestScore = -1.0;
+    for (double f = 0.98; f <= 1.02 + 1.0e-12; f += 0.0001)
+        if (const double s = gridScore (onsets, period * f); s > bestScore)
+        {
+            bestScore = s;
+            best = period * f;
+        }
+    return best;
+}
+
 // A tempo written as a bare number before a dash or underscore ("124-Am loop.wav", "124_kick.wav").
 double tempoFromLeadingNumber (const std::string& name)
 {
@@ -629,6 +680,18 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
         track (bpm);
         if (const double p = regressPeriod (grid, 60.0 / bpm); p > 0.0 && std::abs (60.0 / p / bpm - 1.0) < 0.03)
             bpm = 60.0 / p;
+
+        // Then the grid over the whole file settles the period; tracks made at an integer tempo snap to it when its
+        // grid fits as well (within 2 % of the score).
+        const double fitted = 60.0 / fitPeriod (onsets, 60.0 / bpm);
+        const double fittedScore = gridScore (onsets, 60.0 / fitted);
+        bpm = fitted;
+        double snapped = 0.0;
+        for (double whole = std::ceil (fitted * 0.995); whole <= std::floor (fitted * 1.005); whole += 1.0)
+            if (gridScore (onsets, 60.0 / whole) >= 0.98 * fittedScore && (snapped == 0.0 || std::abs (whole - fitted) < std::abs (snapped - fitted)))
+                snapped = whole;
+        if (snapped > 0.0)
+            bpm = snapped;
     }
 
     const double tracked = bpm;
@@ -684,6 +747,60 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
 
     result.bpm = bpm;
     result.beats = grid.times;
+
+    // A track at a steady tempo: nearly all of its onsets sit on the eighth-note lattice of the fitted grid. Its beats
+    // are then that grid itself (on the onset where there is one), on whichever of the two eighth phases carries the
+    // kicks: the beat tracker can slip to the off-beats through a break and stay there.
+    if (const double period = 60.0 / bpm; onsets.size() >= 8)
+    {
+        double phase = 0.0;
+        gridScore (onsets, period, &phase);
+        const auto offLattice = [&] (double t, double step) {
+            const double d = std::fmod (std::abs (t - phase), step);
+            return std::min (d, step - d);
+        };
+        double on = 0.0, total = 0.0;
+        for (const auto& o : onsets)
+        {
+            const double w = std::sqrt (std::max (0.0f, o.strength));
+            total += w;
+            on += offLattice (o.time, period / 2.0) < 0.015 ? w : 0.0;
+        }
+        if (total > 0.0 && on >= 0.8 * total)
+        {
+            const double first = onsets.front().time, last = onsets.back().time;
+            const auto lines = [&] (double start) {
+                std::vector<double> out;
+                for (double t = start - std::floor ((start - first + 0.012) / period) * period; t <= last + 0.012; t += period)
+                    if (t >= first - 0.012)
+                        out.push_back (t);
+                return out;
+            };
+            const auto kick = [&] (const std::vector<double>& ts) {
+                double sum = 0.0;
+                for (auto t : ts)
+                {
+                    const auto frame = (int64_t) std::lround (t * frameRate);
+                    float v = 0.0f;
+                    for (int64_t j = std::max<int64_t> (0, frame - 1); j <= std::min ((int64_t) flux.low.size() - 1, frame + 3); ++j)
+                        v = std::max (v, flux.low[(size_t) j]);
+                    sum += v;
+                }
+                return ts.empty() ? 0.0 : sum / (double) ts.size();
+            };
+            auto beats = lines (phase);
+            if (const auto other = lines (phase + period / 2.0); kick (other) > 1.1 * kick (beats))
+                beats = other;
+            for (auto& t : beats)
+            {
+                auto it = std::lower_bound (onsets.begin(), onsets.end(), t - 0.012, [] (const Peak& p, double v) { return p.time < v; });
+                if (it != onsets.end() && it->time <= t + 0.012)
+                    t = it->time;
+                t = std::max (0.0, t);
+            }
+            result.beats = beats;
+        }
+    }
 
     // Downbeat: the beat phase (of four) with the most low-frequency attack; bar 1 wins near-ties since exported
     // tracks usually start on it.
