@@ -46,7 +46,7 @@ struct AudioSource
 
 // How an audio clip reads its source. Content beats map to file frames through the project tempo at the time of
 // playback: there is no warp in this stage, so a file plays at its own speed (times the transposition, which works by
-// resampling like Live's Re-Pitch) and a clip keeps its length in beats when the tempo changes.
+// resampling, the Re-Pitch mode) and a clip keeps its length in beats when the tempo changes.
 struct AudioPart
 {
     std::shared_ptr<const AudioSource> source; // null: the file is missing; the clip is silent

@@ -7,11 +7,11 @@
 class AudioEngine;
 
 // The input and monitoring choices of a track (docs/spec/05-audio-recording.md, task 5.3): the text the track card shows
-// and the menus it opens. An audio track picks channels of the sound card ("Вход 1 · Микрофон", "Входы 1/2"), the
-// master ("Ресемплинг") or nothing; a MIDI track picks its MIDI source.
+// and the menus it opens. An audio track picks channels of the sound card ("Input 1 · Mic", "Inputs 1/2"), the
+// master ("Resampling") or nothing; a MIDI track picks its MIDI source.
 namespace inputmenus
 {
-// "Входы 1/2 · Гитара", "Вход 3", "Ресемплинг", "Все MIDI-входы", ...
+// "Inputs 1/2 · Guitar", "Input 3", "Resampling", "All MIDI Inputs", ...
 juce::String inputLabel (AudioEngine&, const TrackRef&);
 juce::String monitorLabel (const TrackRef&);
 

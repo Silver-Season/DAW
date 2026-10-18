@@ -35,7 +35,7 @@ juce::String hashOf (const juce::File&);
 // The tempo of a loop: the acid chunk of a WAV, the tempo of an AIFF, else a number before "bpm" in the name. 0 = unknown.
 double detectTempo (const juce::File&, const juce::StringPairArray& metadata);
 
-// "Найти потерянные файлы…": looks for every FILE that cannot be found by name and hash in `folder` (recursively) and
+// "Find Missing Files…": looks for every FILE that cannot be found by name and hash in `folder` (recursively) and
 // points it there (one undo transaction is the caller's). Returns how many were found.
 int relinkMissing (ProjectModel&, AudioEngine&, const juce::File& folder);
 // The FILE ids no clip refers to any more (recordings that were undone).

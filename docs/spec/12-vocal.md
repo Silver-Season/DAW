@@ -1,67 +1,67 @@
-# 12. Вокал: автотюн и правка высоты (черновик)
+# 12. Vocal: pitch correction and pitch editing (draft)
 
-> Черновик, записанный 17.10.2026 по итогам ревью прототипа Codex (Prisma Voice, см. [`docs/reference/codex/`](../reference/codex/README.md)). Перед началом этапа его нужно довести до уровня остальных спек: уточнить интерфейс со скриншотами концепта, числа тестов и деление на сессии. Направление и решения ниже уже согласованы.
+> A draft written on 17.10.2026 after reviewing the Codex prototype (Prisma Voice, see [`docs/reference/codex/`](../reference/codex/README.md)). Before the stage starts it needs to be brought up to the level of the other specs: refine the UI with concept screenshots, test numbers and the split into sessions. The direction and the decisions below are already agreed.
 
-## Цель
+## Goal
 
-Встроенный вокальный процессор **«Вокал»**, который знает лад и строй проекта. Два режима, как Auto-Tune и Melodyne в одном устройстве:
+A built-in vocal processor, **"Vocal"**, that knows the project scale and tuning. Two modes in one device:
 
-1. **Живой**: ставится на аудиодорожку, через него можно петь в наушники с почти незаметной задержкой, высота притягивается к ладу проекта.
-2. **Графический**: двойной щелчок по аудиоклипу с голосом открывает редактор нот (капли высоты, как в Melodyne), ноты можно двигать по высоте, выпрямлять вибрато и дрейф, менять форманты. Правка неразрушающая и отменяемая.
+1. **Live**: placed on an audio track, the user can sing through it into headphones with barely noticeable latency, and the pitch is pulled toward the project scale.
+2. **Graphical**: double-clicking an audio clip with a voice opens a note editor (pitch blobs), where notes can be moved in pitch, vibrato and drift can be straightened, and formants changed. Editing is non-destructive and undoable.
 
-## Границы
+## Scope
 
-Входит: детектор высоты в `core/`, живой сдвиг высоты с низкой задержкой, устройство «Вокал» в цепочке дорожки, графический режим для одного монофонического голоса в аудиоклипе, форманты, автоматизация параметров.
+In: a pitch detector in `core/`, low-latency live pitch shifting, the "Vocal" device in the track chain, the graphical mode for a single monophonic voice in an audio clip, formants, parameter automation.
 
-Не входит: полифония (аккорды, как Melodyne DNA), правка времени нот внутри клипа (это варп из 07), гармонайзер и дабл-треки (позже, отдельной задачей), ИИ-преобразование голоса (этап 14). Компрессор, деэссер, эхо и реверб внутрь устройства не встраиваем: для этого есть эффекты 06 и заводские цепочки «Vocal …» из 08.
+Out: polyphony (chords), editing note timing inside a clip (that is warp from 07), harmonizer and double tracking (later, as a separate task), AI voice conversion (stage 14). We do not build a compressor, de-esser, echo or reverb into the device: the effects from 06 and the factory "Vocal …" chains from 08 cover that.
 
-Опирается на: 02 (лад `scaleRoot/scaleMode`, `Scales.h`, строй `PROJECT.tuningA4`), 05 (аудиодорожки и клипы, компенсация задержки), 06 (устройства в цепочке, PDC, автоматизация), 07 (Rubber Band R3 и аудиоредактор).
+Builds on: 02 (scale `scaleRoot/scaleMode`, `Scales.h`, tuning `PROJECT.tuningA4`), 05 (audio tracks and clips, latency compensation), 06 (devices in the chain, PDC, automation), 07 (Rubber Band R3 and the audio editor).
 
-## Задачи (набросок)
+## Tasks (outline)
 
-### 12.1. Детектор высоты: `core/include/daw/vocal/PitchTracker.h`
+### 12.1. Pitch detector: `core/include/daw/vocal/PitchTracker.h`
 
-- YIN / pYIN без JUCE. Перед прореживанием обязательный антиалиасинговый фильтр (в прототипе Codex его нет: среднее по 4 отсчётам пропускает алиасы). Окно подбирается под нижнюю ноту диапазона (настройка «Голос»: Сопрано, Альт, Тенор, Бас, Инструмент), чтобы не держать 64 мс для всех.
-- На выходе каждые ~2,7 мс: частота, уверенность, флаг «вокализовано». Защита от октавных ошибок: продолжение трека предпочтительнее скачка на октаву, если уверенность сопоставима.
-- Реальное время: фиксированные буферы, 0 выделений.
+- YIN / pYIN without JUCE. A mandatory anti-aliasing filter before decimation (the Codex prototype lacks it: averaging 4 samples lets aliases through). The window is sized to the lowest note of the range (the "Voice" setting: Soprano, Alto, Tenor, Bass, Instrument), so as not to hold 64 ms for everyone.
+- Output every ~2.7 ms: frequency, confidence, a "voiced" flag. Protection against octave errors: continuing the track is preferred over an octave jump if the confidence is comparable.
+- Real time: fixed buffers, 0 allocations.
 
-### 12.2. Выбор ноты: лад, строй, удержание
+### 12.2. Note selection: scale, tuning, hold
 
-- Частота → нота через `tuningA4` проекта, не через жёсткие 440 Гц.
-- Разрешённые ноты берутся из лада проекта (`Scales.h`), в устройстве можно выбрать «Как в проекте» (по умолчанию), другой лад или ноты вручную (12 кнопок), плюс вход MIDI: держимые ноты задают разрешённые (как MIDI-режим Auto-Tune).
-- **Гистерезис**: текущая цель меняется, только когда голос ушёл от границы между нотами дальше чем на 15–20 центов и продержался там 20–40 мс. Без этого цель скачет между соседними нотами (главный дефект прототипа).
-- При потере уверенности (согласные, дыхание) последняя поправка **удерживается** и плавно гаснет за 50–80 мс, а не обнуляется сразу.
+- Frequency → note via the project's `tuningA4`, not a hard-coded 440 Hz.
+- Allowed notes come from the project scale (`Scales.h`). In the device the user can choose "Same as Project" (default), another scale, or notes by hand (12 buttons), plus a MIDI input: held notes define the allowed ones (a MIDI target mode).
+- **Hysteresis**: the current target changes only when the voice has moved more than 15–20 cents past the boundary between notes and stayed there for 20–40 ms. Without this the target jumps between adjacent notes (the main defect of the prototype).
+- When confidence is lost (consonants, breaths), the last correction is **held** and fades out smoothly over 50–80 ms rather than dropping to zero at once.
 
-### 12.3. Живой сдвиг высоты: PSOLA
+### 12.3. Live pitch shifting: PSOLA
 
-- Сдвиг во временной области, pitch-synchronous overlap-add по меткам периодов из 12.1. Задержка алгоритма цель ≤ 5 мс при 48 кГц, сообщается движку для PDC (05, 06). Спектральные шифтеры (фазовый вокодер, signalsmith-stretch, Rubber Band) для живого режима не подходят: задержка 40 мс и выше и размытый «фазовый» голос.
-- Параметры: Сила (0–100 %), Скорость (0–400 мс, 0 = «роботизированный» эффект), Естественность (сохранение вибрато и мелкого дрейфа: поправка применяется к сглаженной кривой, отклонения вокруг неё сохраняются), Транспонирование ±12, Форманты ±12 полутонов, «Сохранять форманты» (вкл.).
-- Невокализованные фрагменты проходят без обработки, переход с кроссфейдом.
+- Time-domain shifting, pitch-synchronous overlap-add using the period marks from 12.1. Target algorithmic latency ≤ 5 ms at 48 kHz, reported to the engine for PDC (05, 06). Spectral shifters (phase vocoder, signalsmith-stretch, Rubber Band) are not suitable for the live mode: latency of 40 ms and above and a smeared "phasey" voice.
+- Parameters: Strength (0–100%), Speed (0–400 ms, 0 = the "robotic" effect), Naturalness (keeps vibrato and small drift: the correction is applied to a smoothed curve, and deviations around it are kept), Transpose ±12, Formants ±12 semitones, "Preserve formants" (on).
+- Unvoiced fragments pass through unprocessed, with a crossfade at the transition.
 
-### 12.4. Устройство «Вокал» в цепочке дорожки
+### 12.4. The "Vocal" device in the track chain
 
-- Встроенное устройство `vocal` (как эффекты 06): параметры автоматизируемы, цвета только через `theme()`, строки в `Strings.h`.
-- Вид: большая шкала нот с текущей высотой и целью (стрелка/полоска отклонения в центах), ряд разрешённых нот, ручки 12.3, кнопка «Открыть редактор» (12.5) для выделенного клипа.
-- Мониторинг идёт через обычный мониторинг дорожки из 05, своего маршрута звука у устройства нет (в прототипе был отдельный standalone-монитор, и звук пропадал по умолчанию).
+- A built-in device `vocal` (like the effects in 06): parameters are automatable, colors only via `theme()`, strings in `Strings.h`.
+- View: a large note scale with the current pitch and the target (an arrow/bar showing deviation in cents), a row of allowed notes, the knobs from 12.3, and an "Open Editor" button (12.5) for the selected clip.
+- Monitoring goes through the track's regular monitoring from 05; the device has no audio route of its own (the prototype had a separate standalone monitor, and sound was muted by default).
 
-### 12.5. Графический режим
+### 12.5. Graphical mode
 
-- Анализ аудиоклипа на фоновом потоке: кривая высоты + ноты. Нота не режется по округлению высоты: вибрато и подъезды остаются внутри одной ноты; граница — смена устойчивой высоты больше чем на 60 центов на 80+ мс или пауза.
-- Данные правки хранятся в модели проекта у клипа (`AUDIOCLIP` → `PITCHEDIT`: ноты, целевая высота, выпрямление дрейфа и вибрато в %, форманты), а не в состоянии плагина. Звук не копируется: ссылка на файл клипа (в прототипе до 30 с сырого звука лежало base64 внутри состояния). Модель фразы прототипа (неизменяемый исходник + вектор нот, отмена копирует только ноты) брать как образец.
-- Рендер: Rubber Band R3 из 07 с сохранением формант, на фоновом потоке, кэш на диске рядом с проектом; аудиопоток читает кэш как варп-клип. Каждая правка — транзакция отмены проекта.
-- Редактор открывается в детальной панели вместо аудиоредактора 07: капли нот поверх клавиатуры с подсветкой лада, перетаскивание по высоте (с `Alt` без привязки к ладу), инструменты «Выпрямить», «Привязать всё к ладу», двойной щелчок по ноте — к ближайшей ноте лада.
+- Analysis of the audio clip on a background thread: a pitch curve + notes. A note is not split by pitch rounding: vibrato and scoops stay inside one note; a boundary is a change of stable pitch by more than 60 cents for 80+ ms, or a pause.
+- Edit data is stored in the project model on the clip (`AUDIOCLIP` → `PITCHEDIT`: notes, target pitch, drift and vibrato straightening in %, formants), not in plugin state. Audio is not copied: a reference to the clip's file (the prototype kept up to 30 s of raw audio as base64 inside its state). Take the prototype's phrase model (an immutable source + a vector of notes, undo copies only the notes) as a reference.
+- Rendering: Rubber Band R3 from 07 with formant preservation, on a background thread, with a disk cache next to the project; the audio thread reads the cache like a warp clip. Every edit is a project undo transaction.
+- The editor opens in the detail panel in place of the audio editor from 07: note blobs over a keyboard with scale highlighting, dragging in pitch (with `Alt`, without snapping to the scale), the tools "Straighten" and "Snap All to Scale", and double-clicking a note snaps it to the nearest scale note.
 
-## Тесты (набросок)
+## Tests (outline)
 
-1. Детектор: синусы и пилы 80–1000 Гц, точность ±5 центов; синтетический голос с вибрато 6 Гц ±50 центов — без октавных ошибок.
-2. Строй: при `tuningA4 = 432` нота A4 распознаётся на 432 Гц.
-3. Гистерезис: глиссандо между E4 и F4 с остановкой на границе даёт не больше одной смены цели.
-4. Удержание: пауза уверенности 30 мс посреди ноты не меняет поправку больше чем на 10 %.
-5. PSOLA: задержка ≤ 5 мс при 48 кГц; сдвиг ±7 полутонов на синтетическом голосе даёт ожидаемую частоту ±5 центов; 0 выделений в аудиопотоке.
-6. Графический режим: правка ноты + отмена возвращают исходный рендер; проект с правками сохраняется и открывается, звук совпадает.
+1. Detector: sines and saws at 80–1000 Hz, accuracy ±5 cents; a synthetic voice with 6 Hz vibrato at ±50 cents: no octave errors.
+2. Tuning: with `tuningA4 = 432`, the note A4 is recognized at 432 Hz.
+3. Hysteresis: a glissando between E4 and F4 that stops at the boundary gives no more than one target change.
+4. Hold: a 30 ms confidence dropout in the middle of a note does not change the correction by more than 10%.
+5. PSOLA: latency ≤ 5 ms at 48 kHz; a ±7 semitone shift on a synthetic voice gives the expected frequency ±5 cents; 0 allocations on the audio thread.
+6. Graphical mode: a note edit + undo return the original render; a project with edits saves and reopens, and the sound matches.
 
-## Готово, когда (набросок)
+## Done when (outline)
 
-- [ ] Пользователь поёт через «Вокал» на аудиодорожке на Mac с внешней картой, задержку не замечает, высота притягивается к ладу проекта.
-- [ ] В графическом режиме можно поправить фальшивую ноту в записанном клипе, отменить и сохранить проект.
-- [ ] Все тесты зелёные, CI зелёный, README обновлён.
+- [ ] The user sings through "Vocal" on an audio track on a Mac with an external audio interface, does not notice the latency, and the pitch is pulled to the project scale.
+- [ ] In the graphical mode, an off-key note in a recorded clip can be fixed, undone, and the project saved.
+- [ ] All tests green, CI green, README updated.

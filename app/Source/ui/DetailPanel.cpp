@@ -596,7 +596,7 @@ private:
     juce::AudioProcessor* processor = nullptr;
     std::unique_ptr<WavetableMini> wavetable;
     std::unique_ptr<DrumPads> pads;
-    bool keyed = false; // a compressor or gate: the line "Сайдчейн: ..." at the bottom chooses its key track
+    bool keyed = false; // a compressor or gate: the line "Sidechain: ..." at the bottom chooses its key track
     std::vector<std::unique_ptr<BoundKnob>> knobs;
     Part hoverPart = Part::none, pressedPart = Part::none;
 };
@@ -897,7 +897,7 @@ void DeviceChainView::tick()
 }
 
 //==============================================================================
-// "MIDI | Звук": what the selected track records. The audio half waits for stage 5 and is drawn disabled.
+// "MIDI | Audio": what the selected track records. The audio half waits for stage 5 and is drawn disabled.
 class RecordSourceSwitch final : public juce::Component, public HelpProvider
 {
 public:
@@ -1075,7 +1075,7 @@ void DetailPanel::tick()
 
 juce::Rectangle<int> DetailPanel::cardRow (int index) const
 {
-    // the summary card: 13 px margin, the "Дорожка" caption (16), the name (22), a gap (6), then rows of 22
+    // the summary card: 13 px margin, the "Track" caption (16), the name (22), a gap (6), then rows of 22
     return { 14, 13 + 16 + 22 + 6 + index * 22, kInfoWidth - 28, 22 };
 }
 

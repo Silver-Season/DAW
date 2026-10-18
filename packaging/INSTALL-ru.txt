@@ -10,7 +10,7 @@
    Или одной командой в Терминале:
        xattr -dr com.apple.quarantine /Applications/DAW.app
 
-3. Плагин Prisma для Logic, Ableton и других программ (необязательно):
+3. Плагин Prisma для других программ (AU / VST3) (необязательно):
    скопируйте из папки Plugins
        Prisma.component  →  ~/Library/Audio/Plug-Ins/Components
        Prisma.vst3       →  ~/Library/Audio/Plug-Ins/VST3

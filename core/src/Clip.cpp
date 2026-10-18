@@ -287,7 +287,7 @@ void ClipPlayer::process (double a, double b, double spb, int numSamples, std::v
         renderWindow (*playingClip, startBeat, cursor, b, a, spb, numSamples, out, lateStart);
     track (out, mark);
 
-    // A clip with the loop off ends after its first pass, like a one-shot in Live.
+    // A clip with the loop off ends after its first pass, as a one-shot.
     if (playingClip != nullptr && ! playingClip->loop)
     {
         const double endAt = startBeat + playingClip->firstPassBeats();

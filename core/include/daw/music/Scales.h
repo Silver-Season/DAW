@@ -13,7 +13,8 @@ namespace daw::music
 struct Scale
 {
     const char* key;    // stored in the project ("" = no scale)
-    const char* nameRu; // shown in the menus
+    const char* name;   // shown in the menus (English UI)
+    const char* nameRu; // shown in the menus (Russian UI)
     std::array<bool, 12> pitches; // pitch classes above the root that belong to the scale; [0] is the root itself
 };
 

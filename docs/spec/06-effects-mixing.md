@@ -1,22 +1,22 @@
-# 06. Эффекты, посылы, группы, PDC, автоматизация, снимки и морф
+# 06. Effects, sends, groups, PDC, automation, snapshots and morphing
 
-## Цель
+## Goal
 
-Дать полный набор встроенных эффектов уровня продакшена, возвратные дорожки и группы, компенсацию задержки плагинов, автоматизацию любого параметра и третью изюминку: снимки всех ручек с плавным морфом между ними.
+Provide a full set of production-grade built-in effects, return tracks and groups, plugin delay compensation, automation of any parameter, and the third signature feature: snapshots of every knob with smooth morphing between them.
 
-В конце пользователь может: повесить на дорожки эквалайзер, компрессор и дисторшн из браузера, отправить несколько дорожек в общий ревер, собрать барабаны в группу, нарисовать или записать движение среза фильтра, а в живом выступлении одной ручкой перевести весь трек из «куплета» в «дроп».
+At the end the user can: put an EQ, a compressor and a distortion on tracks from the browser, send several tracks to a shared reverb, gather the drums into a group, draw or record a filter cutoff movement, and in a live performance move the whole track from "verse" to "drop" with a single knob.
 
-## Границы
+## Scope
 
-Входит: 13 встроенных эффектов (DSP в `core/` как `daw::fx`, общий с Prisma из этапа 09), компактные интерфейсы устройств, возвратные дорожки и посылы, группы, сайдчейн для компрессора и гейта, PDC, автоматизация в Arrangement и огибающие в клипах, запись автоматизации, отмена изменений параметров, MIDI Learn, снимки и морф.
+In: 13 built-in effects (DSP in `core/` as `daw::fx`, shared with Prisma from stage 09), compact device UIs, return tracks and sends, groups, sidechain for the compressor and gate, PDC, automation in Arrangement and envelopes in clips, automation recording, undo of parameter changes, MIDI Learn, snapshots and morphing.
 
-Не входит: рэки и макросы (фаза 3), многопоточная обработка дорожек (фаза 3), заводские пресеты эффектов (08), Drum Rack (08).
+Out: racks and macros (phase 3), multithreaded track processing (phase 3), factory effect presets (08), the drum machine (08).
 
 ---
 
-## Задача 6.1. Каркас эффектов
+## Task 6.1. Effects framework
 
-- `core/include/daw/fx/`: базовый интерфейс без JUCE:
+- `core/include/daw/fx/`: a base interface without JUCE:
   ```cpp
   namespace daw::fx
   {
@@ -26,151 +26,151 @@
   public:
       virtual ~Effect() = default;
       virtual const std::vector<ParamInfo>& params() const = 0;
-      virtual void prepare (double sampleRate, int maxBlock) = 0;   // единственное место, где можно выделять память
+      virtual void prepare (double sampleRate, int maxBlock) = 0;   // the only place where memory may be allocated
       virtual void reset() = 0;
-      virtual void setParam (int index, float value) = 0;           // значение в единицах параметра, сглаживание внутри
+      virtual void setParam (int index, float value) = 0;           // value in parameter units, smoothing is internal
       virtual void process (float* const* io, int numChannels, int numSamples, const float* const* sidechain = nullptr) = 0;
       virtual int latencySamples() const { return 0; }
       virtual double tailSeconds() const { return 0.0; }
   };
   }
   ```
-- Каждый параметр сглаживается (одна полюсная кривая 20 мс для громкостей и частот, без сглаживания для переключателей), чтобы автоматизация не трещала.
-- `app/Source/engine/BuiltInEffectProcessor`: обёртка `juce::AudioProcessor` над `daw::fx::Effect` (параметры как `AudioProcessorParameter`, состояние как XML со значениями по `id`). В модели `DEVICE kind="fx" fxType="eq8"`.
-- Компактный интерфейс каждого эффекта в детальной панели (ширина 200–360 px), общий набор контролов из 01 (ручки, переключатели) и своё изображение (кривая EQ, кривая компрессора, индикатор GR и т. д., как в концепте).
-- Папка «Встроенные» в категории «Эффекты» браузера (01) наполняется.
-- Эффекты можно собрать и как отдельные AU/VST3 (`plugins/fx/`, один плагин на эффект) — опционально, только если не задерживает этап.
+- Every parameter is smoothed (a one-pole 20 ms curve for levels and frequencies, no smoothing for switches) so that automation does not crackle.
+- `app/Source/engine/BuiltInEffectProcessor`: a `juce::AudioProcessor` wrapper around `daw::fx::Effect` (parameters as `AudioProcessorParameter`, state as XML with values by `id`). In the model: `DEVICE kind="fx" fxType="eq8"`.
+- A compact UI for each effect in the detail panel (width 200–360 px), using the shared control set from 01 (knobs, switches) plus its own display (EQ curve, compressor curve, GR meter, etc., as in the concept).
+- The "Built-in" folder in the browser's "Effects" category (01) gets populated.
+- The effects can also be built as standalone AU/VST3 (`plugins/fx/`, one plugin per effect). Optional, only if it does not delay the stage.
 
-## Задача 6.2. Эффекты
+## Task 6.2. Effects
 
-У каждого эффекта ручка **Mix** (dry/wet с компенсацией задержки dry) и **Output** (дБ), если не сказано иное.
+Every effect has a **Mix** knob (dry/wet with latency compensation of the dry signal) and an **Output** knob (dB), unless stated otherwise.
 
-| Эффект | Параметры | DSP |
+| Effect | Parameters | DSP |
 |---|---|---|
-| **Эквалайзер** (`eq8`) | 8 полос: тип (срез НЧ 6/12/24/48 дБ, полка НЧ, колокол, notch, полка ВЧ, срез ВЧ), частота, усиление, Q, вкл; режим Stereo / L/R / M/S | Биквады по формулам RBJ, для срезов 48 дБ каскад. Кривая в интерфейсе по реальной АЧХ, плюс анализатор спектра (FFT 4096, сглаживание 1/6 окт.) |
-| **Компрессор** (`comp`) | порог, ratio (1:1–∞), атака, релиз, авто-релиз, колено, makeup (авто), lookahead 0–10 мс, детектор Peak / RMS, сайдчейн внешний + фильтр сайдчейна (HPF) | Детектор в лог-области, гладкое колено, атака/релиз с раздельными коэффициентами. Индикатор GR |
-| **Ревербератор** (`reverb`) | размер, время спада, pre-delay (с синхронизацией), ширина, демпфирование ВЧ, низкий срез, диффузия, freeze, модуляция | FDN 8×8 (матрица Адамара), входная диффузия 4 all-pass, модулированные линии задержки, затухание по частотам через shelving в обратной связи |
-| **Дилей** (`delay`) | время L/R (мс или синхронно: 1/32…1 с точкой и триолью), feedback, ping-pong, фильтр в петле (HP/LP), модуляция, freeze, дакинг (громкость эха проседает, пока звучит вход) | Дробная задержка с интерполяцией (Lagrange 3-го порядка), смена времени без треска (кроссфейд двух голов 50 мс) |
-| **Дисторшн и сатуратор** (`drive`) | режим: мягкое насыщение (tanh), лента, лампа (асимметричный), жёсткий клип, fold, bitcrush-lite; drive, тон, bias, DC-фильтр, вход/выход | Передискретизация 4× (полуполосные IIR или FIR из ресемплера 04) вокруг нелинейности |
-| **Хорус** (`chorus`) | голоса 1–4, частота, глубина, задержка, ширина, feedback | Модулированные линии задержки, LFO со сдвигом фазы по голосам |
-| **Фланжер** (`flanger`) | частота (с синхронизацией), глубина, задержка, feedback (±), стерео-фаза | Короткая модулированная задержка 0,1–10 мс |
-| **Фейзер** (`phaser`) | ступени 2–12, частота, глубина, центр, feedback, стерео-фаза | Каскад all-pass первого порядка с модулированной частотой |
-| **Фильтр** (`filter`) | тип (LP/HP/BP/Notch 12/24, ladder), частота, резонанс, drive, LFO (форма, частота с синхронизацией, глубина), огибающая по входу (Envelope follower) | Переиспользовать SVF и ladder из Prisma (09) |
-| **Гейт** (`gate`) | порог, гистерезис, атака, удержание, релиз, глубина (floor), сайдчейн, lookahead | Детектор пика, конечный автомат открыт/удержание/закрыт |
-| **Лимитер** (`limiter`) | потолок (−0,1…−12 dBTP), усиление, релиз (авто), lookahead 1–5 мс, true peak вкл | Lookahead-лимитер с огибающей через скользящий минимум, true peak через 4× передискретизацию детектора. Задержка = lookahead (сообщается в PDC) |
-| **Биткрашер** (`crush`) | битность 1–24, частота дискретизации (понижение до 100 Гц), дизер, mix | Удержание сэмплов + квантование |
-| **Автопан и тремоло** (`autopan`) | частота (с синхронизацией), глубина, форма (sin, треугольник, пила, квадрат, S&H), фаза (0° — тремоло, 180° — панорама), сдвиг | LFO по транспорту при синхронизации, чтобы фаза совпадала при каждом запуске |
+| **EQ** (`eq8`) | 8 bands: type (low cut 6/12/24/48 dB, low shelf, bell, notch, high shelf, high cut), frequency, gain, Q, on; mode Stereo / L/R / M/S | Biquads using the RBJ formulas, cascaded for 48 dB cuts. The UI curve follows the real frequency response, plus a spectrum analyzer (FFT 4096, 1/6-octave smoothing) |
+| **Compressor** (`comp`) | threshold, ratio (1:1–∞), attack, release, auto release, knee, makeup (auto), lookahead 0–10 ms, Peak / RMS detector, external sidechain + sidechain filter (HPF) | Detector in the log domain, soft knee, attack/release with separate coefficients. GR meter |
+| **Reverb** (`reverb`) | size, decay time, pre-delay (with sync), width, high damping, low cut, diffusion, freeze, modulation | 8×8 FDN (Hadamard matrix), input diffusion with 4 all-pass filters, modulated delay lines, frequency-dependent decay via shelving in the feedback path |
+| **Delay** (`delay`) | L/R time (ms or synced: 1/32…1, dotted and triplet), feedback, ping-pong, filter in the loop (HP/LP), modulation, freeze, ducking (echo level dips while the input is playing) | Fractional delay with interpolation (3rd-order Lagrange), time changes without clicks (crossfade between two read heads, 50 ms) |
+| **Distortion and saturator** (`drive`) | mode: soft saturation (tanh), tape, tube (asymmetric), hard clip, fold, bitcrush-lite; drive, tone, bias, DC filter, input/output | 4× oversampling (half-band IIR or FIR from the resampler in 04) around the nonlinearity |
+| **Chorus** (`chorus`) | voices 1–4, rate, depth, delay, width, feedback | Modulated delay lines, LFO with per-voice phase offset |
+| **Flanger** (`flanger`) | rate (with sync), depth, delay, feedback (±), stereo phase | Short modulated delay, 0.1–10 ms |
+| **Phaser** (`phaser`) | stages 2–12, rate, depth, center, feedback, stereo phase | Cascade of first-order all-pass filters with modulated frequency |
+| **Filter** (`filter`) | type (LP/HP/BP/Notch 12/24, ladder), cutoff, resonance, drive, LFO (shape, rate with sync, depth), envelope follower on the input | Reuse the SVF and ladder from Prisma (09) |
+| **Gate** (`gate`) | threshold, hysteresis, attack, hold, release, depth (floor), sidechain, lookahead | Peak detector, open/hold/closed state machine |
+| **Limiter** (`limiter`) | ceiling (−0.1…−12 dBTP), gain, release (auto), lookahead 1–5 ms, true peak on | Lookahead limiter with the envelope from a sliding minimum, true peak via 4× oversampling of the detector. Latency = lookahead (reported to PDC) |
+| **Bitcrusher** (`crush`) | bit depth 1–24, sample rate (down to 100 Hz), dither, mix | Sample and hold + quantization |
+| **Autopan and tremolo** (`autopan`) | rate (with sync), depth, shape (sine, triangle, saw, square, S&H), phase (0° is tremolo, 180° is panning), offset | LFO locked to the transport when synced, so the phase matches on every start |
 
-- Синхронизация с темпом во всех эффектах берёт темп и позицию из `AudioPlayHead`, как Prisma.
-- Бюджет CPU: каждый эффект на стерео 48 кГц не дороже 1 % одного ядра M1 (ревер и лимитер с true peak — 3 %). Цифры в отчёт через тест производительности в `core/tests`.
+- Tempo sync in all effects takes tempo and position from `AudioPlayHead`, like Prisma.
+- CPU budget: each effect on stereo at 48 kHz costs no more than 1% of one M1 core (reverb and limiter with true peak: 3%). The numbers go into the report via a performance test in `core/tests`.
 
-## Задача 6.3. Возвратные дорожки и посылы
+## Task 6.3. Return tracks and sends
 
-- Тип дорожки `return` (в модели уже предусмотрен). По умолчанию в новом проекте две: «A Reverb» (с ревербератором, mix 100 %) и «B Delay» (с дилеем, mix 100 %). `Cmd+Alt+T` — новая возвратная.
-- Возвратные дорожки стоят справа от обычных в Session и внизу в Arrangement, у них нет клипов, только цепочка и микшер.
-- У каждой обычной дорожки ручка посыла на каждую возвратную (`TRACK/SENDS/SEND returnId levelDb=-inf preFader=0`). Пост-фейдер по умолчанию; переключатель Pre/Post в шапке возвратной дорожки (как в Ableton). Возвратная может слать в другие возвратные, кроме себя и тех, кто шлёт в неё (граф без циклов, проверка в модели).
-- Движок: порядок обработки — обычные дорожки, затем возвратные в топологическом порядке, затем мастер.
+- Track type `return` (already provided for in the model). A new project has two by default: "A Reverb" (with a reverb, mix 100%) and "B Delay" (with a delay, mix 100%). `Cmd+Alt+T` creates a new return track.
+- Return tracks sit to the right of regular tracks in Session and at the bottom in Arrangement. They have no clips, only a chain and the mixer.
+- Every regular track has a send knob for each return track (`TRACK/SENDS/SEND returnId levelDb=-inf preFader=0`). Post-fader by default; a Pre/Post switch in the return track's header. A return track can send to other return tracks, except itself and those that send to it (acyclic graph, checked in the model).
+- Engine: processing order is regular tracks, then return tracks in topological order, then the master.
 
-## Задача 6.4. Группы
+## Task 6.4. Groups
 
-- `Cmd+G` группирует выделенные дорожки: создаётся дорожка `type="group"`, выделенные становятся её детьми (`parentGroup=<id>`). Вложенность до 4 уровней. `Cmd+Shift+G` разгруппировывает.
-- Звук детей идёт в группу (цепочка группы, её фейдер), группа идёт в мастер. Посылы детей идут напрямую в возвратные.
-- Интерфейс: группа сворачивается (треугольник в заголовке), в Arrangement свёрнутая группа показывает сводку клипов детей, в Session — кнопки запуска клипов детей одной строкой (как Group Track в Ableton). Solo группы солирует детей.
+- `Cmd+G` groups the selected tracks: a track with `type="group"` is created and the selected tracks become its children (`parentGroup=<id>`). Nesting up to 4 levels. `Cmd+Shift+G` ungroups.
+- The children's audio goes into the group (the group's chain, its fader), and the group goes to the master. The children's sends go directly to the return tracks.
+- UI: a group collapses (triangle in the header). In Arrangement a collapsed group shows a summary of its children's clips; in Session it shows the children's clip launch buttons in a single row. Soloing a group solos its children.
 
-## Задача 6.5. Сайдчейн
+## Task 6.5. Sidechain
 
-- Компрессор и гейт имеют вход сайдчейна: меню «Сайдчейн: нет / <дорожка> (пре-эффекты / пост-эффекты / пост-фейдер)».
-- Движок обрабатывает источник раньше потребителя; если это создаёт цикл, меню не даёт выбрать такой источник.
-- Для сторонних плагинов с шиной сайдчейна (VST3/AU с дополнительной входной шиной) то же меню в заголовке устройства.
+- The compressor and gate have a sidechain input: a menu "Sidechain: none / <track> (pre-effects / post-effects / post-fader)".
+- The engine processes the source before the consumer; if that would create a cycle, the menu does not let the user pick that source.
+- For third-party plugins with a sidechain bus (VST3/AU with an extra input bus), the same menu is in the device header.
 
-## Задача 6.6. Компенсация задержки (PDC)
+## Task 6.6. Plugin delay compensation (PDC)
 
-- Задержка дорожки = сумма `getLatencySamples()` устройств её цепочки. Движок выравнивает все пути до мастера: каждая дорожка, возврат и посыл получают компенсирующую задержку (кольцевой буфер, выделенный на message thread при пересборке графа), так что все сигналы приходят в мастер одновременно.
-- Плагин может поменять задержку на лету (`AudioProcessorListener::audioProcessorChanged` с флагом latency): граф пересобирается, в звуке допустим короткий разрыв (как во всех DAW), но не треск: кроссфейд 10 мс.
-- Воспроизведение клипов с учётом общей задержки: MIDI и аудио подаются раньше на величину максимальной задержки графа, чтобы звук совпадал с курсором (как в Ableton и Logic). Мониторинг входа и игра вживую не задерживаются.
-- В транспорте показывается общая задержка, если больше 0 («PDC 12 мс»). Кнопка в настройках «Отключить PDC» для живой игры с низкой задержкой.
+- Track latency = the sum of `getLatencySamples()` of the devices in its chain. The engine aligns all paths to the master: every track, return and send gets a compensating delay (a ring buffer allocated on the message thread when the graph is rebuilt), so all signals reach the master at the same time.
+- A plugin can change its latency on the fly (`AudioProcessorListener::audioProcessorChanged` with the latency flag): the graph is rebuilt. A short gap in the audio is acceptable (as in all DAWs), but no click: a 10 ms crossfade.
+- Clip playback accounts for the total latency: MIDI and audio are fed earlier by the graph's maximum latency, so the sound lines up with the playhead. Input monitoring and live playing are not delayed.
+- The transport shows the total latency when it is above 0 ("PDC 12 ms"). A "Disable PDC" button in settings for low-latency live playing.
 
-## Задача 6.7. Автоматизация
+## Task 6.7. Automation
 
-### Модель
+### Model
 
 ```
 TRACK/AUTOMATION/LANE  target="device:<deviceId>:<paramIndex>" | "mixer:volume" | "mixer:pan" | "send:<returnId>"
                        visible=1  height=44
-     └── POINT  beat  value (нормализованное 0..1)  curve=0 (−1..1, изгиб сегмента до следующей точки)
-CLIP/ENVELOPE  target=…  └── POINT …          (огибающая внутри клипа: в долях клипа, повторяется с петлёй)
+     └── POINT  beat  value (normalized 0..1)  curve=0 (−1..1, bend of the segment to the next point)
+CLIP/ENVELOPE  target=…  └── POINT …          (envelope inside a clip: in clip beats, repeats with the loop)
 ```
 
-### Воспроизведение
+### Playback
 
-- В аудиопотоке автоматизация применяется подблоками по 32 сэмпла: значение в начале подблока ставится в параметр (через `AudioProcessorParameter::setValue` для плагинов — это разрешено из аудиопотока в JUCE; для встроенных эффектов и Prisma напрямую), сглаживание внутри эффектов делает переход гладким.
-- Огибающая клипа и автоматизация аранжировки на одном параметре: клип умножает (для громкости) или смещает (для остальных) относительно значения аранжировки, как modulation-огибающие в Ableton.
-- Когда пользователь двигает автоматизированную ручку руками во время воспроизведения, автоматизация этой дорожки «отпускается» (кнопка «Вернуть автоматизацию» загорается в транспорте, как в Ableton) до её нажатия.
+- On the audio thread, automation is applied in sub-blocks of 32 samples: the value at the start of the sub-block is set on the parameter (via `AudioProcessorParameter::setValue` for plugins, which JUCE allows from the audio thread; directly for built-in effects and Prisma), and the smoothing inside the effects makes the transition smooth.
+- A clip envelope and arrangement automation on the same parameter: the clip multiplies (for volume) or offsets (for everything else) relative to the arrangement value (a modulation envelope).
+- When the user moves an automated knob by hand during playback, that track's automation is "released" (the "Re-enable Automation" button lights up in the transport) until the button is pressed.
 
-### Интерфейс
+### UI
 
-- `A` переключает режим автоматизации в Arrangement: под каждой дорожкой линии видимых полос, в заголовке полосы — выбор устройства и параметра. Правая кнопка по любой ручке → «Показать автоматизацию».
-- Правка: щелчок по линии ставит точку, тащить точку, Alt+тащить сегмент — изгиб, рамкой выделить точки и двигать или удалять, `Delete`. Карандаш (`B`) рисует ступеньками по сетке. Выделение времени и `Delete` удаляет точки в нём.
-- Огибающие клипа: в редакторе клипа (02) вкладка «Огибающие» с той же правкой.
+- `A` toggles automation mode in Arrangement: under each track are the lines of its visible lanes, and the lane header has a device and parameter selector. Right-click on any knob → "Show Automation".
+- Editing: click on the line to add a point, drag a point, Alt+drag a segment to bend it, marquee-select points to move or delete them, `Delete`. The pencil (`B`) draws steps on the grid. A time selection plus `Delete` removes the points inside it.
+- Clip envelopes: in the clip editor (02), an "Envelopes" tab with the same editing.
 
-### Запись
+### Recording
 
-- Кнопка автоматизации в транспорте (значок с точками, `Alt+A`): при записи в Arrangement движения ручек пишутся в полосы. Режим **Touch**: пишется, пока ручку держат, потом возвращается к старой линии. Режим **Latch** (настройка): пишется до остановки. Запись прореживается (алгоритм Рамера–Дугласа–Пекера с допуском 0,5 %), чтобы не было тысяч точек.
-- Запись в Session View идёт в огибающую играющего клипа, если включена кнопка OVR.
+- The automation button in the transport (dotted icon, `Alt+A`): when recording in Arrangement, knob movements are written into lanes. **Touch** mode: writes while the knob is held, then returns to the previous line. **Latch** mode (a setting): writes until stop. The recording is thinned out (Ramer–Douglas–Peucker algorithm with a 0.5% tolerance) to avoid thousands of points.
+- Recording in Session View goes into the envelope of the playing clip if the OVR button is on.
 
-### Отмена изменений параметров
+### Undo of parameter changes
 
-- Каждое движение ручки встроенного устройства или микшера (от нажатия до отпускания) — транзакция отмены «Изменить срез фильтра». Для сторонних плагинов — через `beginChangeGesture`/`endChangeGesture` слушателей параметров.
+- Every movement of a built-in device or mixer knob (from press to release) is one undo transaction, "Change Filter Cutoff". For third-party plugins, via `beginChangeGesture`/`endChangeGesture` of the parameter listeners.
 
-## Задача 6.8. MIDI Learn
+## Task 6.8. MIDI Learn
 
-- `Cmd+K` включает режим назначения: все ручки, фейдеры, кнопки подсвечиваются. Щелчок по элементу, затем движение ручки контроллера назначает CC (или ноту для кнопки). Повторный `Cmd+K` выходит.
-- Назначения хранятся в проекте (`PROJECT/MIDIMAP/MAP channel cc target min max`) и показываются списком в настройках MIDI (входы с включённым «Управление» из 01 получают смысл). Режим «Takeover»: «Прыжок» / «Подхват» (значение меняется, когда ручка контроллера проходит через текущее).
+- `Cmd+K` enters mapping mode: all knobs, faders and buttons are highlighted. Click an element, then move a controller knob to assign a CC (or a note for a button). Pressing `Cmd+K` again exits.
+- Mappings are stored in the project (`PROJECT/MIDIMAP/MAP channel cc target min max`) and shown as a list in the MIDI settings (inputs with "Remote" enabled from 01 now have a purpose). Takeover mode: "Jump" / "Pickup" (the value changes once the controller knob passes through the current value).
 
-## Задача 6.9. Снимки и морф
+## Task 6.9. Snapshots and morphing
 
-### Модель
+### Model
 
 ```
 PROJECT/SNAPSHOTS  morphA=<id> morphB=<id> morph=0.0 (0..1)
 └── SNAPSHOT  id  name  colour  time
-    └── VALUE  target="device:<id>:<param>" | "mixer:<trackId>:volume" | …  value (норм. 0..1)
+    └── VALUE  target="device:<id>:<param>" | "mixer:<trackId>:volume" | …  value (normalized 0..1)
 ```
 
-### Поведение
+### Behavior
 
-- Кнопка «Снимок» в транспорте (или `Cmd+Alt+S`) запоминает текущие значения **всех** параметров всех устройств и микшера (кроме мастер-громкости). Снимок получает имя «Снимок 3», переименовывается двойным щелчком.
-- Панель снимков (выпадает из ползунка A↔B): список снимков карточками с цветом, назначение A и B перетаскиванием на буквы, кнопка «Вызвать» (мгновенно применить снимок, одна транзакция отмены).
-- **Морф**: ползунок A↔B в транспорте и отдельная назначаемая ручка (MIDI Learn по умолчанию предлагает модуляционное колесо или первую ручку Launchkey). Значение `m` даёт каждому параметру `value = A + (B − A) × m` для непрерывных параметров; переключатели и списки меняются на `m ≥ 0,5`. Параметры, у которых в A и B одинаковые значения, не трогаются, поэтому можно двигать их руками во время морфа.
-- Галочка «Исключить из морфа» по правой кнопке на любой ручке (например, мастер-громкость дорожки вокала). Хранится как `SNAPSHOTS/EXCLUDE target`.
-- Морф пишется как автоматизация: полоса `target="morph"` в мастер-дорожке, как любой параметр. При воспроизведении такой полосы морф применяет значения к параметрам; собственные полосы автоматизации параметров имеют приоритет над морфом.
-- Морф применяется на message thread с частотой 60 Гц при ручном движении (это изменения параметров, движок их сглаживает), а при воспроизведении автоматизации морфа — в аудиопотоке подблоками, как обычная автоматизация: для этого при назначении A и B строится плоский массив `MorphTarget { paramPtr, a, b, isStepped }` и публикуется в графе.
-- Связь с Alloy (этап 10): если на дорожке Alloy, морф может управлять его Transform Pad вместо отдельных параметров (галочка в панели снимков «Морфить Alloy через Transform Pad»).
+- The "Snapshot" button in the transport (or `Cmd+Alt+S`) stores the current values of **all** parameters of all devices and the mixer (except the master volume). The snapshot is named "Snapshot 3" and can be renamed by double-clicking.
+- Snapshot panel (drops down from the A↔B slider): a list of snapshots as colored cards, A and B are assigned by dragging onto the letters, and a "Recall" button applies a snapshot instantly (one undo transaction).
+- **Morph**: an A↔B slider in the transport and a separate assignable knob (MIDI Learn suggests the modulation wheel or the first Launchkey knob by default). The value `m` gives each continuous parameter `value = A + (B − A) × m`; switches and lists change at `m ≥ 0.5`. Parameters whose values are the same in A and B are left alone, so they can be moved by hand during a morph.
+- An "Exclude from Morph" checkbox on the right-click menu of any knob (for example, the volume of the vocal track). Stored as `SNAPSHOTS/EXCLUDE target`.
+- The morph is recorded as automation: a lane with `target="morph"` on the master track, like any parameter. When such a lane plays, the morph applies values to the parameters; a parameter's own automation lanes take priority over the morph.
+- The morph is applied on the message thread at 60 Hz during manual movement (these are parameter changes, and the engine smooths them), and during playback of morph automation it is applied on the audio thread in sub-blocks, like regular automation. For this, when A and B are assigned, a flat array `MorphTarget { paramPtr, a, b, isStepped }` is built and published into the graph.
+- Link with Alloy (stage 10): if a track has Alloy, the morph can drive its Transform Pad instead of individual parameters (a checkbox in the snapshot panel, "Morph Alloy via Transform Pad").
 
-## Тесты
+## Tests
 
-1. **Эффекты, общие** (core, для каждого из 13): при Mix = 0 выход равен входу с учётом задержки (null-тест < −120 дБ); на тишине выход тишина после хвоста; на белом шуме −6 dBFS нет NaN, Inf и выхода за ±4,0; `reset` убирает хвост; `latencySamples` совпадает с измеренной задержкой импульса.
-2. **Эквалайзер:** АЧХ колокола +6 дБ на 1 кГц, Q 1 совпадает с аналитической ± 0,1 дБ; срез 48 дБ на 100 Гц даёт −48 ± 1 дБ на 50 Гц.
-3. **Компрессор:** синус −10 dBFS, порог −20, ratio 4:1, колено 0 → установившийся уровень −17,5 ± 0,2 dBFS; атака 10 мс достигает 63 % ± 5 % за 10 мс.
-4. **Лимитер:** на синусе +6 dBFS true peak выхода ≤ потолок + 0,1 дБ.
-5. **Дисторшн:** синус 15 кГц при 48 кГц с drive 24 дБ: продукты алиасинга ниже −80 дБ относительно основного тона (благодаря 4×).
-6. **Дилей:** импульс при времени 1/4 и 120 BPM даёт эхо через 24 000 ± 1 сэмпл при 48 кГц; смена времени во время звучания не даёт скачков больше 0,1.
-7. **Посылы и возвраты:** посыл −6 дБ даёт в возврате сигнал −6 дБ; пре-фейдер не зависит от фейдера.
-8. **Циклы:** модель не даёт создать цикл посылов или сайдчейна.
-9. **PDC:** дорожка с лимитером (задержка 5 мс) и дорожка без эффектов с одинаковым импульсом в одной позиции дают импульсы в мастере в одном и том же сэмпле.
-10. **Автоматизация:** линия громкости от −∞ до 0 дБ за 1 такт даёт монотонную огибающую без ступенек больше 0,5 дБ; изгиб сегмента меняет форму как ожидается.
-11. **Отпускание:** движение ручки во время воспроизведения отключает автоматизацию дорожки до «Вернуть автоматизацию».
-12. **Морф:** при `m = 0` значения A, при `m = 1` значения B, при `m = 0,5` середина для непрерывных и B для переключателей; исключённые параметры не меняются.
-13. **Реальное время:** проект с 8 дорожками, на каждой 3 эффекта и автоматизация, морф пишется в аудиопотоке: ноль выделений памяти.
+1. **Effects, general** (core, for each of the 13): with Mix = 0 the output equals the input, accounting for latency (null test < −120 dB); silence in gives silence out after the tail; white noise at −6 dBFS gives no NaN, Inf or output beyond ±4.0; `reset` removes the tail; `latencySamples` matches the measured impulse latency.
+2. **EQ:** the frequency response of a +6 dB bell at 1 kHz, Q 1 matches the analytic one ± 0.1 dB; a 48 dB cut at 100 Hz gives −48 ± 1 dB at 50 Hz.
+3. **Compressor:** a −10 dBFS sine, threshold −20, ratio 4:1, knee 0 → steady-state level −17.5 ± 0.2 dBFS; a 10 ms attack reaches 63% ± 5% in 10 ms.
+4. **Limiter:** on a +6 dBFS sine the output true peak is ≤ ceiling + 0.1 dB.
+5. **Distortion:** a 15 kHz sine at 48 kHz with 24 dB drive: aliasing products below −80 dB relative to the fundamental (thanks to 4×).
+6. **Delay:** an impulse with time 1/4 at 120 BPM gives an echo after 24,000 ± 1 samples at 48 kHz; changing the time while sounding gives no jumps larger than 0.1.
+7. **Sends and returns:** a −6 dB send gives a −6 dB signal in the return; pre-fader does not depend on the fader.
+8. **Cycles:** the model does not allow creating a send or sidechain cycle.
+9. **PDC:** a track with a limiter (5 ms latency) and a track without effects, with the same impulse at the same position, produce impulses in the master at the same sample.
+10. **Automation:** a volume line from −∞ to 0 dB over 1 bar gives a monotonic envelope with no steps larger than 0.5 dB; segment bend changes the shape as expected.
+11. **Release:** moving a knob during playback disables the track's automation until "Re-enable Automation".
+12. **Morph:** at `m = 0` the values of A, at `m = 1` the values of B, at `m = 0.5` the midpoint for continuous parameters and B for switches; excluded parameters do not change.
+13. **Real time:** a project with 8 tracks, 3 effects and automation on each, with the morph written on the audio thread: zero memory allocations.
 
-## Готово, когда
+## Done when
 
-- [ ] Все 13 эффектов в браузере, у каждого компактный интерфейс (скриншоты в 4 темах), тесты 1–6 зелёные.
-- [ ] Две возвратные дорожки по умолчанию, посылы пре/пост, группы с вложенностью и сворачиванием.
-- [ ] Сайдчейн компрессора от бочки работает (качание баса слышно и видно на индикаторе GR).
-- [ ] PDC выравнивает дорожки (тест 9), общая задержка видна в транспорте.
-- [ ] Автоматизация рисуется, записывается в режимах Touch и Latch, огибающие клипов работают.
-- [ ] Каждое движение ручки отменяется `Cmd+Z`.
-- [ ] MIDI Learn назначает ручки контроллера.
-- [ ] Снимки запоминаются, морф A↔B плавно переводит весь трек, морф записывается как автоматизация.
-- [ ] Все тесты зелёные, CI зелёный, README обновлён.
+- [ ] All 13 effects are in the browser, each with a compact UI (screenshots in 4 themes), tests 1–6 green.
+- [ ] Two return tracks by default, pre/post sends, groups with nesting and collapsing.
+- [ ] Compressor sidechain from the kick works (the bass pumping is audible and visible on the GR meter).
+- [ ] PDC aligns tracks (test 9), total latency is visible in the transport.
+- [ ] Automation can be drawn, recorded in Touch and Latch modes, clip envelopes work.
+- [ ] Every knob movement is undone with `Cmd+Z`.
+- [ ] MIDI Learn assigns controller knobs.
+- [ ] Snapshots are stored, the A↔B morph smoothly moves the whole track, the morph is recorded as automation.
+- [ ] All tests green, CI green, README updated.

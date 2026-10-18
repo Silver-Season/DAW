@@ -1,105 +1,105 @@
-# 05. Аудиодорожки, запись звука, дубли, вечная запись звука
+# 05. Audio tracks, audio recording, takes, always-on audio capture
 
-## Цель
+## Goal
 
-Записывать голос, гитару, микрофоны и любые входы звуковой карты точно в долю, складывать дубли и собирать из них лучший. Класть сэмплы и лупы из браузера на дорожки. Вечная запись теперь держит в памяти и звук: удачный гитарный рифф, сыгранный без записи, можно достать одной кнопкой.
+Record vocals, guitar, microphones and any audio interface inputs exactly on the beat, stack takes and assemble the best one from them. Drop samples and loops from the browser onto tracks. Always-on capture now keeps audio in memory too: a good guitar riff played without recording can be pulled out with one button.
 
-В конце пользователь может: создать аудиодорожку `Cmd+Shift+T`, выбрать вход «Гитара», включить мониторинг, записать три дубля по петле, собрать лучший из кусков, перетащить луп из браузера и услышать запись ровно в такт.
+At the end the user can: create an audio track with `Cmd+Shift+T`, choose the "Guitar" input, turn on monitoring, record three takes over a loop, assemble the best one from pieces, drag a loop from the browser and hear the recording exactly in time.
 
-## Границы
+## Scope
 
-Входит: модель аудиоклипа, пул аудиофайлов, воспроизведение аудиоклипов в сессии и аранжировке без варпа, фейды, громкость и транспозиция (через ресемплинг, высота меняется вместе с темпом, как режим Re-Pitch), входы дорожек и мониторинг, запись на диск, компенсация задержки записи, тест петлёй, дубли и comping, импорт файлов, предпрослушивание сэмплов, вечная запись звука, переключатель источника записи MIDI / звук.
+Included: the audio clip model, the audio file pool, playback of audio clips in the session and the arrangement without warping, fades, gain and transposition (via resampling, pitch changes together with tempo, like tape speed), track inputs and monitoring, recording to disk, recording latency compensation, the loopback test, takes and comping, file import, sample preview, always-on audio capture, the MIDI / audio record source switch.
 
-Не входит: варп и подстройка под темп без изменения высоты (07), эффекты (06), Sampler и Drum Rack (08).
+Not included: warping and tempo matching without pitch change (07), effects (06), the sampler and the 16-pad drum machine (08).
 
 ---
 
-## Задача 5.1. Модель и пул файлов
+## Task 5.1. Model and file pool
 
 ```
-TRACK type="audio"  input="audio:0-1" (каналы карты, «0» моно, «0-1» стерео) monitor="auto"
-└── SLOTS/SLOT/AUDIOCLIP …   и   ARRANGEMENT/ACLIP/AUDIOCLIP …
-AUDIOCLIP  id  name  colour  file=<id в пуле>
-           sampleStart=0  sampleEnd=<длина>   (в сэмплах файла)
+TRACK type="audio"  input="audio:0-1" (interface channels, "0" mono, "0-1" stereo) monitor="auto"
+└── SLOTS/SLOT/AUDIOCLIP …   and   ARRANGEMENT/ACLIP/AUDIOCLIP …
+AUDIOCLIP  id  name  colour  file=<id in the pool>
+           sampleStart=0  sampleEnd=<length>   (in file samples)
            loopStart  loopEnd  loop=0
-           gainDb=0  transpose=0 (полутона, −48…48)  detune=0 (центы)  reverse=0
-           fadeIn=0  fadeOut=0  (доли; в аранжировке, по умолчанию 4 мс авто-фейды)
-           warp=0  (поле под 07; в этом этапе всегда 0)
-PROJECT/AUDIOFILES/FILE  id  path (относительно папки проекта, если внутри неё)
-                         absPath  sampleRate  channels  lengthSamples  hash (xxHash64 первых 1 МБ + длина)
+           gainDb=0  transpose=0 (semitones, −48…48)  detune=0 (cents)  reverse=0
+           fadeIn=0  fadeOut=0  (beats; in the arrangement, 4 ms auto-fades by default)
+           warp=0  (field reserved for 07; always 0 in this stage)
+PROJECT/AUDIOFILES/FILE  id  path (relative to the project folder, if inside it)
+                         absPath  sampleRate  channels  lengthSamples  hash (xxHash64 of the first 1 MB + length)
 ```
 
-- Брошенный файл снаружи проекта копируется в `Samples/Imported/` (настройка «Копировать сэмплы в проект», по умолчанию вкл). Одинаковые файлы (тот же хэш) не дублируются.
-- Потерянный файл при открытии: клип серый, «Файл не найден». Пункт меню «Найти потерянные файлы…» ищет по имени и хэшу в указанной папке.
-- `engine/AudioFilePool`: открытые `AudioFormatReader` по `FILE id`, файлы до 30 секунд целиком в памяти, длинные — потоково с упреждающим чтением (`BufferingAudioReader` на общем `TimeSliceThread`, буфер 3 секунды). Аудиопоток никогда не ждёт диска: если данных нет, отдаёт тишину и увеличивает счётчик «пропуски диска», интерфейс показывает значок диска в транспорте.
-- Обзор формы волны: `juce::AudioThumbnail` + `AudioThumbnailCache` (кэш на диске в `Samples/.thumbs/`).
+- A file dropped from outside the project is copied into `Samples/Imported/` (setting "Copy samples into project", on by default). Identical files (same hash) are not duplicated.
+- A missing file on open: the clip is gray, "File not found". The menu item "Find Missing Files…" searches by name and hash in a chosen folder.
+- `engine/AudioFilePool`: open `AudioFormatReader`s by `FILE id`, files up to 30 seconds fully in memory, longer ones streamed with read-ahead (`BufferingAudioReader` on a shared `TimeSliceThread`, 3-second buffer). The audio thread never waits for the disk: if data is not available, it outputs silence and increments a "disk dropouts" counter, and the UI shows a disk icon in the transport.
+- Waveform overview: `juce::AudioThumbnail` + `AudioThumbnailCache` (disk cache in `Samples/.thumbs/`).
 
-## Задача 5.2. Воспроизведение аудиоклипов
+## Task 5.2. Audio clip playback
 
-- `core`: `AudioClipPlayback` — чтение из источника с позиции, петля с перекрёстным затуханием 2 мс на шве, громкость, реверс, фейды (кривая равной мощности), транспозиция ресемплером (тот же windowed-sinc из 04, режим реального времени с меньшим числом отводов: 16 на фазу).
-- В сессии аудиоклип запускается и зацикливается как MIDI-клип (квантованный запуск, `ClipPlayer` обобщается на оба типа). Длина петли в долях = длина в сэмплах ÷ сэмплов на долю при **исходном** темпе файла, если он известен (`acid`-чанк или имя файла `*_124bpm*`), иначе при темпе проекта на момент вставки. Без варпа при смене темпа проекта клип не растягивается, это нормально для этого этапа и подписано в редакторе клипа: «Подстройка под темп — этап 7».
-- В аранжировке ACLIP с AUDIOCLIP играет с позиции, учитывая `sampleStart` и обрезку. Авто-фейды 4 мс на краях, чтобы не было щелчков.
+- `core`: `AudioClipPlayback`: reading from a source at a position, looping with a 2 ms crossfade at the seam, gain, reverse, fades (equal-power curve), transposition through the resampler (the same windowed-sinc from 04, in a real-time mode with fewer taps: 16 per phase).
+- In the session an audio clip launches and loops like a MIDI clip (quantized launch, `ClipPlayer` is generalized to both types). Loop length in beats = length in samples ÷ samples per beat at the file's **original** tempo, if known (`acid` chunk or a file name like `*_124bpm*`), otherwise at the project tempo at the time of insertion. Without warping, the clip is not stretched when the project tempo changes; this is fine for this stage and is noted in the clip editor: "Tempo matching arrives in stage 7".
+- In the arrangement, an ACLIP with an AUDIOCLIP plays from its position, taking into account `sampleStart` and trimming. 4 ms auto-fades at the edges to avoid clicks.
 
-## Задача 5.3. Входы и мониторинг
+## Task 5.3. Inputs and monitoring
 
-- Заголовок аудиодорожки: меню входа «Вход 1 · Микрофон», «Входы 3/4 · Гитара (стерео)», «Ресемплинг» (выход мастера), «Нет». Имена каналов из настроек (01, 1.9).
-- Мониторинг: **Auto** (слышно вход, когда дорожка взведена и не играет клип), **In** (всегда слышно вход), **Off**. Монитор идёт через цепочку дорожки с минимально возможной задержкой (текущий буфер).
-- Индикатор уровня входа на заголовке и в микшере виден, как только дорожка взведена, ещё до записи. Пик выше −0,5 dBFS подсвечивает индикатор красным до щелчка по нему.
-- Переключатель **источника записи** на MIDI-дорожке (из 02) теперь работает: «Звук» записывает выход инструмента этой дорожки в аудиоклип (удобно, чтобы «заморозить» партию синта). На аудиодорожке источник всегда звук.
+- Audio track header: an input menu "Input 1 · Mic", "Inputs 3/4 · Guitar (stereo)", "Resampling" (master output), "None". Channel names come from settings (01, 1.9).
+- Monitoring: **Auto** (the input is audible when the track is armed and no clip is playing), **In** (the input is always audible), **Off**. Monitoring goes through the track chain with the lowest possible latency (the current buffer).
+- The input level meter on the header and in the mixer is visible as soon as the track is armed, before recording. A peak above −0.5 dBFS lights the meter red until it is clicked.
+- The **record source** switch on a MIDI track (from 02) now works: "Audio" records the output of this track's instrument into an audio clip (handy for "freezing" a synth part). On an audio track the source is always audio.
 
-## Задача 5.4. Запись на диск
+## Task 5.4. Recording to disk
 
-- Включается так же, как MIDI (02, 03): слот, ● транспорта, F9, punch, отсчёт, метроном.
-- Аудиопоток копирует входные сэмплы дорожки в SPSC-кольцо (`AbstractFifo`, ёмкость 2 секунды на канал, выделено заранее). Фоновый поток пишет на диск через `AudioFormatWriter::ThreadedWriter` в `Samples/Recorded/<дорожка> <дата время>.wav`, WAV 24 бит (настройка: 16 / 24 / 32 float), частота проекта.
-- Если кольцо переполнилось (диск не успевает), запись продолжается, потерянный кусок заполняется тишиной, а после записи показывается предупреждение с указанием времени пропуска.
-- Во время записи клип в слоте или на шкале рисует форму волны по мере поступления (по данным уровня из аудиопотока, не читая файл).
-- Остановка записи закрывает файл, создаёт FILE в пуле и клип одной транзакцией. `Cmd+Z` удаляет клип, файл остаётся на диске до «Удалить неиспользуемые записи…» в меню Файл.
+- Activated the same way as MIDI (02, 03): slot, transport ●, F9, punch, count-in, metronome.
+- The audio thread copies the track's input samples into an SPSC ring (`AbstractFifo`, capacity 2 seconds per channel, preallocated). A background thread writes to disk via `AudioFormatWriter::ThreadedWriter` into `Samples/Recorded/<track> <date time>.wav`, 24-bit WAV (setting: 16 / 24 / 32 float), at the project sample rate.
+- If the ring overflows (the disk cannot keep up), recording continues, the lost part is filled with silence, and after recording a warning is shown with the time of the dropout.
+- During recording, the clip in the slot or on the timeline draws its waveform as data arrives (from level data from the audio thread, without reading the file).
+- Stopping recording closes the file and creates the FILE in the pool and the clip in one transaction. `Cmd+Z` removes the clip; the file stays on disk until "Delete Unused Recordings…" in the File menu.
 
-### Компенсация задержки записи
+### Recording latency compensation
 
-- Записанный звук сдвигается раньше на `inputLatency + outputLatency` сэмплов (данные драйвера), плюс ручная поправка из настроек «Запись» (±100 мс, шаг 0,1 мс). Сдвиг делается при создании клипа (`sampleStart`), файл пишется целиком без обрезки.
-- **Тест петлёй** (настройки → Запись → «Измерить задержку»): пользователь соединяет кабелем выход карты со входом. DAW проигрывает 10 щелчков (импульс 1 сэмпл, затем 100 мс тишины), записывает вход, находит каждый щелчок по максимуму взаимной корреляции и вычисляет медиану задержки. Разница с данными драйвера сохраняется как ручная поправка. Алгоритм в `core` (`measureRoundTrip`), с тестом на синтетическом сигнале.
+- Recorded audio is shifted earlier by `inputLatency + outputLatency` samples (driver data), plus a manual adjustment from the "Recording" settings (±100 ms, 0.1 ms step). The shift is applied when the clip is created (`sampleStart`); the file is written in full without trimming.
+- **Loopback test** (settings → Recording → "Measure latency"): the user connects an interface output to an input with a cable. The DAW plays 10 clicks (a 1-sample impulse, then 100 ms of silence), records the input, finds each click by the maximum of the cross-correlation and computes the median latency. The difference from the driver data is saved as the manual adjustment. The algorithm is in `core` (`measureRoundTrip`), with a test on a synthetic signal.
 
-## Задача 5.5. Дубли и comping
+## Task 5.5. Takes and comping
 
-- Запись по петле в аранжировке создаёт **полосы дублей** под дорожкой (как Take Lanes в Ableton 12 / Logic): каждый круг — своя полоса, последний дубль активен в основной дорожке.
-- Модель: `ACLIP/TAKES/TAKE id index` и `ACLIP/COMP/SEGMENT start end takeIndex`. Основная дорожка играет сегменты комп-а.
-- Интерфейс: кнопка ▸ на заголовке дорожки раскрывает полосы. Протяжка мышью по полосе дубля выбирает этот кусок в комп (сегмент), граница сегментов получает перекрёстное затухание 10 мс (тянется). Щелчок по полосе с Alt прослушивает дубль соло. `Cmd+Shift+D` — «Следующий дубль» для выделенного куска.
-- Работает и для MIDI-дублей из 03 (вместо меню «Дубли ▸»).
-- «Свести комп» (правая кнопка) создаёт новый файл из сегментов и заменяет ими клип, дубли остаются в полосах.
+- Loop recording in the arrangement creates **take lanes** under the track: each pass gets its own lane, the latest take is active in the main track.
+- Model: `ACLIP/TAKES/TAKE id index` and `ACLIP/COMP/SEGMENT start end takeIndex`. The main track plays the comp segments.
+- UI: a ▸ button on the track header expands the lanes. Dragging with the mouse across a take lane selects that piece into the comp (a segment); the boundary between segments gets a 10 ms crossfade (adjustable by dragging). Alt-clicking a lane previews that take solo. `Cmd+Shift+D` is "Next Take" for the selected piece.
+- Works for the MIDI takes from 03 too (replacing the "Takes ▸" menu).
+- "Flatten Comp" (right-click) creates a new file from the segments and replaces the clip with it; the takes stay in the lanes.
 
-## Задача 5.6. Сэмплы из браузера и Finder
+## Task 5.6. Samples from the browser and Finder
 
-- Категория «Звуки» (01) теперь кладёт файлы: на аудиодорожку — клип в слот или на шкалу; на MIDI-дорожку — нельзя (подсветки нет), а на пустое место — новая аудиодорожка с клипом.
-- Предпрослушивание: выбор файла в браузере играет его с начала (наушники вкл). Если у файла известен темп и включено «Синхронно», предпрослушивание начинается с ближайшей доли проекта (без растяжения до 07).
-- Импорт из Finder: WAV, AIFF, FLAC, MP3, M4A/AAC (на macOS через `CoreAudioFormat`), OGG. Несколько файлов брошенных разом раскладываются по дорожкам подряд (в Arrangement — друг под другом, в Session — в слоты одной дорожки по сценам; модификатор Cmd меняет на «друг за другом»).
+- The "Sounds" category (01) now drops files: onto an audio track, a clip in a slot or on the timeline; onto a MIDI track, not allowed (no highlight); onto empty space, a new audio track with the clip.
+- Preview: selecting a file in the browser plays it from the start (headphones on). If the file's tempo is known and "Sync" is on, the preview starts at the nearest project beat (without stretching until 07).
+- Import from Finder: WAV, AIFF, FLAC, MP3, M4A/AAC (on macOS via `CoreAudioFormat`), OGG. Several files dropped at once are laid out across tracks in sequence (in the Arrangement, one below another; in the Session, into slots of one track across scenes; the Cmd modifier switches to "one after another").
 
-## Задача 5.7. Вечная запись звука
+## Task 5.7. Always-on audio capture
 
-- Для каждого входного канала, который используется взведённой аудиодорожкой или дорожкой с мониторингом In, движок держит кольцевой буфер float. Длина по настройке: 1 / 2 / 5 / 10 минут, по умолчанию 5. Память показывается в настройках («≈ 115 МБ на стерео вход при 48 кГц, 5 минут»). Буферы выделяются на message thread при изменении набора входов, никогда в аудиопотоке.
-- Лента «10 мин» в транспорте показывает и звук: огибающая уровня полупрозрачной заливкой цвета дорожки под штрихами MIDI.
-- «Захватить» на выделенной аудиодорожке: фраза определяется по уровню (участок, где RMS 50 мс выше −50 dBFS, паузы короче 4 с не разрывают фразу), с запасом 200 мс до начала. Если транспорт играл — начало и длина по тактам как в MIDI-захвате (02, 2.5), позиция берётся из записанной вместе со звуком отметки транспорта. Если стоял — клип без привязки к тактам, начало у первой атаки. Звук пишется в `Samples/Recorded/Захват <дата>.wav` в фоне.
-- Если захват был на MIDI-дорожке, работает MIDI-захват из 02.
+- For every input channel used by an armed audio track or a track with In monitoring, the engine keeps a float ring buffer. Length is a setting: 1 / 2 / 5 / 10 minutes, default 5. Memory use is shown in settings ("≈ 115 MB per stereo input at 48 kHz, 5 minutes"). Buffers are allocated on the message thread when the set of inputs changes, never in the audio thread.
+- The "10 min" strip in the transport shows audio too: a level envelope as a translucent fill in the track color under the MIDI ticks.
+- "Capture" on a selected audio track: the phrase is detected by level (a region where the 50 ms RMS is above −50 dBFS; pauses shorter than 4 s do not break the phrase), with a 200 ms margin before the start. If the transport was playing, start and length are aligned to bars as in MIDI capture (02, 2.5), with the position taken from the transport marker recorded together with the audio. If it was stopped, the clip is not tied to bars and starts at the first attack. The audio is written to `Samples/Recorded/Capture <date>.wav` in the background.
+- If capture was on a MIDI track, the MIDI capture from 02 is used.
 
-## Тесты
+## Tests
 
-1. **Пул.** Импорт двух одинаковых файлов создаёт один FILE; потерянный файл находится по хэшу в другой папке.
-2. **Воспроизведение.** Клип из синуса 1 кГц длиной 1 такт в сессии играет непрерывно 8 кругов, шов петли без щелчка (максимальная разность соседних сэмплов на шве не больше, чем внутри синуса × 1,5).
-3. **Потоковое чтение.** Файл 10 минут: при искусственно медленном чтении аудиопоток не блокируется (время блока < 1 мс), пропуски считаются.
-4. **Запись.** Через `FakeDevice` подать на вход импульсы в позициях долей, записать 2 такта: в клипе импульсы на долях с точностью ± 1 сэмпл после компенсации заданной задержки.
-5. **Переполнение.** Искусственно остановленный писатель: запись не падает, пропуск заполнен тишиной, длина файла верная.
-6. **Тест петлёй** (core): синтетическая задержка 371 сэмпл с шумом −60 dB измеряется как 371 ± 1.
-7. **Comping.** Три дубля и два сегмента дают ожидаемый звук на границе (перекрёстное затухание 10 мс, без разрыва).
-8. **Захват звука.** Кольцо 5 минут с фразой из 3 атак после тишины: захват находит начало фразы −200 мс ± 5 мс, длину по тактам при игравшем транспорте.
-9. **Реальное время.** Запись 4 стерео дорожек 1 минуту с `DAW_RT_CHECKS=ON`: ноль выделений памяти в аудиопотоке.
+1. **Pool.** Importing two identical files creates one FILE; a missing file is found by hash in another folder.
+2. **Playback.** A 1-bar clip of a 1 kHz sine in the session plays continuously for 8 passes, the loop seam has no click (the maximum difference between adjacent samples at the seam is no more than inside the sine × 1.5).
+3. **Streaming read.** A 10-minute file: with artificially slow reading, the audio thread does not block (block time < 1 ms), dropouts are counted.
+4. **Recording.** Through `FakeDevice`, feed impulses to the input at beat positions, record 2 bars: in the clip, impulses sit on the beats within ± 1 sample after compensating the given latency.
+5. **Overflow.** With an artificially stalled writer: recording does not crash, the gap is filled with silence, the file length is correct.
+6. **Loopback test** (core): a synthetic latency of 371 samples with −60 dB noise is measured as 371 ± 1.
+7. **Comping.** Three takes and two segments give the expected sound at the boundary (10 ms crossfade, no discontinuity).
+8. **Audio capture.** A 5-minute ring with a phrase of 3 attacks after silence: capture finds the phrase start −200 ms ± 5 ms, and the length in bars with the transport playing.
+9. **Real time.** Recording 4 stereo tracks for 1 minute with `DAW_RT_CHECKS=ON`: zero memory allocations in the audio thread.
 
-## Готово, когда
+## Done when
 
-- [ ] Аудиодорожка записывает вход карты в такт (тест 4 и проверка на Mac со встроенным микрофоном и внешней картой).
-- [ ] Мониторинг Auto / In / Off работает, индикатор входа виден до записи.
-- [ ] Тест петлёй измеряет задержку и сохраняет поправку.
-- [ ] Три дубля по петле, comping мышью, «Свести комп».
-- [ ] Сэмпл из браузера и файл из Finder ложатся на дорожку и играют в сессии и на шкале.
-- [ ] Вечная запись звука захватывает фразу гитары, сыгранную без записи.
-- [ ] MIDI-дорожка с источником «Звук» записывает свой синт в аудио.
-- [ ] Все тесты зелёные, CI зелёный, README обновлён.
+- [ ] An audio track records the interface input in time (test 4 and a check on a Mac with the built-in microphone and an external audio interface).
+- [ ] Auto / In / Off monitoring works, the input meter is visible before recording.
+- [ ] The loopback test measures latency and saves the adjustment.
+- [ ] Three takes over a loop, comping with the mouse, "Flatten Comp".
+- [ ] A sample from the browser and a file from Finder land on a track and play in the session and on the timeline.
+- [ ] Always-on audio capture captures a guitar phrase played without recording.
+- [ ] A MIDI track with the "Audio" source records its synth to audio.
+- [ ] All tests green, CI green, README updated.

@@ -165,10 +165,10 @@ void testMissingPlugin()
     const auto folder = makeTempFolder ("missing");
 
     juce::PluginDescription desc;
-    desc.name = "Serum 2";
+    desc.name = "Third Synth";
     desc.manufacturerName = "Xfer Records";
     desc.pluginFormatName = "VST3";
-    desc.fileOrIdentifier = "/no/such/folder/Serum2.vst3";
+    desc.fileOrIdentifier = "/no/such/folder/ThirdSynth.vst3";
     desc.uniqueId = 12345;
     desc.isInstrument = true;
     desc.numInputChannels = 0;
@@ -181,7 +181,7 @@ void testMissingPlugin()
         auto model = ProjectModel::createEmpty();
         model.insertScene (-1);
         const auto track = model.addTrack ("midi");
-        const auto device = model.addDevice (track, "plugin", "Serum 2");
+        const auto device = model.addDevice (track, "plugin", "Third Synth");
         device.setPluginDesc (descText, nullptr);
         device.setStateBase64 (stateText, nullptr);
         xml = project::serialise (model.root);
@@ -201,7 +201,7 @@ void testMissingPlugin()
 
     const auto device = model.trackAt (0).device (0);
     check (device.kind() == "missing", "kind became \"missing\" (was: " + device.kind() + ")");
-    check (device.stateBase64() == stateText && device.pluginDesc() == descText && device.name() == "Serum 2", "state, description and name are untouched");
+    check (device.stateBase64() == stateText && device.pluginDesc() == descText && device.name() == "Third Synth", "state, description and name are untouched");
     check (engine.findProcessor (device.id()) == nullptr && ! engine.isDeviceLoading (device.id()), "no instance, nothing loading");
 
     // The sound goes through the gap: the track is silent, the engine does not complain.
@@ -443,7 +443,7 @@ void testUserLibrary()
     check (f1.existsAsFile() && f1 == root.getChildFile ("Presets/Prisma/My Bass.dawpreset"), "preset path: Presets/<device>/<name>.dawpreset");
     const auto f2 = lib.savePreset ("Prisma", "My Bass", "prisma", {}, "QUJD", error);
     check (f2.getFileName() == "My Bass 2.dawpreset", "a taken name gets a number instead of overwriting");
-    lib.savePreset ("Serum 2", "Wub", "plugin", "<PLUGIN name=\"Serum 2\"/>", "REVG", error);
+    lib.savePreset ("Third Synth", "Wub", "plugin", "<PLUGIN name=\"Third Synth\"/>", "REVG", error);
 
     const auto data = library::UserLibrary::readPreset (f1);
     check (data.valid && data.deviceKind == "prisma" && data.name == "My Bass" && data.state == "QUJD", "a preset reads back");
@@ -453,11 +453,11 @@ void testUserLibrary()
 
     auto list = lib.listPresets();
     check (list.size() == 3, "three presets are listed");
-    int serum = 0;
+    int found = 0;
     for (const auto& p : list)
-        if (p.deviceName == "Serum 2" && p.data.deviceKind == "plugin" && p.data.pluginDesc.contains ("Serum 2"))
-            ++serum;
-    check (serum == 1, "the plugin preset sits in the plugin's folder with its description");
+        if (p.deviceName == "Third Synth" && p.data.deviceKind == "plugin" && p.data.pluginDesc.contains ("Third Synth"))
+            ++found;
+    check (found == 1, "the plugin preset sits in the plugin's folder with its description");
 
     const auto renamed = library::UserLibrary::renamePreset (f1, "Deep Bass");
     check (renamed.existsAsFile() && ! f1.existsAsFile() && library::UserLibrary::readPreset (renamed).name == "Deep Bass", "rename changes the file and the name inside");

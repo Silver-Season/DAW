@@ -39,7 +39,7 @@ public:
     // "C3": the octave of the A key, for the lamp in the top bar.
     juce::String octaveText() const;
 
-    // A line for the info bar ("Октава: C3–E4").
+    // A line for the info bar ("Octave: C3–E4").
     std::function<void (const juce::String&)> onMessage;
     // On/off or octave changed: the lamp refreshes itself.
     std::function<void()> onStateChanged;

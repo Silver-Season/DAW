@@ -11,7 +11,7 @@ juce::String scaleLabel (int root, const juce::String& mode)
     const auto* scale = daw::music::findScale (mode.toRawUTF8());
     if (scale == nullptr)
         return Strings::transport::scaleOff;
-    return Strings::rootNames[juce::jlimit (0, 11, root)] + " " + Strings::utf8 (scale->nameRu);
+    return Strings::rootNames[juce::jlimit (0, 11, root)] + " " + Strings::tr (scale->name, scale->nameRu);
 }
 
 ScalePicker::ScalePicker (int r, const juce::String& m, Callback onChange) : root (r), mode (m), callback (std::move (onChange))
@@ -78,7 +78,7 @@ void ScalePicker::paint (juce::Graphics& g)
     for (int i = 0; i < numModeCells(); ++i)
     {
         const bool on = i == 0 ? current == nullptr : (current != nullptr && &daw::music::allScales()[(size_t) i - 1] == current);
-        cellLook (modeCell (i), i == 0 ? Strings::scaleNone : Strings::utf8 (daw::music::allScales()[(size_t) i - 1].nameRu), on, i == hoverMode);
+        cellLook (modeCell (i), i == 0 ? Strings::scaleNone : Strings::tr (daw::music::allScales()[(size_t) i - 1].name, daw::music::allScales()[(size_t) i - 1].nameRu), on, i == hoverMode);
     }
 }
 

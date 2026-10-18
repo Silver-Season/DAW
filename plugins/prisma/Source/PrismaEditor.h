@@ -86,7 +86,7 @@ private:
     std::vector<Row> rows;
 };
 
-// Serum-style view of the current wavetable: a stack of frames with the active one highlighted.
+// View of the current wavetable: a stack of frames with the active one highlighted.
 class WavetableView : public juce::Component, private juce::Timer
 {
 public:
@@ -103,7 +103,7 @@ private:
     float lastTable = -1, lastPos = -1, lastOn = -1;
 };
 
-// On-screen keyboard with octave shift and computer-keyboard playing, laid out like Ableton:
+// On-screen keyboard with octave shift and computer-keyboard playing:
 // A W S E D F T G Y H U J K O L P ; play notes, Z / X shift the octave, C / V change the velocity.
 // The owner forwards its keyPressed / keyStateChanged calls here.
 class KeyboardPanel : public juce::Component

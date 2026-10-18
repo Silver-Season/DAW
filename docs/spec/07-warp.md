@@ -1,124 +1,124 @@
-# 07. Warp, аудиоредактор, дорожка темпа
+# 07. Warp, audio editor, tempo track
 
-## Цель
+## Goal
 
-Любой луп и любая запись подстраиваются под темп проекта без изменения высоты, как в Ableton. Темп и размер могут меняться по ходу трека. Аудиоредактор показывает волну, маркеры варпа и позволяет поправить тайминг записи руками.
+Any loop and any recording adapts to the project tempo without changing pitch. Tempo and time signature can change over the course of the track. The audio editor shows the waveform and warp markers and lets the user fix the timing of a recording by hand.
 
-В конце пользователь может: бросить луп 92 BPM в проект 124 BPM и услышать его в темпе, поправить маркер варпа на съехавшей доле, замедлить проект в бридже и ускорить в дропе, и все клипы последуют за темпом.
+At the end the user can: drop a 92 BPM loop into a 124 BPM project and hear it in tempo, fix a warp marker on a beat that drifted, slow the project down in the bridge and speed it up in the drop, and all clips follow the tempo.
 
-## Границы
+## Scope
 
-Входит: библиотека тайм-стретчинга, режимы варпа, определение темпа и онсетов, маркеры варпа, аудиоредактор, дорожка темпа и размера, перевод темпо-зависимого времени во всём движке, «Подогнать темп проекта под клип», нарезка аудио по транзиентам в MIDI (Slice to MIDI появится вместе с Drum Rack в 08, здесь только алгоритм).
+In: a time-stretching library, warp modes, tempo and onset detection, warp markers, the audio editor, a tempo and time signature track, tempo-dependent time conversion throughout the engine, "Match Project Tempo to Clip", slicing audio into MIDI by transients (Slice to MIDI arrives together with the drum machine in 08; only the algorithm is done here).
 
-Не входит: Melodyne-подобная правка высоты отдельных нот, полифоническое извлечение MIDI из аудио.
+Out: editing the pitch of individual notes inside audio (stage 12), polyphonic MIDI extraction from audio.
 
 ---
 
-## Задача 7.1. Тайм-стретчинг
+## Task 7.1. Time stretching
 
-- Библиотека **Rubber Band Library v3** (лицензия GPL v2 или новее, совместима с AGPLv3). Исходники в `third_party/rubberband/` с `SOURCE.md` (URL github.com/breakfastquay/rubberband, тег релиза, SHA коммита, лицензия). Собирается статически через её single-file сборку (`single/RubberBandSingle.cpp`), FFT — встроенный (`USE_BUILTIN_FFT`) или vDSP на macOS (`HAVE_VDSP`), ресемплер встроенный.
-- Используется движок **R3** (`OptionEngineFiner`) для режима «Complex Pro» и **R2** (`OptionEngineFaster`) для «Complex» и как резерв при высокой нагрузке. Режим реального времени (`OptionProcessRealTime`).
-- Собственный простой режим **Beats** (как в Ableton, для барабанов): нарезка по онсетам на сегменты, каждый сегмент играет без растяжения с исходной высотой, промежутки при замедлении заполняются хвостом сегмента с огибающей «транзиенты» (настройка «Затухание» 0–100 %), при ускорении сегмент обрезается с фейдом 3 мс. Работает без Rubber Band, дёшево по CPU.
-- Режим **Re-Pitch**: просто ресемплинг (высота меняется с темпом), из 05.
-- Режим **Tones** — R3 с опцией `OptionFormantPreserved` выключенной и `OptionPitchHighConsistency`; **Texture** — R2 с `OptionTransientsSmooth`. Итого режимы клипа: Beats, Tones, Texture, Re-Pitch, Complex, Complex Pro (по умолчанию: Beats для файлов короче 8 тактов с ударными онсетами, Complex Pro для остальных; классификация по плотности онсетов).
-- Аудиопоток не может ждать Rubber Band: обработка идёт с упреждением на **фоновом потоке рендера** (по одному на клип, пул из N потоков = число ядер − 2), который заполняет кольцевой буфер на 1 секунду вперёд от курсора. Аудиопоток читает из кольца. При перемотке: первые 50 мс заполняются ресемплингом (Re-Pitch) с кроссфейдом на варп, когда рендер догонит. Это стандартный подход; без него стретчинг в реальном времени даёт выпадения.
-- Качество проверяется численно (см. тесты), не на слух.
+- The **Rubber Band Library v3** (GPL v2 or later, compatible with AGPLv3). Sources in `third_party/rubberband/` with `SOURCE.md` (URL github.com/breakfastquay/rubberband, release tag, commit SHA, license). Built statically via its single-file build (`single/RubberBandSingle.cpp`), FFT either built-in (`USE_BUILTIN_FFT`) or vDSP on macOS (`HAVE_VDSP`), built-in resampler.
+- The **R3** engine (`OptionEngineFiner`) is used for the "Complex Pro" mode, and **R2** (`OptionEngineFaster`) for "Complex" and as a fallback under high load. Real-time mode (`OptionProcessRealTime`).
+- An in-house simple **Beats** mode (for drums): slicing by onsets into segments, each segment plays unstretched at its original pitch. When slowing down, the gaps are filled with the segment's tail with a "transients" envelope (the "Decay" setting, 0–100%); when speeding up, the segment is truncated with a 3 ms fade. Works without Rubber Band, cheap on CPU.
+- **Re-Pitch** mode: plain resampling (pitch changes with tempo), from 05.
+- **Tones** mode is R3 with `OptionFormantPreserved` off and `OptionPitchHighConsistency`; **Texture** is R2 with `OptionTransientsSmooth`. Clip modes in total: Beats, Tones, Texture, Re-Pitch, Complex, Complex Pro (default: Beats for files shorter than 8 bars with percussive onsets, Complex Pro for everything else; classification by onset density).
+- The audio thread cannot wait for Rubber Band: processing runs ahead on a **background render thread** (one per clip, a pool of N threads = number of cores − 2) that fills a ring buffer 1 second ahead of the playhead. The audio thread reads from the ring. On a jump: the first 50 ms are filled with resampling (Re-Pitch) with a crossfade to the warped signal once the renderer catches up. This is the standard approach; without it, real-time stretching produces dropouts.
+- Quality is verified numerically (see tests), not by ear.
 
-## Задача 7.2. Онсеты и темп
+## Task 7.2. Onsets and tempo
 
 `core/include/daw/dsp/Onsets.h`:
-- **Детектор онсетов**: спектральный поток (STFT 1024, шаг 256, окно Ханна, логарифмическая амплитуда, положительная разность по бинам, сумма), адаптивный порог (медиана 11 кадров × 1,5 + смещение), минимум 50 мс между онсетами, уточнение позиции по максимуму энергии во временной области ± 5 мс. Чувствительность 0–100 % — множитель порога.
-- **Оценка темпа**: автокорреляция функции онсетов на 4–16 секундах, кандидаты 60–200 BPM, предпочтение 90–150 (весовое окно), разрешение октавных ошибок по сравнению силы пиков `T`, `T/2`, `2T`. Плюс подсказки: `acid`-чанк, имя файла (`_124bpm`, `124 BPM`, `124-`), длина файла, кратная целому числу тактов при круглом темпе (если длина ровно 4,000 такта при 92 BPM — это сильный кандидат).
-- **Сетка долей**: динамическое программирование по Ellis (beat tracking): выбор последовательности долей, максимизирующей силу онсетов при штрафе за отклонение от темпа.
-- Анализ идёт в фоне при импорте файла и кэшируется в `Samples/.analysis/<hash>.xml` (онсеты, темп, доли, режим).
+- **Onset detector**: spectral flux (STFT 1024, hop 256, Hann window, log magnitude, positive per-bin difference, sum), adaptive threshold (median of 11 frames × 1.5 + offset), minimum 50 ms between onsets, position refined by the energy maximum in the time domain within ± 5 ms. Sensitivity 0–100% is a threshold multiplier.
+- **Tempo estimation**: autocorrelation of the onset function over 4–16 seconds, candidates 60–200 BPM, preference for 90–150 (a weighting window), octave errors resolved by comparing the peak strengths at `T`, `T/2`, `2T`. Plus hints: the `acid` chunk, the file name (`_124bpm`, `124 BPM`, `124-`), and a file length that is a whole number of bars at a round tempo (if the length is exactly 4.000 bars at 92 BPM, that is a strong candidate).
+- **Beat grid**: dynamic programming after Ellis (beat tracking): choose the sequence of beats that maximizes onset strength with a penalty for deviating from the tempo.
+- Analysis runs in the background on file import and is cached in `Samples/.analysis/<hash>.xml` (onsets, tempo, beats, mode).
 
-## Задача 7.3. Маркеры варпа и модель
+## Task 7.3. Warp markers and the model
 
 ```
 AUDIOCLIP  warp=1  warpMode="beats|tones|texture|repitch|complex|complexpro"
            beatsDecay=1.0  preserveFormants=0  originalTempo=92.0
-└── WARP   └── MARKER  sample=<позиция в файле>  beat=<позиция в долях клипа>
+└── WARP   └── MARKER  sample=<position in the file>  beat=<position in clip beats>
 ```
 
-- Между соседними маркерами время файла отображается в доли линейно. Новый клип получает два маркера (начало и конец) по найденному темпу, плюс «авто-маркеры» на каждой доле из сетки (показываются бледно, не хранятся, пока их не тронули).
-- Сдвиг маркера: тащить маркер в редакторе по горизонтали (меняется `beat`, сегменты справа и слева растягиваются). Ctrl-тащить двигает волну под маркером (меняется `sample`). Двойной щелчок по авто-маркеру или по волне создаёт маркер. `Delete` удаляет выделенный.
-- Правая кнопка по маркеру: «Темп отсюда = …» (ввести BPM для участка до следующего маркера), «Выровнять сегмент по сетке», «Поставить маркеры на все онсеты в выделении».
+- Between adjacent markers, file time maps to beats linearly. A new clip gets two markers (start and end) from the detected tempo, plus "auto markers" on every beat of the grid (shown faintly, not stored until touched).
+- Moving a marker: drag the marker horizontally in the editor (`beat` changes, the segments to its left and right stretch). Ctrl+drag moves the waveform under the marker (`sample` changes). Double-click an auto marker or the waveform to create a marker. `Delete` removes the selected one.
+- Right-click on a marker: "Tempo From Here = …" (enter a BPM for the section up to the next marker), "Align Segment to Grid", "Add Markers at All Onsets in Selection".
 
-## Задача 7.4. Аудиоредактор
+## Task 7.4. Audio editor
 
-Детальная панель для аудиоклипа (как пиано-ролл для MIDI, `Shift+Tab`):
+The detail panel for an audio clip (like the piano roll for MIDI, `Shift+Tab`):
 
 ```
-┌ Клип ───────────┬ линейка (такты, петля, старт) ──────────────────────────────────┐
-│ имя, цвет, файл │ маркеры варпа (жёлтые треугольники) ────────────────────────────│
-│ громкость, транс│ волна (стерео по половинам, онсеты тонкими линиями)             │
-│ позиция, детюн  │                                                                 │
-│ Warp вкл, режим │                                                                 │
-│ исх. темп 92 ×2 ÷2                                                                │
-│ Обратить        │                                                                 │
-│ Затухание (Beats)                                                                 │
+┌ Clip ───────────┬ ruler (bars, loop, start) ──────────────────────────────────────┐
+│ name, color,file│ warp markers (yellow triangles) ────────────────────────────────│
+│ gain, transpose │ waveform (stereo in halves, onsets as thin lines)               │
+│ position, detune│                                                                 │
+│ Warp on, mode   │                                                                 │
+│ orig. tempo 92 ×2 ÷2                                                              │
+│ Reverse         │                                                                 │
+│ Decay (Beats)   │                                                                 │
 └─────────────────┴─────────────────────────────────────────────────────────────────┘
 ```
 
-- Кнопки «×2» и «÷2» удваивают и делят исходный темп (частая ошибка детектора).
-- «Подогнать темп проекта» (правая кнопка): темп проекта = исходный темп клипа.
-- Масштаб и прокрутка как в пиано-ролле, `Cmd+колесо`, щипок, `Z`.
-- Волна при сильном приближении рисуется по сэмплам (отрезки и точки), при отдалении — по уровням из `AudioThumbnail`.
-- Курсор воспроизведения клипа бежит по волне.
+- The "×2" and "÷2" buttons double and halve the original tempo (a common detector error).
+- "Match Project Tempo" (right-click): project tempo = the clip's original tempo.
+- Zoom and scroll as in the piano roll, `Cmd+wheel`, pinch, `Z`.
+- At high zoom the waveform is drawn per sample (segments and dots); zoomed out, from the `AudioThumbnail` levels.
+- The clip's playback cursor moves across the waveform.
 
-## Задача 7.5. Дорожка темпа и размера
+## Task 7.5. Tempo and time signature track
 
-### Модель
+### Model
 
 ```
 PROJECT/TEMPOMAP
-├── TEMPO  beat  bpm  curve=0  (0 — ступенька, 1 — линейно до следующей точки)
+├── TEMPO  beat  bpm  curve=0  (0 is a step, 1 is linear up to the next point)
 └── SIG    bar   num  den
 ```
 
-`PROJECT tempo` из 01 остаётся как темп «по умолчанию» и первая точка карты.
+`PROJECT tempo` from 01 stays as the "default" tempo and the first point of the map.
 
-### Время в движке
+### Time in the engine
 
-- `core/include/daw/engine/TempoMap.h`: перевод `beat ↔ seconds ↔ samples` по кусочной карте. Для линейного участка темп меняется линейно по долям, время = интеграл `60 / bpm(beat)` по долям (аналитически: `60 * ln(bpm1/bpm0) / k` для линейной функции, при `bpm0 = bpm1` предел). Кэш накопленного времени на начало каждого участка, двоичный поиск.
-- `Transport` переходит на `TempoMap`: окно блока `[startBeat, endBeat)` считается по карте, внутри блока с линейным темпом рендер клипов использует точную позицию каждого события (`samplesAt (beat)`), а не постоянные «сэмплов на долю».
-- `AudioPlayHead` сообщает плагинам текущий темп в начале блока и `ppqPosition`.
-- Метроном, квантизация запуска, петля, маркеры, записи — всё в долях, поэтому продолжают работать без изменений. Изменения нужны только там, где был код «samplesPerBeat = const».
-- Варп-клипы получают коэффициент растяжения в каждом блоке из карты (Rubber Band `setTimeRatio` плавно; в Beats — длины сегментов).
-- Размер: такты и линейка в Arrangement учитывают смены размера (функции `barToBeat`, `beatToBarBeat` в `TempoMap`).
+- `core/include/daw/engine/TempoMap.h`: conversion `beat ↔ seconds ↔ samples` over a piecewise map. On a linear section the tempo changes linearly with beats, and time = the integral of `60 / bpm(beat)` over beats (analytically `60 * ln(bpm1/bpm0) / k` for a linear function, taking the limit when `bpm0 = bpm1`). Cache of accumulated time at the start of each section, binary search.
+- `Transport` moves to `TempoMap`: the block window `[startBeat, endBeat)` is computed from the map, and inside a block with a linear tempo, clip rendering uses the exact position of each event (`samplesAt (beat)`) rather than a constant "samples per beat".
+- `AudioPlayHead` reports the current tempo at the start of the block and `ppqPosition` to plugins.
+- The metronome, launch quantize, loop, markers and recordings are all in beats, so they keep working without changes. Changes are needed only where the code had "samplesPerBeat = const".
+- Warp clips get their stretch ratio from the map in every block (Rubber Band `setTimeRatio` smoothly; in Beats, the segment lengths).
+- Time signature: bars and the ruler in Arrangement account for signature changes (the functions `barToBeat`, `beatToBarBeat` in `TempoMap`).
 
-### Интерфейс
+### UI
 
-- В Arrangement над дорожками полоса «Темп» (показывается кнопкой в шапке или через меню Вид → «Дорожка темпа»). Правка как у автоматизации (06): точки, ступеньки или линии, диапазон по вертикали 60–200 BPM (настраивается).
-- Полоса «Размер»: щелчок ставит смену размера на начало такта, двойной щелчок — ввод «7/8».
-- Поле темпа в транспорте показывает текущий темп по карте и курсивом, если в проекте есть изменения темпа. Изменение поля в этом случае сдвигает всю карту пропорционально (с подтверждением в строке подсказок).
-- **Tap tempo**: кнопка TAP рядом с полем темпа: 4+ нажатия задают темп по среднему интервалу последних 4.
-- Сцена с заданным темпом (`SCENE tempo` из 01) при запуске меняет темп проекта (как в Ableton).
+- In Arrangement, a "Tempo" lane above the tracks (shown with a button in the header or via View → "Tempo Track"). Editing is the same as automation (06): points, steps or lines, vertical range 60–200 BPM (configurable).
+- The "Time Signature" lane: a click places a signature change at the start of a bar, a double-click opens input such as "7/8".
+- The tempo field in the transport shows the current tempo from the map, in italics if the project has tempo changes. In that case, editing the field scales the whole map proportionally (with a confirmation in the hint bar).
+- **Tap tempo**: a TAP button next to the tempo field: 4+ taps set the tempo from the average interval of the last 4.
+- A scene with a set tempo (`SCENE tempo` from 01) changes the project tempo when launched.
 
-## Задача 7.6. Нарезка по транзиентам (алгоритм)
+## Task 7.6. Slicing by transients (algorithm)
 
-- `core`: `sliceByOnsets (onsets, mode, minSlice)` и `sliceByGrid (beats, division)` возвращают список отрезков. Используется в 08 (Slice to Drum Rack) и в аудиоредакторе для «Разрезать по онсетам» (правая кнопка: клип разрезается на клипы по онсетам или по сетке).
+- `core`: `sliceByOnsets (onsets, mode, minSlice)` and `sliceByGrid (beats, division)` return a list of segments. Used in 08 (slicing to drum machine pads) and in the audio editor for "Slice at Onsets" (right-click: the clip is cut into clips at onsets or on the grid).
 
-## Тесты
+## Tests
 
-1. **Онсеты** (core): синтетический сигнал из 16 щелчков с шумом −40 дБ: найдено 16 онсетов, ошибка позиции ≤ 2 мс.
-2. **Темп** (core): синтетические ударные паттерны 92, 124, 140, 174 BPM дают темп ± 0,5 BPM; паттерн 70 BPM с акцентами на 16-х не определяется как 140 (тест октавной ошибки) — если не удаётся, тест фиксирует поведение как известное ограничение и это пишется в отчёт.
-3. **Подсказки:** имя «loop_92bpm.wav» и длина ровно 4 такта при 92 побеждают неуверенный детектор.
-4. **Стретчинг, длина:** клип 92 BPM 4 такта в проекте 124 BPM занимает 4 такта ± 1 мс по выходу.
-5. **Стретчинг, высота:** синус 440 Гц, растянутый ×1,35 в режимах Tones, Complex, Complex Pro, остаётся 440 ± 1 Гц (FFT с интерполяцией пика); в Re-Pitch даёт 440 × 124 / 92 ± 1 Гц.
-6. **Beats:** онсеты в результате стоят на долях проекта ± 1 мс, транзиенты не размыты (пиковая амплитуда атаки ≥ 90 % исходной).
-7. **Перемотка:** после перемотки звук появляется через ≤ 1 блок, без щелчка при переходе с Re-Pitch на варп (разность соседних сэмплов в окне перехода в пределах обычной для сигнала).
-8. **TempoMap** (core): линейный разгон 100 → 150 BPM за 8 тактов: время конца участка совпадает с численным интегрированием до 1e-9 с; `beat → sample → beat` возвращает исходное ± 1e-9.
-9. **Рендер с картой:** ноты клипа на долях при линейном разгоне стоят в сэмплах, рассчитанных `TempoMap`, ± 1 сэмпл.
-10. **Реальное время:** 8 варп-клипов Complex Pro играют 1 минуту без выпадений (кольцо ни разу не пустело) и без выделений памяти в аудиопотоке.
+1. **Onsets** (core): a synthetic signal of 16 clicks with −40 dB noise: 16 onsets found, position error ≤ 2 ms.
+2. **Tempo** (core): synthetic drum patterns at 92, 124, 140, 174 BPM give the tempo ± 0.5 BPM; a 70 BPM pattern with 16th-note accents is not detected as 140 (octave error test). If this does not work out, the test records the behavior as a known limitation and it goes into the report.
+3. **Hints:** the name "loop_92bpm.wav" and a length of exactly 4 bars at 92 win over an uncertain detector.
+4. **Stretching, length:** a 92 BPM 4-bar clip in a 124 BPM project occupies 4 bars ± 1 ms in the output.
+5. **Stretching, pitch:** a 440 Hz sine stretched ×1.35 in Tones, Complex and Complex Pro modes stays at 440 ± 1 Hz (FFT with peak interpolation); in Re-Pitch it gives 440 × 124 / 92 ± 1 Hz.
+6. **Beats:** onsets in the result land on project beats ± 1 ms, transients are not smeared (attack peak amplitude ≥ 90% of the original).
+7. **Jumps:** after a jump, sound appears within ≤ 1 block, with no click at the transition from Re-Pitch to warp (the difference between adjacent samples in the transition window is within what is normal for the signal).
+8. **TempoMap** (core): a linear ramp 100 → 150 BPM over 8 bars: the end time of the section matches numerical integration to 1e-9 s; `beat → sample → beat` returns the original ± 1e-9.
+9. **Rendering with the map:** clip notes on beats during a linear ramp land on the samples computed by `TempoMap`, ± 1 sample.
+10. **Real time:** 8 Complex Pro warp clips play for 1 minute without dropouts (the ring never ran empty) and without memory allocations on the audio thread.
 
-## Готово, когда
+## Done when
 
-- [ ] Луп другого темпа из браузера играет в темпе проекта, режим выбирается автоматически и меняется вручную.
-- [ ] Маркеры варпа ставятся, двигаются, авто-маркеры по долям видны (скриншоты аудиоредактора в 4 темах).
-- [ ] Дорожка темпа с плавным разгоном: MIDI- и аудиоклипы и метроном следуют за ней.
-- [ ] Смены размера отображаются на линейке и влияют на такты.
-- [ ] Tap tempo и «Подогнать темп проекта» работают.
-- [ ] CPU на 8 варп-клипах Complex Pro в отчёте (цифра с M1 или оценка в контейнере), без выпадений.
-- [ ] Rubber Band лежит в `third_party/rubberband` с `SOURCE.md` и лицензией.
-- [ ] Все тесты зелёные, CI зелёный, README обновлён.
+- [ ] A loop at a different tempo from the browser plays at the project tempo; the mode is chosen automatically and can be changed by hand.
+- [ ] Warp markers can be placed and moved, auto markers on beats are visible (audio editor screenshots in 4 themes).
+- [ ] A tempo track with a smooth ramp: MIDI and audio clips and the metronome follow it.
+- [ ] Time signature changes are shown on the ruler and affect bars.
+- [ ] Tap tempo and "Match Project Tempo" work.
+- [ ] CPU usage with 8 Complex Pro warp clips is in the report (a number from an M1 or an estimate in the container), without dropouts.
+- [ ] Rubber Band is in `third_party/rubberband` with `SOURCE.md` and the license.
+- [ ] All tests green, CI green, README updated.
