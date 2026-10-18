@@ -1,6 +1,7 @@
 {
   "id": "studio",
-  "name": "Студия",
+  "name": "Studio",
+  "nameRu": "Студия",
   "background": "#161718",
   "chrome": "#232426",
   "panel": "#2b2c2f",

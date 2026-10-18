@@ -1,0 +1,21 @@
+Installing DAW
+==============
+
+1. Drag DAW.app onto the Applications shortcut in this window.
+
+2. First launch. The app is not yet signed with an Apple certificate, so macOS will block it:
+   - click "Done" (not "Move to Trash");
+   - open System Settings → Privacy & Security;
+   - at the bottom, next to the line about "DAW", click "Open Anyway" and confirm.
+   Or run a single command in Terminal:
+       xattr -dr com.apple.quarantine /Applications/DAW.app
+
+3. The Prisma plugin for other audio apps (AU / VST3 hosts) (optional):
+   copy from the Plugins folder
+       Prisma.component  →  ~/Library/Audio/Plug-Ins/Components
+       Prisma.vst3       →  ~/Library/Audio/Plug-Ins/VST3
+   (in Finder: Go → Go to Folder… and paste the path). Then in Terminal:
+       xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Prisma.component ~/Library/Audio/Plug-Ins/VST3/Prisma.vst3
+   Prisma.app in the same folder is the synth as a standalone app.
+
+4. In DAW, click "▶ Scene 1" on the right to hear the demo. The audio interface is chosen in "Audio/MIDI".

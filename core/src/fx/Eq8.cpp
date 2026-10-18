@@ -1,4 +1,4 @@
-// EQ Eight ("eq8"), docs/spec/06-effects-mixing.md, task 6.2.
+// The eight-band EQ ("eq8"), docs/spec/06-effects-mixing.md, task 6.2.
 //
 // Eight bands of RBJ biquads (6 dB slopes are bilinear one-poles, 24 and 48 dB slopes are Butterworth cascades whose
 // sharpest stage takes the band's Q as resonance). Frequency, gain and Q glide (20 ms, frequency and Q on a log scale) and

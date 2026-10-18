@@ -311,7 +311,7 @@ public:
     }
 
     // A track that records sound (an audio track with an input, a MIDI track with the record source "audio"): its record
-    // circle works whether or not it is armed, like a click on a slot in Live.
+    // circle works whether or not it is armed.
     bool recordsSound (const TrackRef& track) const
     {
         return view.recorder != nullptr && view.recorder->sound().recordsSound (track);

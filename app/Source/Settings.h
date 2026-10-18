@@ -23,6 +23,14 @@ public:
     juce::PropertiesFile& getPropertiesFile() { return *props; }
     void save();
 
+    // The settings file of the app in the per-user folder.
+    static juce::File defaultFile();
+    // The UI language lives in its own small file next to the settings ("en" or "ru"), because the strings of the
+    // interface are made before main, when there is no Settings object yet (Language.h).
+    static juce::File languageFileFor (const juce::File& settingsFile);
+    juce::String language() const; // the choice for the next launch: "en" (default) or "ru"
+    void setLanguage (const juce::String& code);
+
     // Appearance
     juce::String theme() const;
     void setTheme (const juce::String& id);

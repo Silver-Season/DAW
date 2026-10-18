@@ -1,6 +1,7 @@
 {
   "id": "prism",
-  "name": "Призма",
+  "name": "Prism",
+  "nameRu": "Призма",
   "background": "#07080d",
   "chrome": "#0c0e15",
   "panel": "#121520",

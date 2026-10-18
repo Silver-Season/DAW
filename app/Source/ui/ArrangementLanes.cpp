@@ -990,7 +990,7 @@ void ArrangementLanes::showClipMenu (juce::Point<int> screenPosition)
     if (one)
         if (const auto takes = arrangement::takesOf (selected.front()); takes.size() > 1)
         {
-            // Clips recorded in a loop keep every pass: "Дубли ▸ Дубль 1 / 2 / 3"
+            // Clips recorded in a loop keep every pass: "Takes ▸ Take 1 / 2 / 3"
             juce::PopupMenu takeMenu;
             const auto clipId = selected.front().id();
             for (const auto& take : takes)

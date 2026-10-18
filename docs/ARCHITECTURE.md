@@ -1,106 +1,108 @@
-# DAW: архитектура и дорожная карта
+# DAW: architecture and roadmap
 
-Рабочие названия: приложение **DAW**, первый встроенный синт **Prisma**. Переименовать можно в любой момент.
+Working names: the application is **DAW**, the first built-in synth is **Prisma**. Both can be renamed at any time.
 
-## Технические решения
+## Technical choices
 
-| Решение | Выбор | Почему |
+| Decision | Choice | Why |
 |---|---|---|
-| Язык | C++20 | Стандарт индустрии для аудио в реальном времени |
-| Фреймворк | JUCE 8 | Аудио/MIDI-устройства, хостинг AU/VST3, сборка плагинов, GUI. Так сделаны Tracktion Waveform, Vital, Surge |
-| Сборка | CMake (+ Ninja или Xcode) | JUCE поддерживает CMake напрямую |
-| Платформа | macOS 11+, universal binary (arm64 + x86_64) | Apple Silicon и Intel одной сборкой |
-| Форматы плагинов | AU и VST3 (хостинг и экспорт), Standalone | AU нужен для Logic/GarageBand, VST3 для остальных |
+| Language | C++20 | The industry standard for real-time audio |
+| Framework | JUCE 8 | Audio/MIDI devices, AU/VST3 hosting, plugin builds, GUI. Tracktion Waveform, Vital and Surge are built on it |
+| Build | CMake (+ Ninja or Xcode) | JUCE supports CMake directly |
+| Platform | macOS 11+, universal binary (arm64 + x86_64) | Apple Silicon and Intel from one build |
+| Plugin formats | AU and VST3 (hosting and export), Standalone | AU is needed for Logic/GarageBand, VST3 for everything else |
 
-**Лицензия: GNU AGPLv3** (решение от 16.10.2026). Проект открытый для всех, поэтому JUCE используется по бесплатной лицензии AGPLv3, коммерческая лицензия JUCE не нужна.
+**License: GNU AGPLv3** (decided on 16.10.2026). The project is open to everyone, so JUCE is used under its free AGPLv3 license and no commercial JUCE license is needed.
 
-## Слои
+## Layers
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ app/      GUI: Session View, Arrangement, Mixer, браузер │
+│ app/      GUI: Session View, Arrangement, Mixer, browser │
 ├─────────────────────────────────────────────────────────┤
-│ app/      AudioEngine: граф треков, хостинг плагинов,    │
-│           аудио/MIDI-устройства (JUCE)                   │
+│ app/      AudioEngine: track graph, plugin hosting,      │
+│           audio/MIDI devices (JUCE)                      │
 ├─────────────────────────────────────────────────────────┤
-│ core/     daw::engine: транспорт, клипы, квантизация     │
-│ core/     daw::synth:  Prisma (голоса, мод-матрица)      │
-│ core/     daw::dsp:    wavetable, фильтры, огибающие, LFO│
-│           (чистый C++20, без JUCE, покрыт тестами)       │
+│ core/     daw::engine: transport, clips, quantization    │
+│ core/     daw::synth:  Prisma (voices, mod matrix)       │
+│ core/     daw::dsp:    wavetable, filters, envelopes, LFO│
+│           (plain C++20, no JUCE, covered by tests)       │
 ├─────────────────────────────────────────────────────────┤
-│ plugins/  Prisma как AU/VST3/Standalone (обёртка JUCE)   │
+│ plugins/  Prisma as AU/VST3/Standalone (JUCE wrapper)    │
 └─────────────────────────────────────────────────────────┘
 ```
 
-Весь звук и вся логика времени живут в `core/` без зависимости от JUCE. Это даёт быстрые юнит-тесты, офлайн-рендер и возможность сменить GUI-фреймворк, не трогая звук.
+All sound and all timing logic live in `core/` with no dependency on JUCE. That gives fast unit tests, offline rendering, and the option to switch GUI frameworks without touching the audio.
 
-### Аудио-движок
-- Аудиопоток никогда не выделяет память и не ждёт ввода-вывода. Сейчас изменения из GUI защищены короткой блокировкой; следующий шаг (фаза 1) — очередь команд без блокировок и неизменяемые снимки состояния сессии.
-- Блочная обработка: транспорт выдаёт окно `[startBeat, endBeat)` на блок, клипы превращают его в MIDI-события с точным сэмпл-смещением.
-- Два времени (этап 3): монотонные доли (`Block::startBeat/endBeat`, `getPositionBeats()`) идут от 0 при каждом старте и никогда не прыгают: на них живут запуски клипов Session View, их фаза и запись сессии. Позиция песни (`Block::windows`, `getSongPositionBeats()`) начинается с `arrangementPlayStart`, перематывается и прыгает по петле; блок с прыжком режется на окна с точным сэмпловым смещением. Аранжировка, метроном и курсор живут на позиции песни.
-- Аранжировка (`daw::engine::ArrangementPlayer`): держит звучащие ноты дорожки, при любом разрыве позиции (перемотка, петля, возврат из сессии, правка клипов) выключает их и «догоняет» ноты под новой позицией. Дорожка, на которой запущен клип сессии или нажат её стоп, «в сессии» (`TrackRuntime::inSession`) и аранжировку не играет до `AudioEngine::backToArrangement()`.
-- Граф: трек → инструмент → цепочка эффектов → фейдер/панорама → шины/посылы → мастер. Позже: компенсация задержки плагинов (PDC), многопоточная обработка треков.
+### Audio engine
+- The audio thread never allocates memory and never waits on I/O. Changes from the GUI reach it as immutable snapshots swapped in atomically, small values as atomics, and commands through lock-free queues (see [docs/spec/00-rules.md](spec/00-rules.md)).
+- Block processing: the transport hands out a `[startBeat, endBeat)` window per block, and clips turn it into MIDI events with exact sample offsets.
+- Two timelines (stage 3): monotonic beats (`Block::startBeat/endBeat`, `getPositionBeats()`) start from 0 on every play and never jump; Session clip launches, their phase and session recording live on them. The song position (`Block::windows`, `getSongPositionBeats()`) starts at `arrangementPlayStart`, can be relocated and jumps at the loop; a block with a jump is split into windows with exact sample offsets. The arrangement, the metronome and the playhead live on the song position.
+- Arrangement (`daw::engine::ArrangementPlayer`): keeps track of the sounding notes per track; on any position discontinuity (relocation, loop, return from the session, clip edits) it turns them off and "chases" the notes under the new position. A track with a running Session clip, or whose Session stop button was pressed, is "in the session" (`TrackRuntime::inSession`) and does not play the arrangement until `AudioEngine::backToArrangement()`.
+- Graph: track → instrument → effect chain → fader/pan → buses/sends → master. Later: plugin delay compensation (PDC), multi-threaded track processing.
 
-### Сессия и клипы (как Session View в Ableton)
-- Сетка треков × сцен, у каждого слота может быть клип. Запуск клипа квантуется (по умолчанию 1 такт), клипы зациклены.
-- Запуск сцены целиком, остановка трека.
-- Готово в каркасе: MIDI-клипы, квантизованный запуск, сцены, стоп. Аудио-клипы с варпом — фаза 2.
+### Session and clips
+- A grid of tracks × scenes where every slot can hold a clip. Clip launches are quantized (1 bar by default), and clips loop.
+- Launching a whole scene, stopping a track.
+- Done in the skeleton: MIDI clips, quantized launching, scenes, stop. Audio clips with warp come in phase 2.
 
-### Аранжировка
-- Линейная шкала времени, клипы на треках, запись из Session View в Arrangement (как в Ableton), петля, маркеры.
-- Тот же `ClipPlayer` рендерит клип в окне времени, поэтому арранжировка переиспользует логику сессии.
+### Arrangement
+- A linear timeline with clips on tracks, recording a Session performance into the Arrangement, a loop, markers.
+- The same `ClipPlayer` renders a clip over a time window, so the arrangement reuses the session logic.
 
-### Микшер
-- Громкость, панорама (равная мощность, −3 дБ в центре), mute/solo/arm, индикаторы уровня — готово.
-- Посылы, возвратные треки, группы, сайдчейн — фаза 2.
+### Mixer
+- Volume, pan (equal power, −3 dB at center), mute/solo/arm, level meters: done.
+- Sends, return tracks, groups, sidechain: phase 2.
 
 ### MIDI
-- Внешние MIDI-устройства и экранная клавиатура уходят на трек с включённым arm.
-- Пиано-ролл, запись MIDI, квантизация, MPE — фазы 1–3.
+- External MIDI devices and the on-screen keyboard go to the armed track.
+- Piano roll, MIDI recording, quantization, MPE: phases 1–3.
 
-### Автоматизация
-- Огибающие параметров в аранжировке и в клипах, режимы записи (latch/touch), сэмплово-точное применение через разбиение блока.
+### Automation
+- Parameter envelopes in the arrangement and in clips, write modes (latch/touch), sample-accurate application by splitting the block.
 
-### Хостинг плагинов
-- Сканирование AU и VST3, список известных плагинов, загрузка инструмента на трек, окно редактора плагина — готово в каркасе.
-- Позже: эффекты в цепочке, вынос сканирования в отдельный процесс (чтобы падающий плагин не ронял DAW), сохранение состояния плагинов в проекте.
+### Plugin hosting
+- Scanning AU and VST3, a list of known plugins, loading an instrument on a track, the plugin editor window: done in the skeleton.
+- Later: effects in the chain, scanning in a separate process (so a crashing plugin does not take the DAW down), plugin state saved in the project.
 
-### Встроенные инструменты и эффекты
-| Инструмент | Тип | Статус |
+### Built-in instruments and effects
+| Instrument | Type | Status |
 |---|---|---|
-| **Prisma** | Wavetable (в духе Serum): 2 осциллятора, унисон до 16 голосов, суб, шум, SVF-фильтр 12/24 дБ, 3 огибающие, 2 LFO с синхронизацией, мод-матрица на 8 слотов, моно/глайд, пресеты | Готов первый вариант |
-| **Флагманский синт в духе Alchemy** (рабочее название Alloy) | 4 источника, у каждого свой движок: virtual analog, wavetable, additive (ресинтез сэмпла), spectral, granular, sampler. XY-морфинг между источниками, 8 макро-ручек, арпеджиатор, секвенсор шагов, мод-матрица с MSEG-огибающими, эффекты внутри синта. Использует DSP-блоки Prisma | Фаза 2–3 |
-| FM-синт | 6 операторов, алгоритмы | Фаза 3 |
-| Субтрактивный аналоговый | Ladder-фильтр, дрейф | Фаза 3 |
-| Сэмплер / Drum Rack | Пэды, слои, choke-группы | Фаза 2 |
+| **Prisma** | Wavetable: 2 oscillators, unison up to 16 voices, sub, noise, 12/24 dB SVF filter, 3 envelopes, 2 LFOs with sync, 8-slot mod matrix, mono/glide, presets | First version done |
+| **Alloy** (working name), the flagship synth | 4 sources, each with its own engine: virtual analog, wavetable, additive (sample resynthesis), spectral, granular, sampler. XY morphing between sources, 8 macro knobs, arpeggiator, step sequencer, mod matrix with MSEG envelopes, built-in effects. Reuses Prisma's DSP blocks | Phase 2–3 |
+| FM synth | 6 operators, algorithms | Phase 3 |
+| Subtractive analog | Ladder filter, drift | Phase 3 |
+| Sampler / drum machine | Pads, layers, choke groups (a 16-pad drum machine with synthesized kits exists) | Phase 2 |
 
-### Пресеты
-- Сейчас: у Prisma 7 заводских пресетов, они переключаются из DAW и из любого хоста (programs AU/VST3).
-- Дальше: библиотека пресетов на диске (`~/Music/DAW/Presets`), браузер с категориями и тегами (Bass, Lead, Pad, Keys, FX), избранное, поиск, предпрослушивание, сохранение своих пресетов. Цель на релиз: сотни заводских пресетов на каждый встроенный синт, как в Alchemy.
+### Presets
+- Now: Prisma has 7 factory presets that can be switched from the DAW and from any host (AU/VST3 programs).
+- Next: a preset library on disk (`~/Music/DAW/Presets`), a browser with categories and tags (Bass, Lead, Pad, Keys, FX), favorites, search, preview, saving your own presets. Release goal: hundreds of factory presets for every built-in synth.
 
-### MIDI-контроллеры
-- Любой класс-совместимый MIDI-контроллер работает сразу: клавиши, колесо модуляции, питч-бенд, сустейн, ручки через MIDI Learn (фаза 1).
-- **Novation Launchkey (MK3/MK4)**: отдельный скрипт поддержки по открытому протоколу Novation DAW Mode. Пэды запускают клипы Session View с подсветкой цветов клипов, ручки управляют громкостью/панорамой/параметрами выбранного инструмента, транспорт с кнопок (фаза 2).
-- **Native Instruments Maschine MK3**: в режиме MIDI (через NI Controller Editor) пэды, ручки и транспорт работают как обычный контроллер с маппингом (фаза 2). Глубокая интеграция с экранами Maschine использует закрытый протокол NI, её возможность нужно отдельно проверить.
-- Архитектура: слой `ControlSurface` с подключаемыми скриптами под каждое устройство, как Remote Scripts в Ableton.
+### MIDI controllers
+- Any class-compliant MIDI controller works out of the box: keys, mod wheel, pitch bend, sustain, knobs via MIDI Learn (phase 1).
+- **Novation Launchkey (MK3/MK4)**: a dedicated support script using Novation's open DAW Mode protocol. Pads launch Session clips with clip colors lit, knobs control volume/pan/parameters of the selected instrument, transport from the buttons (phase 2).
+- **Native Instruments Maschine MK3**: in MIDI mode (via NI Controller Editor) the pads, knobs and transport work as a regular controller with a mapping (phase 2). Deep integration with the Maschine screens relies on NI's closed protocol, and whether it is possible still has to be checked.
+- Architecture: a `ControlSurface` layer with a pluggable script per device.
 
-### Сторонние плагины
-- Загрузка AU и VST3 любых производителей (Serum, Vital, Kontakt, FabFilter и т.д.) уже заложена в каркас. Сохранение состояния плагинов в проекте — фаза 1, изолированное сканирование — фаза 3.
+### Third-party plugins
+- Loading AU and VST3 instruments and effects from any vendor already works. Saving plugin state in the project is phase 1, isolated scanning phase 3.
 
-Эффекты (фаза 2): EQ Eight-аналог, компрессор, ревербератор, дилей, хорус, дисторшн, лимитер.
+Built-in effects (stage 6, done): 8-band EQ, compressor, gate, limiter, reverb, delay, saturator, bitcrusher, filter, chorus, flanger, phaser, auto pan.
 
-## Дорожная карта
+## Roadmap
 
-**Где мы сейчас (октябрь 2026).** Фаза 0 готова. Фаза 1 идёт по этапам из [docs/spec](spec/README.md): этап 1 (модель проекта, движок, окно, браузер, сохранение) этап 2 (piano roll, лады, метроном, запись MIDI, захват) и этап 3 (Arrangement View, запись на шкалу) готовы, следующий этап 4, экспорт. Что уже работает, описано в [README](../README.md).
+**Where we are (October 2026).** Phase 0 is done. Phase 1 proceeds in the stages of [docs/spec](spec/README.md): stage 1 (project model, engine, window, browser, saving), stage 2 (piano roll, scales, metronome, MIDI recording, capture), stage 3 (Arrangement View, recording to the timeline), stage 5 (audio tracks, playback and recording), stage 6 (built-in effects, sends, sidechain, drum machine, automation) and the core of stage 4 (export) are done, and the UI is English with Russian as a second language. Warp (stage 7) is in progress. What already works is described in the [README](../README.md); the current step is in [HANDOFF.md](HANDOFF.md).
 
-**Фаза 0 — основа.** Каркас сборки, `core` с тестами, Prisma как плагин и встроенный инструмент, приложение с Session View, микшером, хостингом AU/VST3, выбором аудиоустройства.
+**Phase 0: foundation.** Build skeleton, `core` with tests, Prisma as a plugin and a built-in instrument, an app with Session View, mixer, AU/VST3 hosting and audio device selection.
 
-**Фаза 1 — играбельная DAW.** Пиано-ролл, запись MIDI, сохранение и загрузка проекта, очередь команд без блокировок, undo/redo, браузер пресетов, перетаскивание клипов.
+**Phase 1: a playable DAW.** Piano roll, MIDI recording, saving and loading projects, a lock-free command queue, undo/redo, preset browser, clip drag and drop.
 
-**Фаза 2 — продакшн.** Аудио-треки и запись, аудио-клипы с варпом (time-stretch), Arrangement View, автоматизация, эффекты, посылы и возвраты, сэмплер и Drum Rack, PDC, экспорт в WAV/AIFF/MP3.
+**Phase 2: production.** Audio tracks and recording, audio clips with warp (time-stretching), Arrangement View, automation, effects, sends and returns, sampler and drum machine, PDC, export to WAV/AIFF/MP3.
 
-**Фаза 3 — паритет с популярными DAW.** Ещё синты (FM, аналоговый), MPE, групповые треки, макросы и рэки, сайдчейн, Link (синхронизация темпа), поддержка контроллеров (Push, Launchpad), многопоточность движка, изолированное сканирование плагинов.
+**Phase 3: the feature set of a mature DAW.** More synths (FM, analog), MPE, group tracks, macros and racks, sidechain, Link (tempo sync), controller support (Push, Launchpad), a multi-threaded engine, isolated plugin scanning.
 
-**Фаза 4 — релиз.** Подпись и нотаризация приложения Apple, инсталлятор, автообновление, документация.
+**Phase 4: release.** Apple code signing and notarization, installer, auto-update, documentation.
 
-Честная оценка: Ableton Live — результат многих лет работы большой команды. Этот проект можно довести до сильной и удобной DAW, но паритет по всем функциям достигается поэтапно, а не одним рывком.
+**UI languages.** All UI strings are collected in `app/Source/Strings.h` as English and Russian pairs; English is the default, Russian is chosen in Settings and applies after a restart. More languages would turn the pairs into a table per language.
+
+An honest estimate: a full-featured DAW is the result of many years of work by large teams. This project can grow into a strong and comfortable DAW, but the full feature set arrives stage by stage, not in one leap.

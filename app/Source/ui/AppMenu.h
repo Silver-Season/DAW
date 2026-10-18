@@ -79,7 +79,7 @@ public:
     std::function<juce::StringArray()> recentProjects;
     std::function<void (const juce::String& path)> onOpenRecent;
     std::function<void()> onClearRecent;
-    std::function<juce::PopupMenu()> inspirationMenu; // the submenu "Вдохновение" of Create
+    std::function<juce::PopupMenu()> inspirationMenu; // the submenu "Inspiration" of Create
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int index, const juce::String& name) override;

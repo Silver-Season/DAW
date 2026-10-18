@@ -189,7 +189,7 @@ void AudioEngine::handleNoteOff (juce::MidiKeyboardState*, int channel, int note
 //==============================================================================
 void AudioEngine::play()
 {
-    // Like Live: Play brings back the Session clips that were playing when the transport was stopped.
+    // Play brings back the Session clips that were playing when the transport was stopped.
     if (! pushCommand ({ EngineCommand::Type::resume, -1, -1 }))
         playing = true;
 }
@@ -574,7 +574,7 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
     const auto launch = [&] (const PlaybackGraph::Track& t, int scene, const daw::engine::MidiClip* clip) {
         recordingEndsWithLaunch (*t.runtime);
         t.runtime->player.launch (scene, clip, now, q);
-        playing = true; // launching a clip starts the transport, like in Live
+        playing = true; // launching a clip starts the transport
     };
 
     const auto startRecording = [&] (const PlaybackGraph::Track& t, int scene, bool noOverdub) {
@@ -679,7 +679,7 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 if (auto* t = findTrack (c.trackId))
                 {
                     t->runtime->player.stop (now, q);
-                    t->runtime->inSession = true; // like Live: the stopped track stays silent until "Back to arrangement"
+                    t->runtime->inSession = true; // the stopped track stays silent until "Back to arrangement"
                     t->runtime->backPending = false;
                 }
                 break;
@@ -1431,7 +1431,7 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
             return;
     }
 
-    // Solo leaves the return tracks on, like in Live: a soloed track keeps its reverb.
+    // Solo leaves the return tracks on: a soloed track keeps its reverb.
     const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load() || t.isReturn);
     const float vol = audible ? (autoVolume >= 0.0f ? autoVolume : rt.volumeGain.load()) : 0.0f;
     const float pan = juce::jlimit (-1.0f, 1.0f, autoPan > -1.5f ? autoPan : rt.pan.load());

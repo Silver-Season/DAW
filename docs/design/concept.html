@@ -1,4 +1,4 @@
-<title>Концепт окна DAW</title>
+<title>DAW Window Concept</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -270,73 +270,73 @@ body {
 <div class="page">
   <header class="head">
     <div>
-      <h1>Призма: главное окно DAW</h1>
-      <p>Живой макет. Нажмите клип или сцену, пробел запускает воспроизведение, Tab переключает Session и Arrangement, пресет из браузера можно перетащить на дорожку или в цепочку устройств.</p>
+      <h1>Prism: the main DAW window</h1>
+      <p>A live mock. Click a clip or a scene, Space starts playback, Tab switches between Session and Arrangement, and a preset from the browser can be dragged onto a track or into the device chain.</p>
     </div>
-    <div class="skins" role="group" aria-label="Тема оформления">
-      <button class="skin" data-skin="prism" aria-pressed="false"><i style="background:conic-gradient(#ff5d7a,#ffb35c,#f6ef6b,#6bf0a6,#6bd5ff,#9b8cff,#ff5d7a)"></i>Призма</button>
-      <button class="skin" data-skin="neon" aria-pressed="false"><i style="background:linear-gradient(135deg,#ff2bd6 50%,#00f0ff 50%)"></i>Неон</button>
-      <button class="skin" data-skin="studio" aria-pressed="false"><i style="background:linear-gradient(135deg,#2b2c2f 50%,#ffb547 50%)"></i>Студия</button>
-      <button class="skin" data-skin="paper" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 50%,#2457e6 50%);border:1px solid #c8cfdb"></i>Бумага</button>
+    <div class="skins" role="group" aria-label="Theme">
+      <button class="skin" data-skin="prism" aria-pressed="false"><i style="background:conic-gradient(#ff5d7a,#ffb35c,#f6ef6b,#6bf0a6,#6bd5ff,#9b8cff,#ff5d7a)"></i>Prism</button>
+      <button class="skin" data-skin="neon" aria-pressed="false"><i style="background:linear-gradient(135deg,#ff2bd6 50%,#00f0ff 50%)"></i>Neon</button>
+      <button class="skin" data-skin="studio" aria-pressed="false"><i style="background:linear-gradient(135deg,#2b2c2f 50%,#ffb547 50%)"></i>Studio</button>
+      <button class="skin" data-skin="paper" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffffff 50%,#2457e6 50%);border:1px solid #c8cfdb"></i>Paper</button>
     </div>
   </header>
 
   <div class="stage">
-    <div class="mock" id="mock" tabindex="0" aria-label="Макет окна DAW">
+    <div class="mock" id="mock" tabindex="0" aria-label="DAW window mock">
       <!-- transport -->
       <div class="transport">
         <div class="logo"><canvas id="logo" width="44" height="44" aria-hidden="true"></canvas>Prisma</div>
         <div class="tgroup">
-          <span class="field num" id="tempo" title="Темп">124.00</span>
+          <span class="field num" id="tempo" title="Tempo">124.00</span>
           <span class="field num">4 / 4</span>
-          <button class="btn on" id="metro" title="Метроном">♩</button>
+          <button class="btn on" id="metro" title="Metronome">♩</button>
         </div>
         <div class="tgroup">
-          <button class="btn play" id="play" title="Играть (пробел)">▶</button>
-          <button class="btn" id="stop" title="Стоп">■</button>
-          <button class="btn rec" id="rec" title="Запись (F9)">●</button>
+          <button class="btn play" id="play" title="Play (Space)">▶</button>
+          <button class="btn" id="stop" title="Stop">■</button>
+          <button class="btn rec" id="rec" title="Record (F9)">●</button>
           <span class="field num" id="pos" style="min-width:86px;text-align:center">1. 1. 1</span>
-          <button class="btn" id="loop" title="Петля (Cmd+L)">⟲</button>
+          <button class="btn" id="loop" title="Loop (Cmd+L)">⟲</button>
         </div>
-        <div class="capture" title="Вечная запись: последние 10 минут игры всегда в памяти">
-          <span class="lbl">10 мин</span>
+        <div class="capture" title="Always-on recording: the last 10 minutes of playing are always kept in memory">
+          <span class="lbl">10 min</span>
           <canvas id="ribbon" width="300" height="48"></canvas>
-          <button class="btn" id="capture">Захватить</button>
+          <button class="btn" id="capture">Capture</button>
         </div>
-        <div class="morph" title="Снимки и морф: плавный переход между положениями всех ручек">
-          <b>A</b><input type="range" id="morph" min="0" max="100" value="0" aria-label="Морф между снимками A и B"><b>B</b>
+        <div class="morph" title="Snapshots and morph: a smooth transition between the positions of all knobs">
+          <b>A</b><input type="range" id="morph" min="0" max="100" value="0" aria-label="Morph between snapshots A and B"><b>B</b>
         </div>
         <div class="spacer"></div>
-        <div class="seg" role="tablist" aria-label="Вид">
+        <div class="seg" role="tablist" aria-label="View">
           <button id="tabSession" class="on" role="tab" aria-selected="true">Session</button>
           <button id="tabArr" role="tab" aria-selected="false">Arrangement</button>
         </div>
         <div class="versions">
-          <button class="btn" id="verBtn" title="История версий">v14 · сейчас</button>
+          <button class="btn" id="verBtn" title="Version history">v14 · now</button>
           <div class="pop" id="verPop" hidden>
-            <div class="lbl" style="padding:2px 6px 6px">История версий</div>
-            <div class="v cur"><i></i><span>v14 · автосохранение</span><span class="num">18:42</span></div>
-            <div class="v"><i></i><span>v13 · автосохранение</span><span class="num">18:41</span></div>
-            <div class="v named"><i></i><span>v12 · «до нового баса»</span><span class="num">18:20</span></div>
+            <div class="lbl" style="padding:2px 6px 6px">Version history</div>
+            <div class="v cur"><i></i><span>v14 · autosave</span><span class="num">18:42</span></div>
+            <div class="v"><i></i><span>v13 · autosave</span><span class="num">18:41</span></div>
+            <div class="v named"><i></i><span>v12 · "before the new bass"</span><span class="num">18:20</span></div>
             <div class="v"><i></i><span>v11 · Cmd+S</span><span class="num">17:58</span></div>
-            <div class="v named"><i></i><span>v7 · «первый дроп»</span><span class="num">16:03</span></div>
-            <div class="lbl" style="padding:8px 6px 0;text-transform:none;letter-spacing:0">Любую версию можно прослушать или забрать из неё одну дорожку.</div>
+            <div class="v named"><i></i><span>v7 · "first drop"</span><span class="num">16:03</span></div>
+            <div class="lbl" style="padding:8px 6px 0;text-transform:none;letter-spacing:0">Any version can be previewed, or a single track taken from it.</div>
           </div>
         </div>
-        <div class="tgroup" title="Нагрузка на процессор"><span class="lbl">CPU</span><div class="cpu"><i id="cpu"></i></div></div>
+        <div class="tgroup" title="CPU load"><span class="lbl">CPU</span><div class="cpu"><i id="cpu"></i></div></div>
       </div>
 
       <!-- browser + view -->
       <div class="middle">
-        <aside class="browser" aria-label="Браузер">
-          <label class="search">⌕ <input id="q" placeholder="Поиск  ⌘F" aria-label="Поиск по браузеру"></label>
+        <aside class="browser" aria-label="Browser">
+          <label class="search">⌕ <input id="q" placeholder="Search  ⌘F" aria-label="Search the browser"></label>
           <div class="cats" id="cats"></div>
           <div class="items" id="items"></div>
         </aside>
         <div class="view">
           <section class="session" id="session" aria-label="Session View"></section>
           <section class="arr" id="arr" hidden aria-label="Arrangement View">
-            <div class="corner lbl">Дорожки</div>
+            <div class="corner lbl">Tracks</div>
             <div class="ruler"><canvas id="rulerC"></canvas></div>
             <div class="heads" id="heads"></div>
             <div class="lanes"><canvas id="lanesC"></canvas></div>
@@ -355,25 +355,25 @@ body {
 
   <div class="notes">
     <div class="note">
-      <h2>Почему «Призма»</h2>
-      <p>Свет проходит через призму и раскладывается в спектр. Так устроено и окно: дорожки слева направо окрашены по порядку спектра, от красного к фиолетовому. Цвет сразу говорит, где ты, а играющий клип светится, по нему пробегает радужный блик. Синт Prisma дал имя всей программе.</p>
+      <h2>Why "Prism"</h2>
+      <p>Light passes through a prism and splits into a spectrum. The window works the same way: tracks are colored left to right in spectral order, from red to violet. The color tells you at once where you are, and a playing clip glows with a rainbow sheen running across it. The Prisma synth gave its name to the whole app.</p>
     </div>
     <div class="note">
-      <h2>Детали, которых нет у других</h2>
+      <h2>Signature details</h2>
       <ul>
-        <li><b>Лента «10 мин»</b> в транспорте: видно, как копится сыгранное. «Захватить» превращает последнюю фразу в клип.</li>
-        <li><b>Ползунок A ↔ B</b>: морф между снимками ручек. Подвигайте его и посмотрите на ручки Prisma внизу.</li>
-        <li><b>v14 · сейчас</b>: лента версий проекта, важные отмечены именем.</li>
-        <li><b>Луч воспроизведения</b> в Arrangement расщепляется в спектр там, где проходит по клипу.</li>
+        <li><b>The "10 min" ribbon</b> in the transport: you can see what you play building up. "Capture" turns the last phrase into a clip.</li>
+        <li><b>The A ↔ B slider</b>: a morph between knob snapshots. Move it and watch the Prisma knobs below.</li>
+        <li><b>v14 · now</b>: the project's version timeline, important versions are marked with a name.</li>
+        <li><b>The playhead beam</b> in Arrangement splits into a spectrum where it crosses a clip.</li>
       </ul>
     </div>
     <div class="note">
-      <h2>Темы</h2>
+      <h2>Themes</h2>
       <div class="swatches">
-        <div class="sw"><div class="chips"><i style="background:#07080d"></i><i style="background:#8be9ff"></i><i style="background:#c59bff"></i></div><div><b>Призма.</b> <span>Основная. Глубокий чернильный фон, спектральные клипы, мягкое свечение.</span></div></div>
-        <div class="sw"><div class="chips"><i style="background:#040208"></i><i style="background:#ff2bd6"></i><i style="background:#00f0ff"></i></div><div><b>Неон.</b> <span>Киберпанк: острые углы, моноширинный шрифт, строки развёртки, кислотные цвета.</span></div></div>
-        <div class="sw"><div class="chips"><i style="background:#2b2c2f"></i><i style="background:#ffb547"></i><i style="background:#7fc8b2"></i></div><div><b>Студия.</b> <span>Приглушённая, для долгих сессий ночью. Ближе всего к Ableton.</span></div></div>
-        <div class="sw"><div class="chips"><i style="background:#ffffff"></i><i style="background:#2457e6"></i><i style="background:#b5179e"></i></div><div><b>Бумага.</b> <span>Светлая, для дня и яркого солнца.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#07080d"></i><i style="background:#8be9ff"></i><i style="background:#c59bff"></i></div><div><b>Prism.</b> <span>The default. A deep ink background, spectral clips, a soft glow.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#040208"></i><i style="background:#ff2bd6"></i><i style="background:#00f0ff"></i></div><div><b>Neon.</b> <span>Cyberpunk: sharp corners, a monospaced font, scanlines, acid colors.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#2b2c2f"></i><i style="background:#ffb547"></i><i style="background:#7fc8b2"></i></div><div><b>Studio.</b> <span>Muted, for long sessions at night. The most restrained of the four.</span></div></div>
+        <div class="sw"><div class="chips"><i style="background:#ffffff"></i><i style="background:#2457e6"></i><i style="background:#b5179e"></i></div><div><b>Paper.</b> <span>Light, for daytime and bright sun.</span></div></div>
       </div>
     </div>
   </div>
@@ -394,11 +394,11 @@ body {
     paper: [350, 24, 46, 150, 200, 262],
   };
   const tracks = [
-    { name: 'Drums', dev: 'Drum Rack', kind: 'drums' },
+    { name: 'Drums', dev: 'Drum Machine', kind: 'drums' },
     { name: 'Reese', dev: 'Prisma · Reese Bass', kind: 'bass' },
     { name: 'Supersaw', dev: 'Prisma · Supersaw Lead', kind: 'lead' },
     { name: 'Glass Pad', dev: 'Prisma · Glass Pad', kind: 'pad' },
-    { name: 'Vox', dev: 'Аудио · микрофон', kind: 'audio' },
+    { name: 'Vox', dev: 'Audio · microphone', kind: 'audio' },
     { name: 'Arp', dev: 'Prisma · Pluck', kind: 'arp' },
   ];
   const scenes = ['Intro', 'Build', 'Drop', 'Break', 'Drop 2', 'Outro'];
@@ -420,15 +420,15 @@ body {
   state.playingScene = [0, -1, -1, 0, -1, 0];
 
   const browser = {
-    'Инструменты': { dot: 'var(--accent)', folders: { 'Prisma': ['Init', 'Supersaw Lead', 'Reese Bass', 'Wobble Bass', 'Glass Pad', 'Pluck', 'Vox Sweep'], 'Скоро': ['Alloy (Alchemy-класс)', 'Drum Rack', 'Sampler'] } },
-    'Пресеты': { dot: 'var(--accent-2)', folders: { 'Bass': ['Reese Bass', 'Wobble Bass', 'Sub 808'], 'Lead': ['Supersaw Lead', 'Glass Lead'], 'Pad': ['Glass Pad', 'Dust Pad'], 'Pluck': ['Pluck', 'Bell Pluck'] } },
-    'Эффекты': { dot: '#f6ad55', folders: { 'Встроенные': ['Эквалайзер', 'Компрессор', 'Реверберация', 'Дилей', 'Дисторшн', 'Лимитер'] } },
-    'Плагины': { dot: '#68d391', folders: { 'Xfer Records': ['Serum 2'], 'Native Instruments': ['Massive X', 'Kontakt 8'], 'FabFilter': ['Pro-Q 4', 'Pro-L 2'], 'Valhalla DSP': ['VintageVerb'] } },
-    'Звуки': { dot: '#63b3ed', folders: { 'Drums': ['kick_tight.wav', 'snare_crack.wav', 'hat_closed.wav'], 'Loops': ['break_174.wav', 'top_loop_124.wav'] } },
-    'MIDI-файлы': { dot: '#fc8181', folders: { 'Аккорды': ['Am-F-C-G.mid', 'dm9 groove.mid'] } },
-    'Места': { dot: 'var(--dim)', folders: { 'Мои папки': ['~/Music/Samples', '~/Desktop/Проекты'] } },
+    'Instruments': { dot: 'var(--accent)', folders: { 'Prisma': ['Init', 'Supersaw Lead', 'Reese Bass', 'Wobble Bass', 'Glass Pad', 'Pluck', 'Vox Sweep'], 'Coming soon': ['Alloy', 'Drum Machine', 'Sampler'] } },
+    'Presets': { dot: 'var(--accent-2)', folders: { 'Bass': ['Reese Bass', 'Wobble Bass', 'Sub 808'], 'Lead': ['Supersaw Lead', 'Glass Lead'], 'Pad': ['Glass Pad', 'Dust Pad'], 'Pluck': ['Pluck', 'Bell Pluck'] } },
+    'Effects': { dot: '#f6ad55', folders: { 'Built-in': ['EQ', 'Compressor', 'Reverb', 'Delay', 'Distortion', 'Limiter'] } },
+    'Plugins': { dot: '#68d391', folders: { 'Vendor A': ['Synth One'], 'Vendor B': ['Synth Two', 'Sampler Plus'], 'Vendor C': ['Pro EQ', 'Pro Limiter'], 'Vendor D': ['Vintage Reverb'] } },
+    'Sounds': { dot: '#63b3ed', folders: { 'Drums': ['kick_tight.wav', 'snare_crack.wav', 'hat_closed.wav'], 'Loops': ['break_174.wav', 'top_loop_124.wav'] } },
+    'MIDI Files': { dot: '#fc8181', folders: { 'Chords': ['Am-F-C-G.mid', 'dm9 groove.mid'] } },
+    'Places': { dot: 'var(--dim)', folders: { 'My folders': ['~/Music/Samples', '~/Desktop/Projects'] } },
   };
-  let cat = 'Пресеты', selItem = 'Reese Bass';
+  let cat = 'Presets', selItem = 'Reese Bass';
 
   /* ---------- skins ---------- */
   function hue(i) { return (SKIN_HUES[state.skin] || SKIN_HUES.prism)[i]; }
@@ -456,9 +456,9 @@ body {
         const hits = list.filter(x => !q || x.toLowerCase().includes(q));
         if (!hits.length) continue;
         html += `<div class="folder">${q ? cname + ' · ' : ''}${folder}</div>`;
-        html += hits.map(x => `<div class="item ${x === selItem ? 'sel' : ''}" draggable="true" data-item="${x}" data-cat="${cname}">${x}${cname === 'Плагины' ? '<span class="tag">VST3</span>' : cname === 'Пресеты' || cname === 'Инструменты' ? '<span class="tag">Prisma</span>' : ''}</div>`).join('');
+        html += hits.map(x => `<div class="item ${x === selItem ? 'sel' : ''}" draggable="true" data-item="${x}" data-cat="${cname}">${x}${cname === 'Plugins' ? '<span class="tag">VST3</span>' : cname === 'Presets' || cname === 'Instruments' ? '<span class="tag">Prisma</span>' : ''}</div>`).join('');
       }
-    $('#items').innerHTML = html || '<div class="folder">Ничего не найдено</div>';
+    $('#items').innerHTML = html || '<div class="folder">Nothing found</div>';
   }
   $('#cats').addEventListener('click', e => { const b = e.target.closest('.cat'); if (!b) return; cat = b.dataset.cat; $('#q').value = ''; renderBrowser(); });
   $('#q').addEventListener('input', renderBrowser);
@@ -471,15 +471,15 @@ body {
   $('#items').addEventListener('dblclick', e => { const it = e.target.closest('.item'); if (it) dropOnTrack(state.sel, { item: it.dataset.item, cat: it.dataset.cat }); });
 
   function dropOnTrack(t, d) {
-    if (d.cat === 'Эффекты' || d.cat === 'Плагины') {
-      state.chains[t].push({ name: d.item, plugin: d.cat === 'Плагины' });
-      toast(`«${d.item}» добавлен в цепочку дорожки ${tracks[t].name}`);
-    } else if (d.cat === 'Пресеты' || d.cat === 'Инструменты') {
+    if (d.cat === 'Effects' || d.cat === 'Plugins') {
+      state.chains[t].push({ name: d.item, plugin: d.cat === 'Plugins' });
+      toast(`"${d.item}" added to the chain of track ${tracks[t].name}`);
+    } else if (d.cat === 'Presets' || d.cat === 'Instruments') {
       tracks[t].dev = 'Prisma · ' + d.item;
       if (!state.chains[t].includes('prisma')) state.chains[t].unshift('prisma');
-      toast(`На дорожке ${tracks[t].name} теперь Prisma «${d.item}»`);
+      toast(`Track ${tracks[t].name} now has Prisma "${d.item}"`);
     } else {
-      toast(`«${d.item}» положен на дорожку ${tracks[t].name}`);
+      toast(`"${d.item}" placed on track ${tracks[t].name}`);
     }
     state.sel = t; renderAll();
   }
@@ -505,9 +505,9 @@ body {
       h += `<div class="slot ret"></div><div class="slot ret"></div><div class="scene" data-r="${r}">${sc}</div>`;
     });
     tracks.forEach((t, i) => h += strip(i));
-    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.4"></div>Pan</div></div><div class="fader"><canvas class="meter" data-m="r1" width="14" height="200"></canvas><input type="range" value="70" aria-label="Громкость Reverb"></div><div class="vol num">−6.0</div></div>`;
-    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.5"></div>Pan</div></div><div class="fader"><canvas class="meter" data-m="r2" width="14" height="200"></canvas><input type="range" value="62" aria-label="Громкость Delay"></div><div class="vol num">−9.5</div></div>`;
-    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.5;--k:var(--fg)"></div>Cue</div></div><div class="fader"><canvas class="meter" data-m="master" width="14" height="200"></canvas><input type="range" value="80" aria-label="Громкость мастер"></div><div class="vol num">0.0</div></div>`;
+    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.4"></div>Pan</div></div><div class="fader"><canvas class="meter" data-m="r1" width="14" height="200"></canvas><input type="range" value="70" aria-label="Reverb volume"></div><div class="vol num">−6.0</div></div>`;
+    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.5"></div>Pan</div></div><div class="fader"><canvas class="meter" data-m="r2" width="14" height="200"></canvas><input type="range" value="62" aria-label="Delay volume"></div><div class="vol num">−9.5</div></div>`;
+    h += `<div class="strip"><div class="sends"><div class="knob-wrap"><div class="knob" style="--v:.5;--k:var(--fg)"></div>Cue</div></div><div class="fader"><canvas class="meter" data-m="master" width="14" height="200"></canvas><input type="range" value="80" aria-label="Master volume"></div><div class="vol num">0.0</div></div>`;
     s.innerHTML = h;
     s.querySelectorAll('.th[data-t]').forEach(el => { const t = +el.dataset.t; el.onclick = () => { state.sel = t; renderAll(); }; wireDrop(el, t); });
     s.querySelectorAll('.slot[data-t]').forEach(el => {
@@ -538,9 +538,9 @@ body {
     const sends = [[.35, 'A'], [.15, 'B']].map(([v, n]) => `<div class="knob-wrap"><div class="knob" style="--v:${v};--k:${clipColour(i)}"></div>${n}</div>`).join('');
     const db = ((state.vol[i] - 80) * 0.4).toFixed(1).replace('-', '−');
     return `<div class="strip"><div class="sends">${sends}<div class="knob-wrap"><div class="knob" style="--v:.5;--k:var(--fg)"></div>Pan</div></div>
-      <div class="fader"><canvas class="meter" data-m="${i}" width="14" height="200"></canvas><input type="range" value="${state.vol[i]}" data-v="${i}" aria-label="Громкость ${tracks[i].name}"></div>
+      <div class="fader"><canvas class="meter" data-m="${i}" width="14" height="200"></canvas><input type="range" value="${state.vol[i]}" data-v="${i}" aria-label="${tracks[i].name} volume"></div>
       <div class="vol num">${db}</div>
-      <div class="btns"><button class="m ${state.mute[i] ? '' : 'on'}" data-t="${i}" data-k="m" title="Дорожка включена">${i + 1}</button><button class="s ${state.solo[i] ? 'on' : ''}" data-t="${i}" data-k="s">S</button><button class="a ${state.armed === i ? 'on' : ''}" data-t="${i}" data-k="a" title="Arm">●</button></div></div>`;
+      <div class="btns"><button class="m ${state.mute[i] ? '' : 'on'}" data-t="${i}" data-k="m" title="Track on">${i + 1}</button><button class="s ${state.solo[i] ? 'on' : ''}" data-t="${i}" data-k="s">S</button><button class="a ${state.armed === i ? 'on' : ''}" data-t="${i}" data-k="a" title="Arm">●</button></div></div>`;
   }
 
   /* ---------- arrangement ---------- */
@@ -552,12 +552,12 @@ body {
     [4, 10, 6, 'Vox chop'], [4, 18, 10, 'Vox take 3'],
     [5, 0, 12, 'Arp 16th'], [5, 20, 12, 'Arp 16th'],
   ];
-  const markers = [[0, 'Интро'], [8, 'Билд'], [16, 'Дроп'], [24, 'Дроп 2']];
+  const markers = [[0, 'Intro'], [8, 'Build'], [16, 'Drop'], [24, 'Drop 2']];
   const BARS = 32, LANE = 56, AUTO = 44;
   function renderArrHeads() {
     let h = '';
     tracks.forEach((t, i) => {
-      h += `<div class="lane-h"><i style="background:${clipColour(i)}"></i>${t.name}<span class="lbl">${t.kind === 'audio' ? 'аудио' : 'midi'}</span></div>`;
+      h += `<div class="lane-h"><i style="background:${clipColour(i)}"></i>${t.name}<span class="lbl">${t.kind === 'audio' ? 'audio' : 'midi'}</span></div>`;
       if (i === 1) h += `<div class="lane-h auto"><i></i>↳ Prisma · Cutoff</div>`;
     });
     $('#heads').innerHTML = h;
@@ -633,27 +633,27 @@ body {
 
   /* ---------- device chain ---------- */
   const SNAP_A = [.25, .62, .30, .45, .20, .70, .35, .50], SNAP_B = [.85, .30, .78, .90, .65, .25, .80, .95];
-  const MACROS = ['Морф WT', 'Детюн', 'Срез', 'Резонанс', 'Драйв', 'Атака', 'LFO', 'Ширина'];
+  const MACROS = ['WT Morph', 'Detune', 'Cutoff', 'Resonance', 'Drive', 'Attack', 'LFO', 'Width'];
   function renderChain() {
     const t = state.sel, tr = tracks[t];
-    $('#info').innerHTML = `<div class="lbl">Дорожка</div><div><b style="color:${clipColour(t)}">${tr.name}</b></div>
-      <div>${tr.kind === 'audio' ? 'Вход: <b>Вход 1 · Микрофон</b>' : 'Вход: <b>Все MIDI · Launchkey 49</b>'}</div>
-      <div>Мониторинг: <b>Auto</b></div><div>Цепочка: <b>${state.chains[t].length} устр.</b></div>
-      <div class="lbl" style="margin-top:6px">Shift+Tab: редактор клипа</div>`;
+    $('#info').innerHTML = `<div class="lbl">Track</div><div><b style="color:${clipColour(t)}">${tr.name}</b></div>
+      <div>${tr.kind === 'audio' ? 'Input: <b>Input 1 · Microphone</b>' : 'Input: <b>All MIDI · Launchkey 49</b>'}</div>
+      <div>Monitoring: <b>Auto</b></div><div>Chain: <b>${state.chains[t].length} devices</b></div>
+      <div class="lbl" style="margin-top:6px">Shift+Tab: clip editor</div>`;
     const parts = state.chains[t].map((d, k) => device(d, t, k));
-    $('#chain').innerHTML = parts.join('<span class="arrow">→</span>') + '<span class="arrow">→</span><div class="drop" id="drop">Перетащите сюда эффект или плагин из браузера</div>';
+    $('#chain').innerHTML = parts.join('<span class="arrow">→</span>') + '<span class="arrow">→</span><div class="drop" id="drop">Drag an effect or plugin here from the browser</div>';
     wireDrop($('#drop'), t);
     drawDevices();
   }
   function device(d, t, k) {
     if (d === 'prisma') {
       const knobs = MACROS.map((m, j) => `<div class="knob-wrap"><div class="knob" data-macro="${j}" style="--k:${clipColour(t)}"></div>${m}</div>`).join('');
-      return `<div class="dev" style="width:470px"><header><span class="pw"></span>${tracks[t].dev}<small>32 гол. · ↗ открыть</small></header><div class="body"><canvas id="wt" width="300" height="240" style="width:150px;height:120px"></canvas><div class="macros">${knobs}</div></div></div>`;
+      return `<div class="dev" style="width:470px"><header><span class="pw"></span>${tracks[t].dev}<small>32 voices · ↗ open</small></header><div class="body"><canvas id="wt" width="300" height="240" style="width:150px;height:120px"></canvas><div class="macros">${knobs}</div></div></div>`;
     }
-    if (d === 'eq') return `<div class="dev" style="width:250px"><header><span class="pw"></span>Эквалайзер<small>8 полос</small></header><div class="body"><canvas class="eq" width="460" height="240" style="width:230px;height:120px"></canvas></div></div>`;
-    if (d === 'comp') return `<div class="dev" style="width:200px"><header><span class="pw"></span>Компрессор<small>−4.2 дБ</small></header><div class="body"><canvas class="comp" width="360" height="240" style="width:180px;height:120px"></canvas></div></div>`;
-    if (d === 'verb') return `<div class="dev" style="width:200px"><header><span class="pw"></span>Реверберация<small>2.8 с</small></header><div class="body"><canvas class="verb" width="360" height="240" style="width:180px;height:120px"></canvas></div></div>`;
-    return `<div class="dev" style="width:190px"><header><span class="pw"></span>${d.name}<small>${d.plugin ? 'VST3' : 'встр.'}</small></header><div class="body" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${[...Array(8)].map((_, j) => `<div class="knob" style="--v:${(j * 37 % 10) / 10}"></div>`).join('')}</div></div>`;
+    if (d === 'eq') return `<div class="dev" style="width:250px"><header><span class="pw"></span>EQ<small>8 bands</small></header><div class="body"><canvas class="eq" width="460" height="240" style="width:230px;height:120px"></canvas></div></div>`;
+    if (d === 'comp') return `<div class="dev" style="width:200px"><header><span class="pw"></span>Compressor<small>−4.2 dB</small></header><div class="body"><canvas class="comp" width="360" height="240" style="width:180px;height:120px"></canvas></div></div>`;
+    if (d === 'verb') return `<div class="dev" style="width:200px"><header><span class="pw"></span>Reverb<small>2.8 s</small></header><div class="body"><canvas class="verb" width="360" height="240" style="width:180px;height:120px"></canvas></div></div>`;
+    return `<div class="dev" style="width:190px"><header><span class="pw"></span>${d.name}<small>${d.plugin ? 'VST3' : 'built-in'}</small></header><div class="body" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${[...Array(8)].map((_, j) => `<div class="knob" style="--v:${(j * 37 % 10) / 10}"></div>`).join('')}</div></div>`;
   }
   function drawDevices() {
     const m = state.morph / 100;
@@ -752,9 +752,9 @@ body {
   $('#capture').onclick = () => {
     const t = state.armed >= 0 ? state.armed : state.sel;
     const r = grid[t].indexOf('');
-    if (r >= 0) { grid[t][r] = 'Захват 8 т.'; }
+    if (r >= 0) { grid[t][r] = 'Capture 8 bars'; }
     state.activity = [];
-    toast(r >= 0 ? `Захвачено 8 тактов в ${tracks[t].name}: новый клип в сцене ${scenes[r]}` : `Захвачено 8 тактов в ${tracks[t].name}`);
+    toast(r >= 0 ? `Captured 8 bars on ${tracks[t].name}: new clip in scene ${scenes[r]}` : `Captured 8 bars on ${tracks[t].name}`);
     renderSession();
   };
   function setView(v) {

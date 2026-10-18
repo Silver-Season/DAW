@@ -33,7 +33,7 @@ juce::Path backToArrangement (juce::Rectangle<float> area);  // an arrow back to
 } // namespace icons
 
 // Single-line text editor for renaming and typing numbers in place. Enter confirms, Esc cancels,
-// losing focus confirms (like the rename boxes of Ableton). Deletes itself through its owner.
+// losing focus confirms. Deletes itself through its owner.
 class InlineEditor final : public juce::TextEditor
 {
 public:

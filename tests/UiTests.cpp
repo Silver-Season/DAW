@@ -97,7 +97,7 @@ void testThemes()
     // User themes from a folder: valid ones join the list, a broken one is reported and skipped.
     auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("daw-theme-test-" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
     dir.createDirectory();
-    dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"prism\"", "\"id\": \"mine\"").replace ("\"name\": \"Призма\"", "\"name\": \"Mine\""));
+    dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"prism\"", "\"id\": \"mine\"").replace ("\"name\": \"Prism\"", "\"name\": \"Mine\""));
     dir.getChildFile ("broken.json").replaceWithText ("{ \"id\": \"broken\" }");
     const auto userProblems = manager.reload (dir);
     check (manager.all().size() == 5 && manager.all().back().id == "mine", "a theme from User Library/Themes appears in the list");
@@ -520,7 +520,7 @@ void testComputerKeys()
     check (stateChanges == 1 && keys.isOn(), "switching on notifies the lamp");
     messages.clear();
     check (press ('x') && messages.size() == 1 && messages[0] == K::octaveMessage (72), "X: octave up is announced");
-    check (messages[0] == juce::String (juce::CharPointer_UTF8 ("\xd0\x9e\xd0\xba\xd1\x82\xd0\xb0\xd0\xb2\xd0\xb0: C4\xe2\x80\x93" "E5")), "the message reads Октава: C4–E5");
+    check (messages[0] == Strings::tr ("Octave: C4\xe2\x80\x93" "E5", "\xd0\x9e\xd0\xba\xd1\x82\xd0\xb0\xd0\xb2\xd0\xb0: C4\xe2\x80\x93" "E5"), "the message reads Octave: C4–E5");
     check (keys.octaveText() == "C4" && keys.panel().getBaseNote() == 72, "the lamp text follows the octave");
     check (press ('z') && press ('z') && keys.octaveText() == "C2" && messages[messages.size() - 1] == K::octaveMessage (48), "Z twice goes two octaves down");
     check (press ('c') && keys.panel().getVelocity() == 80 && messages[messages.size() - 1] == K::velocityMessage (80), "C: velocity down is announced");
@@ -571,7 +571,7 @@ void testComputerKeys()
 }
 
 //==============================================================================
-// Finds an item of a popup menu by the texts of its path ("Отсчёт", "2 такта"); null if there is none.
+// Finds an item of a popup menu by the texts of its path ("Count-in", "2 bars"); null if there is none.
 const juce::PopupMenu::Item* findMenuItem (const juce::PopupMenu& menu, std::initializer_list<juce::String> path, juce::PopupMenu& holder)
 {
     holder = menu;

@@ -39,7 +39,7 @@ double songLengthBeats (const ProjectModel&);
 void resolveOverlaps (ProjectModel&, const TrackRef& track, int64_t winnerId);
 
 // ×2 / ÷2 of the clip editor: stretches the content of a clip in time (clipedit::scaleTime). The content of an arrangement
-// clip also stretches its place on the timeline from the same start, as in Live; a longer clip covers what follows it.
+// clip also stretches its place on the timeline from the same start; a longer clip covers what follows it.
 void scaleClipTime (ProjectModel&, const ClipRef& content, double factor);
 // The same for a bare time range: removes whatever lies in [from, to) on the track (Delete on a time selection).
 void clearRange (ProjectModel&, const TrackRef& track, double from, double to);

@@ -6,7 +6,7 @@
 
 namespace ui
 {
-// "Квантизация…" (Cmd+Shift+U): grid, strength, swing and whether note ends are quantised too. Apply writes the
+// "Quantize…" (Cmd+Shift+U): grid, strength, swing and whether note ends are quantised too. Apply writes the
 // settings into the project and quantises the selected notes of the open clip in one undo step.
 class QuantiseWindow final : public juce::DocumentWindow
 {

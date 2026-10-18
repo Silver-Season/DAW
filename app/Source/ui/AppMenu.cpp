@@ -31,7 +31,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
                         onOpenRecent (path);
                 });
             if (list.isEmpty())
-                recent.addItem (Strings::utf8 ("(пусто)"), false, false, nullptr);
+                recent.addItem (Strings::tr ("(empty)", "(пусто)"), false, false, nullptr);
             else
             {
                 recent.addSeparator();
@@ -123,7 +123,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
                             onThemeChosen (id);
                     });
                 }
-                menu.addSubMenu (Strings::utf8 ("Тема"), themes);
+                menu.addSubMenu (Strings::tr ("Theme", "Тема"), themes);
             }
 #if ! JUCE_MAC
             menu.addSeparator();

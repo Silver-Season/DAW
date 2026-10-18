@@ -431,6 +431,61 @@ void testEditorMissingFile()
     check (ed.hasClip() && img.isValid(), "the editor of a missing file opens and paints");
     check (ed.viewBeats() >= 4.0, "the view covers the clip");
 }
+
+//==============================================================================
+// Live test: a folded device could not be opened again (the narrow strip ignored clicks).
+void testDeviceFold()
+{
+    std::printf ("[live] a folded device unfolds with a click on its strip\n");
+    Rig r;
+    auto device = r.f.model.addDevice (r.midi, "prisma", "Prisma");
+    r.f.engine.rebuildGraphIfNeeded();
+    ui::DeviceChainView chain (r.f.engine, r.f.model, r.actions, r.selection);
+    chain.setBounds (0, 0, 1000, 240);
+    chain.setTrack (r.midi.id());
+    chain.tick();
+
+    // The device view is the only child of the chain's content that is a HelpProvider.
+    std::function<juce::Component*(juce::Component&)> findView = [&] (juce::Component& c) -> juce::Component* {
+        for (auto* child : c.getChildren())
+        {
+            if (dynamic_cast<ui::HelpProvider*> (child) != nullptr && child->getParentComponent() != &chain)
+                return child;
+            if (auto* found = findView (*child))
+                return found;
+        }
+        return nullptr;
+    };
+    auto mouse = [] (juce::Component& c, juce::Point<int> p) {
+        auto src = juce::Desktop::getInstance().getMainMouseSource();
+        const auto now = juce::Time::getCurrentTime();
+        return juce::MouseEvent (src, p.toFloat(), juce::ModifierKeys::leftButtonModifier, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, p.toFloat(), now, 1, false);
+    };
+    auto click = [&] (juce::Point<int> p) {
+        auto* v = findView (chain);
+        v->mouseDown (mouse (*v, p));
+        v->mouseUp (mouse (*v, p));
+        chain.tick();
+    };
+
+    auto* view = findView (chain);
+    check (view != nullptr && chain.numDeviceViews() == 1, "the chain shows the device");
+    if (view == nullptr)
+        return;
+    const int wide = view->getWidth();
+    click ({ wide - 53, 13 }); // the fold triangle in the header
+    check (r.f.model.findDevice (device.id()).folded(), "the fold button folds it");
+    view = findView (chain);
+    check (view->getWidth() < 60, "into a narrow strip");
+
+    click ({ view->getWidth() / 2, 13 }); // the power dot, centred in the strip
+    check (! r.f.model.findDevice (device.id()).enabled(), "the centred power dot still switches the device");
+    check (r.f.model.findDevice (device.id()).folded(), "without unfolding it");
+
+    click ({ view->getWidth() / 2, view->getHeight() / 2 }); // anywhere else on the strip
+    check (! r.f.model.findDevice (device.id()).folded(), "a click on the strip unfolds it");
+    check (findView (chain)->getWidth() == wide, "back to its full width");
+}
 } // namespace
 
 namespace tests
@@ -440,6 +495,7 @@ void runAudioUiTests()
     testDrops();
     testLanesPaint();
     testDetailPanel();
+    testDeviceFold();
     testEditorProperties();
     testEditorGestures();
     testEditorMissingFile();

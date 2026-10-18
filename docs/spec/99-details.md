@@ -1,87 +1,87 @@
-# 99. Мелочи, которые делают DAW удобной
+# 99. Small things that make the DAW pleasant to use
 
-Список деталей, которые легко забыть, с этапом, где каждая делается. Исполнитель этапа проверяет свой раздел этого списка вместе с разделом «Готово, когда». Если деталь уже описана в файле этапа, здесь стоит ссылка; если нет — она входит в этап как маленькая задача.
+A list of details that are easy to forget, with the stage where each one is done. Whoever implements a stage checks their section of this list together with the "Done when" section. If a detail is already described in the stage file, there is a reference here; if not, it is part of the stage as a small task.
 
-## Этап 1 (окно, проект)
+## Stage 1 (window, project)
 
-- Цвет дорожки и клипа меняется щелчком по палитре в один клик, без диалога.
-- Двойной щелчок по любому числовому полю (темп, громкость, параметр) открывает ввод с клавиатуры; `Enter` подтверждает, `Esc` отменяет.
-- Перетаскивание ручки с `Shift` — точная настройка (×0,1), двойной щелчок — значение по умолчанию.
-- Колесо мыши над ручкой меняет её, над списком прокручивает.
-- Ширина столбцов в Session View тянется за край заголовка.
-- Подсказки (InfoBar) есть у каждого элемента, включая пункты меню устройства.
-- Название окна: имя проекта и `•`, если есть изменения.
-- Недавние проекты в стартовом окне со скриншотом-миниатюрой (снимок окна при сохранении, 320×200).
-- Удаление дорожки с клипами и устройствами не спрашивает подтверждения: есть `Cmd+Z`.
-- Индикатор CPU в транспорте, щелчок открывает настройки звука.
-- Индикатор MIDI-входа в транспорте мигает при входящих событиях, отдельный для «Управления» (06).
-- Пустое состояние браузера («Ничего не найдено по “…”») и пустого проекта («Перетащите инструмент из браузера сюда»).
-- Сочетания клавиш в меню показываются справа от пунктов.
+- Track and clip color changes with a single click on the palette, without a dialog.
+- Double-clicking any numeric field (tempo, volume, parameter) opens keyboard entry; `Enter` confirms, `Esc` cancels.
+- Dragging a knob with `Shift` is fine adjustment (×0.1); a double click resets to the default value.
+- The mouse wheel over a knob changes it; over a list it scrolls.
+- Column width in Session View is resized by dragging the header edge.
+- Hints (InfoBar) exist for every element, including device menu items.
+- Window title: the project name and `•` if there are changes.
+- Recent projects in the start window with a screenshot thumbnail (a snapshot of the window on save, 320×200).
+- Deleting a track with clips and devices does not ask for confirmation: there is `Cmd+Z`.
+- CPU indicator in the transport; clicking it opens the audio settings.
+- MIDI input indicator in the transport blinks on incoming events, with a separate one for "Control" (06).
+- Empty states for the browser ("Nothing found for “…”") and for an empty project ("Drag an instrument from the browser here").
+- Keyboard shortcuts are shown to the right of menu items.
 
-## Этап 2 (MIDI)
+## Stage 2 (MIDI)
 
-- Счётчик сыгранных нот в ленте «10 мин» не нужен, но подсказка при наведении показывает «за 10 минут: 1 240 нот».
-- Нота в пиано-ролле, перетянутая за край клипа, удлиняет петлю клипа (с подтверждением подсветкой).
-- `Cmd+Shift+стрелки` в пиано-ролле: транспонирование выделения с удержанием лада.
-- Режим «Игра аккордами» для клавиатуры Mac (одна клавиша — трезвучие лада), выключен по умолчанию.
-- Инверсия выделения нот, «Выделить все ноты этой высоты» по щелчку на клавише.
-- Прослушивание ноты при её выделении (наушники в панели).
-- MIDI-клип пустой после записи без нот не создаётся, вместо него сообщение «Нот не было».
+- A played-note counter in the "10 min" tape is not needed, but the hover hint shows "Last 10 minutes: 1,240 notes".
+- A note in the piano roll dragged past the clip edge extends the clip loop (confirmed by highlighting).
+- `Cmd+Shift+arrows` in the piano roll: transpose the selection while staying in the scale.
+- A "Chord play" mode for the Mac keyboard (one key plays a triad of the scale), off by default.
+- Invert note selection; "Select all notes of this pitch" by clicking a key.
+- Note preview when a note is selected (headphones in the panel).
+- An empty MIDI clip is not created after a recording with no notes; instead, the message "No notes were played" appears.
 
-## Этап 3 (Arrangement)
+## Stage 3 (Arrangement)
 
-- Щелчок по пустому месту линейки во время воспроизведения прыгает квантованно, с `Shift` — сразу.
-- Цвет маркеров и их список в выпадающем меню для быстрого перехода.
-- «Консолидировать» (`Cmd+J` по выделению времени на нескольких дорожках) — клипы склеиваются на каждой дорожке.
-- Заморозка дорожки (Freeze, правая кнопка по заголовку): дорожка рендерится в аудио офлайн-движком (04) и играет из файла, устройства становятся недоступными до разморозки. Здесь только MIDI-дорожки; делается после 04, поэтому фактически в 04.
-- Сетка показывает номера тактов и на мини-карте.
+- Clicking an empty spot on the ruler during playback jumps quantized; with `Shift`, immediately.
+- Marker colors and a marker list in a dropdown menu for quick navigation.
+- "Consolidate" (`Cmd+J` on a time selection across several tracks): clips are joined on each track.
+- Track freeze (Freeze, right-click on the header): the track is rendered to audio by the offline engine (04) and plays from the file; devices become unavailable until unfreeze. MIDI tracks only here; it comes after 04, so in practice it is done in 04.
+- The grid shows bar numbers on the mini-map as well.
 
-## Этап 4 (экспорт)
+## Stage 4 (export)
 
-- Звуковой сигнал macOS и уведомление по окончании долгого экспорта, если окно не в фокусе.
-- Последняя папка экспорта запоминается.
-- Freeze и Flatten (см. этап 3).
-- Экспорт выделения времени одной кнопкой из правой кнопки по линейке.
+- A macOS sound and a notification when a long export finishes, if the window is not focused.
+- The last export folder is remembered.
+- Freeze and Flatten (see stage 3).
+- Export a time selection with one button from the ruler's right-click menu.
 
-## Этап 5 (аудио)
+## Stage 5 (audio)
 
-- Нормализация клипа (правая кнопка) и «Реверс» без перезаписи файла.
-- Автоматическая обрезка тишины в начале записи (опция).
-- Предупреждение, если частота файла отличается от проекта (с автоматическим ресемплингом при воспроизведении).
-- Счётчик свободного места на диске в окне записи, предупреждение при < 2 ГБ.
-- «Удалить неиспользуемые записи…» и «Собрать и сохранить» (скопировать все внешние файлы в проект).
+- Clip normalize (right click) and "Reverse" without rewriting the file.
+- Automatic trimming of silence at the start of a recording (option).
+- A warning if the file's sample rate differs from the project's (with automatic resampling during playback).
+- A free disk space counter in the recording window, with a warning at < 2 GB.
+- "Delete Unused Recordings…" and "Collect and Save" (copy all external files into the project).
 
-## Этап 6 (эффекты, микшер)
+## Stage 6 (effects, mixer)
 
-- Кнопка «Сбросить пик» по щелчку на индикаторе, цифра пика над индикатором.
-- Режим микшера во весь экран (`Cmd+Alt+M` дважды), широкие фейдеры.
-- Перетаскивание устройства с дорожки на дорожку (Alt — копия).
-- Групповое изменение громкости выделенных дорожек (движение фейдера одной меняет все выделенные).
-- Моно-переключатель и фазоинвертор в цепочке (утилита «Утилита» как Utility в Ableton: громкость, панорама, ширина, моно, фаза, DC).
-- Лимитер на мастере не стоит по умолчанию, но шаблон «Мастеринг» в браузере цепочек есть (08).
+- "Reset peak" by clicking the meter, with the peak value shown above the meter.
+- Full-screen mixer mode (`Cmd+Alt+M` twice), wide faders.
+- Dragging a device from one track to another (Alt copies).
+- Group volume change for selected tracks (moving one fader changes all selected tracks).
+- A mono switch and phase inverter in the chain (a "Utility" device: volume, pan, width, mono, phase, DC).
+- No limiter on the master by default, but there is a "Mastering" template in the chain browser (08).
 
-## Этап 7 (warp)
+## Stage 7 (warp)
 
-- Нажатие на темп в транспорте с `Alt` — tap tempo без кнопки.
-- Предпрослушивание лупов в браузере синхронно и в темпе проекта (растяжением).
-- Автоматическое определение тональности сэмпла (хромаграмма + профили Крумхансла), показывается в браузере.
+- Clicking the tempo in the transport with `Alt` is tap tempo, no separate button needed.
+- Loop preview in the browser in sync and at the project tempo (by stretching).
+- Automatic key detection for a sample (chromagram + Krumhansl profiles), shown in the browser.
 
-## Этап 8 (библиотека)
+## Stage 8 (library)
 
-- Hot-swap пресетов, превью, теги — описано в 08.
-- Пользовательский шаблон проекта из библиотеки («Новый проект из шаблона ▸»).
-- Пакеты звуков от сообщества: формат `.dawpack` (08) и папка «Пакеты» в браузере.
+- Preset hot-swap, previews, tags: described in 08.
+- A user project template from the library ("New Project from Template ▸").
+- Community sound packs: the `.dawpack` format (08) and a "Packs" folder in the browser.
 
-## Этап 9–10 (синты)
+## Stages 9–10 (synths)
 
-- Случайный пресет с замком на выбранные секции (Prisma), кнопка «Ещё похожих» (Alloy, по тегам).
-- Сохранение пресета прямо из DAW сохраняет и превью.
+- A random preset with locks on selected sections (Prisma), a "More Like This" button (Alloy, by tags).
+- Saving a preset directly from the DAW also saves its preview.
 
-## Позже (фаза 3 и релиз)
+## Later (phase 3 and release)
 
-- Ableton Link, MIDI Clock (ведущий и ведомый), MIDI-выходы на внешние синты (дорожка «Внешний инструмент»).
-- Push, Launchpad, Launchkey (скрипты `ControlSurface`), Maschine MK3 в MIDI-режиме.
-- Английский перевод интерфейса (все строки уже в `Strings.h`).
-- Подпись и нотаризация Apple, автообновление (Sparkle), отчёты о сбоях с согласия пользователя.
-- Изолированное сканирование плагинов в отдельном процессе.
-- Видеодорожка для музыки к видео.
+- Link (the open tempo-sync protocol), MIDI Clock (leader and follower), MIDI outputs to external synths (an "External Instrument" track).
+- Push, Launchpad, Launchkey (`ControlSurface` scripts), Maschine MK3 in MIDI mode.
+- Additional UI languages beyond English and Russian (all strings are already in `Strings.h`).
+- Apple code signing and notarization, auto-update (Sparkle), crash reports with user consent.
+- Isolated plugin scanning in a separate process.
+- A video track for scoring music to picture.

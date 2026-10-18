@@ -213,8 +213,26 @@ void testStringsAndSettings()
 {
     std::printf ("[test] Strings and Settings\n");
     check (Strings::trackTypeMidi.isNotEmpty() && Strings::undoNewTrack.containsNonWhitespaceChars(), "strings exist");
-    check (Strings::undoNewTrack.length() == 13, "Russian strings are decoded as UTF-8 (13 characters for the \"new track\" name)");
+    check (Strings::utf8 ("Новая дорожка").length() == 13, "Russian strings are decoded as UTF-8 (13 characters for the \"new track\" name)");
+    check (Strings::undoNewTrack == (Strings::isRussian() ? Strings::utf8 ("Новая дорожка") : juce::String ("New Track")),
+           "the UI strings follow the language of this run (DAW_LANG)");
     check (Strings::defaultTrackName (3).endsWith ("3"), "default track names are numbered");
+
+    {
+        // The language for the next launch sits in a "language" file next to the settings file.
+        juce::TemporaryFile folder;
+        folder.getFile().createDirectory();
+        const auto settingsFile = folder.getFile().getChildFile ("DAW.settings");
+        {
+            Settings s (settingsFile);
+            check (s.language() == "en", "the UI language is English by default");
+            s.setLanguage ("ru");
+        }
+        check (Settings (settingsFile).language() == "ru", "the language choice survives a restart");
+        check (Strings::languageFromCode (Settings::languageFileFor (settingsFile).loadFileAsString()) == Strings::Language::russian,
+               "and is read back from the language file");
+        folder.getFile().deleteRecursively();
+    }
 
     juce::TemporaryFile file (".settings");
     {

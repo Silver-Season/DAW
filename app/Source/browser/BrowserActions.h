@@ -9,7 +9,7 @@ class AudioEngine;
 class Settings;
 
 // What dropping a browser item (or a file from Finder) does to the project (docs/spec/01-layout-project.md,
-// tasks 1.5 and 1.6). Each drop is exactly one undo transaction, named after what happened ("Добавить Prisma · Reese Bass").
+// tasks 1.5 and 1.6). Each drop is exactly one undo transaction, named after what happened ("Add Prisma · Reese Bass").
 namespace browser
 {
 struct ImportedSound

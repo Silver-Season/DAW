@@ -2,6 +2,8 @@
 #include <algorithm>
 #include "Theme.h"
 
+#include "../Language.h"
+
 #include <BinaryData.h>
 #include <juce_core/juce_core.h>
 
@@ -103,6 +105,8 @@ bool Theme::fromJson (const juce::String& json, Theme& result, juce::String& err
         return false;
     t.id = obj->getProperty ("id").toString();
     t.name = obj->getProperty ("name").toString();
+    if (Strings::isRussian() && obj->getProperty ("nameRu").toString().isNotEmpty())
+        t.name = obj->getProperty ("nameRu").toString(); // optional: the name in the Russian UI
     if (t.id.isEmpty())
     {
         error = "empty id";

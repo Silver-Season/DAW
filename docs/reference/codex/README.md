@@ -1,16 +1,16 @@
-# Справочник: прототипы Codex
+# Reference: Codex prototypes
 
-Здесь лежат файлы двух отдельных плагинов, которые Codex сделал в локальной ветке `codex/vocal-plugin` (17.10.2026): драм-пад **Prisma Touch** и вокальный процессор **Prisma Voice**. В сборку они не входят. Это материал для исполнителей этапов 08 и 12: идеи берём, код переписываем под правила [00-rules.md](../../spec/00-rules.md) (DSP в `core/` без JUCE, цвета через `theme()`, строки в `Strings.h`, связь с моделью проекта).
+This folder holds files from two standalone plugins that Codex built in the local branch `codex/vocal-plugin` (17.10.2026): the **Prisma Touch** drum pad and the **Prisma Voice** vocal processor. They are not part of the build. This is material for the implementers of stages 08 and 12: we take the ideas and rewrite the code to follow [00-rules.md](../../spec/00-rules.md) (DSP in `core/` without JUCE, colors via `theme()`, strings in `Strings.h`, connection to the project model).
 
-| Файл | Что взять | Где пригодится |
+| File | What to take | Where it is useful |
 |---|---|---|
-| `touchdrums/TouchSurface_mac.mm`, `TouchSurface.h` | Игра на трекпаде через публичный `NSTouch`: прозрачный `NSView` поверх сетки пэдов, `allowedTouchTypes = Indirect`, стабильные токены касаний, одно касание = один удар, отмена при потере фокуса окна, поглощение mouseDown от tap-to-click | 08, задача 8.16 |
-| `touchdrums/Processor.cpp`, функция `buildKit` | Рецепты 8 синтезированных ударов (kick с падающей частотой, snare, хэты на 4 квадратных генераторах, clap с тремя всплесками, tom, rim, perc с FM) | 08, задача 8.8 (`tools/drumgen`) как стартовые рецепты |
-| `voicer/Pitch.h` | Детектор высоты в стиле YIN и привязка к гамме. Как основа годится, но нужны фильтр перед прореживанием, гистерезис ноты и строй проекта | 12, задачи 12.1–12.2 |
-| `voicer/Engine.cpp` | Порядок цепочки, выравнивание сухого сигнала по задержке, параметры Retune / Natural drift / Formant | 12, только как пример; живой сдвиг делаем на PSOLA |
-| `voicer/Phrase.cpp` | Модель фразы: неизменяемый исходник + вектор нот с целевой высотой и флагом правки, отмена копирует только ноты | 12, задача 12.5 (графический режим) |
-| `*/README-codex.md` | Пользовательские описания Codex: сценарии, список настроек | 08, 12 |
+| `touchdrums/TouchSurface_mac.mm`, `TouchSurface.h` | Playing on the trackpad via the public `NSTouch`: a transparent `NSView` over the pad grid, `allowedTouchTypes = Indirect`, stable touch tokens, one touch = one hit, cancellation when the window loses focus, swallowing the mouseDown from tap-to-click | 08, task 8.16 |
+| `touchdrums/Processor.cpp`, the `buildKit` function | Recipes for 8 synthesized hits (kick with a falling pitch, snare, hats on 4 square oscillators, clap with three bursts, tom, rim, perc with FM) | 08, task 8.8 (`tools/drumgen`) as starting recipes |
+| `voicer/Pitch.h` | A YIN-style pitch detector and snapping to a scale. Fine as a base, but needs a filter before decimation, note hysteresis and the project tuning | 12, tasks 12.1–12.2 |
+| `voicer/Engine.cpp` | Chain order, aligning the dry signal for latency, the Retune / Natural drift / Formant parameters | 12, only as an example; the live shift is done with PSOLA |
+| `voicer/Phrase.cpp` | Phrase model: an immutable source + a vector of notes with target pitch and an edited flag; undo copies only the notes | 12, task 12.5 (graphical mode) |
+| `*/README-codex.md` | Codex's user descriptions: scenarios, list of settings | 08, 12 |
 
-Почему не берём как есть (ревью 17.10.2026): оба плагина живут вне DAW, цвета захардкожены, нет слоя `core/`. У Prisma Voice задержка 40 мс из-за спектрального шифтера (для живого пения нужно меньше 10 мс), нет удержания ноты (цель прыгает между соседними нотами), при потере уверенности детектора коррекция уходит в ноль и возвращается, строй жёстко A = 440, четыре вшитые гаммы, до 30 с сырого звука хранится в состоянии плагина.
+Why we do not take them as is (review of 17.10.2026): both plugins live outside the DAW, colors are hard-coded, and there is no `core/` layer. Prisma Voice has 40 ms of latency because of a spectral shifter (live singing needs under 10 ms), has no note hold (the target jumps between adjacent notes), drops the correction to zero and back when the detector loses confidence, hard-codes the tuning at A = 440, has four built-in scales, and stores up to 30 s of raw audio in the plugin state.
 
-Лицензия: код написан для этого проекта и распространяется под AGPLv3, как весь репозиторий.
+License: the code was written for this project and is distributed under AGPLv3, like the whole repository.

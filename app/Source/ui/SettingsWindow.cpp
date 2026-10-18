@@ -708,7 +708,7 @@ class AppearancePage final : public Page
 public:
     explicit AppearancePage (Settings& s) : settings (s)
     {
-        for (auto* l : { &themeLabel, &scaleLabel })
+        for (auto* l : { &themeLabel, &scaleLabel, &languageLabel })
         {
             l->setFont (theme().uiFont (12.5f, 600));
             l->setColour (juce::Label::textColourId, theme().text);
@@ -730,6 +730,22 @@ public:
         animations.setToggleState (settings.animations(), juce::dontSendNotification);
         animations.onClick = [this] { settings.setAnimations (animations.getToggleState()); };
         addAndMakeVisible (animations);
+        // Each language is named in itself, so that it can be found whatever language the UI is in now.
+        languageLabel.setText (Strings::settingsui::language, juce::dontSendNotification);
+        languageBox.addItem ("English", 1);
+        languageBox.addItem (juce::String::fromUTF8 ("Русский"), 2);
+        languageBox.setSelectedId (settings.language() == "ru" ? 2 : 1, juce::dontSendNotification);
+        styleCombo (languageBox);
+        languageBox.onChange = [this] {
+            settings.setLanguage (languageBox.getSelectedId() == 2 ? "ru" : "en");
+            languageNote.setVisible (Strings::languageFromCode (settings.language()) != Strings::language());
+        };
+        addAndMakeVisible (languageBox);
+        languageNote.setText (Strings::settingsui::languageRestart, juce::dontSendNotification);
+        languageNote.setFont (theme().uiFont (11.5f));
+        languageNote.setColour (juce::Label::textColourId, theme().dimText);
+        languageNote.setVisible (Strings::languageFromCode (settings.language()) != Strings::language());
+        addChildComponent (languageNote);
         rebuildCards();
     }
 
@@ -757,6 +773,12 @@ public:
         scaleBox.setBounds (line.removeFromLeft (120));
         r.removeFromTop (10);
         animations.setBounds (r.removeFromTop (kRowHeight).withWidth (240));
+        r.removeFromTop (10);
+        line = r.removeFromTop (kRowHeight);
+        languageLabel.setBounds (line.removeFromLeft (200));
+        languageBox.setBounds (line.removeFromLeft (120));
+        line.removeFromLeft (12);
+        languageNote.setBounds (line);
     }
 
 private:
@@ -820,8 +842,8 @@ private:
     }
 
     Settings& settings;
-    juce::Label themeLabel, scaleLabel;
-    juce::ComboBox scaleBox;
+    juce::Label themeLabel, scaleLabel, languageLabel, languageNote;
+    juce::ComboBox scaleBox, languageBox;
     juce::ToggleButton animations;
     std::vector<std::unique_ptr<Card>> cards;
 };
