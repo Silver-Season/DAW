@@ -10,7 +10,13 @@ The current branch transfers the common rendering layer and configurable light/d
 
 See [GLASS-UI.md](design/GLASS-UI.md) for settings, rendering boundaries and native capture instructions. The local-track CPU lens is intentionally documented separately from the HTML study's full canvas refraction. Full-window refraction, pointer-following glints and a complete one-for-one recreation of every conceptual screen are **not finished**. The prototype is a design reference, not evidence of a native feature. No DSP or project schema changes were made.
 
-Validation status and final capture location are recorded below when the branch is ready for review. Publishing/PR creation remains separate from the local implementation; do not merge an untested design branch into main.
+Stopped at the owner's request to conserve usage limits. Implementation and the merge with main are committed (`8979413`, `5df224c`). The branch contains `origin/main` at `be186ab`; later GitHub commits are not fetched automatically.
+
+Verified locally: macOS arm64 Release app and engine-test build succeeded; all 10 CTest suites passed after the merge (18.71 s), including engine/UI tests in English and Russian. Final native captures: 22 PNGs in `media/ui-glass/`, with an `index.html` gallery. Session, MIDI and Arrangement are captured in all six themes; Appearance and Prisma in both glass themes. Source tests remain enabled. The installed Xcode SDK produces pre-existing warnings in JUCE and untouched project code; this is not a warning-free release or universal-binary validation.
+
+Next: review the actual native captures with the owner, then assess whether a full backdrop renderer is worth the additional work. Further visual verification is still needed for Audio/Warp, drums, export, hover/focus states, and the settings/synth windows in the four legacy themes. No new features should be inferred from the generated concepts. The conceptual images/archives under `media/design/` remain local and mostly untracked; the HTML optics prototype and its assets are committed.
+
+Publication: local branch only; no push or PR was created, and GitHub main was not changed. Do not restart GitHub authentication without the owner's instruction. The local build is `/private/tmp/prisma-glass-native/app/DAW_artefacts/Release/DAW.app`; the build and logs are temporary, while source, handoff and final captures are kept in the repository.
 
 ## Now (2026-10-18)
 
@@ -41,7 +47,7 @@ Warp part 2 (branch `claude/project-thread-aqlatg`, thread "warp"; the design di
 - Next (part 3): tempo and time signature track (7.5), the project following a performance played without a click, rendering ahead of the cursor (7.1), tap tempo, audio quantize with strength across tracks.
 - `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion. When merging it after the English UI, turn every new `utf8 ("…")` in `Strings.h` into `tr ("English", "…")`.
 
-Logo and app icon (thread "design and logo"): `ui::drawLogo` redrawn as the glass prism with the incoming beam and six spectrum bars, theme-aware; the app icon is `app/Resources/brand/AppIcon-1024.png` (`ICON_BIG`), sources in `media/brand/`. A design pass is being discussed with the owner: three directions for the main window (glass and light, instrument, living canvas); no restyling before the owner picks one.
+Logo and app icon (thread "design and logo"): `ui::drawLogo` redrawn as the glass prism with the incoming beam and six spectrum bars, theme-aware; the app icon is `app/Resources/brand/AppIcon-1024.png` (`ICON_BIG`), sources in `media/brand/`. A design pass is being discussed with the owner: three directions for the main window (glass and light, instrument, living canvas); The owner subsequently selected the glass direction; see the integration status at the top of this file.
 
 README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
 

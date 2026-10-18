@@ -40,3 +40,7 @@ DAW_LANG=en DAW_UI_SNAPSHOTS=/private/tmp/prisma-ui-shots /path/to/DAW.app/Conte
 Use an absolute output path. This creates a demo in memory, its own settings/library inside the output folder, and captures Session, MIDI editor and Arrangement in all six themes, plus Appearance and the built-in synth in both glass themes. It exits automatically. These captures are actual JUCE component rendering; they exclude the macOS title bar.
 
 Build outside the repository. `PRISMA_COPY_AFTER_BUILD` defaults to OFF, so a verification build does not install the synth into the user's plugin folders. Release packaging can enable the option explicitly.
+
+## Checkpoint, 2026-10-19
+
+Paused at the owner's request to conserve usage. The merged branch includes GitHub main `be186ab` (PR #25 branding). All 10 CTest suites passed after the merge; the macOS arm64 Release app built successfully. See `media/ui-glass/index.html` for 22 final native captures. Audio/Warp, drums, export and additional interaction states still need a visual pass; Appearance/synth have captures only in the two glass themes. Full backdrop refraction and pointer-following highlights remain unimplemented. Existing SDK/upstream warnings remain; universal builds, CI and live hardware audio were not verified in this pass. No push or PR was made.
