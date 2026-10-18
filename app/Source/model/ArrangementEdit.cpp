@@ -449,7 +449,7 @@ ArrangementClipRef joinClips (ProjectModel& model, const Clips& input)
         return {};
     for (const auto& c : clips)
         if (c.clip().isAudio())
-            return {}; // joining audio means rendering a new file: "Свести комп" of task 5.5 does that
+            return {}; // joining audio means rendering a new file: "Consolidate Comp" of task 5.5 does that
     const auto track = trackOf (model, clips.front());
     for (const auto& c : clips)
         if (trackOf (model, c) != track)

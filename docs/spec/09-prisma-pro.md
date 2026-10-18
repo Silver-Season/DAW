@@ -1,169 +1,169 @@
-# 09. Prisma до уровня Serum
+# 09. Prisma as a release-level wavetable synth
 
-## Цель
+## Goal
 
-Довести встроенный синт Prisma до уровня, на котором им можно пользоваться вместо Serum в большинстве задач: импорт и правка wavetable, режимы warp, новые фильтры, 4 огибающие и 4 LFO с рисуемой формой, мод-матрица на 32 слота, 8 макро-ручек, встроенная цепочка из десяти эффектов, библиотека из 150+ заводских пресетов с браузером и интерфейс, который не стыдно показать: векторный, масштабируемый, с вкладками и модуляцией перетаскиванием. Всё это работает и как отдельный AU/VST3, и как устройство внутри DAW.
+Bring the built-in Prisma synth to release level, where it can be the main wavetable synth for most tasks: wavetable import and editing, warp modes, new filters, 4 envelopes and 4 LFOs with drawable shapes, a 32-slot mod matrix, 8 macro knobs, a built-in chain of ten effects, a library of 150+ factory presets with a browser, and an interface worth showing: vector, scalable, with tabs and drag-and-drop modulation. All of this works both as a standalone AU/VST3 and as a device inside the DAW.
 
-В конце пользователь может: открыть Prisma в DAW или в Logic, листать пресеты стрелками или в браузере по категориям и тегам, перетащить LFO на срез фильтра и увидеть кольцо глубины и живое движение ручки, нарисовать форму LFO, импортировать wavetable из Serum, включить дисторшн, OTT и ревербератор внутри синта, переставить их местами, сохранить свой пресет и найти его в браузере DAW, крутить 8 макросов прямо в детальной панели DAW и автоматизировать их по понятным именам.
+At the end the user can: open Prisma in the DAW or in any AU/VST3 host, step through presets with the arrows or in a browser by category and tag, drag an LFO onto the filter cutoff and see the depth ring and the knob moving live, draw an LFO shape, import a wavetable made in another wavetable synth (a WAV with a `clm ` chunk), turn on distortion, the multiband compressor and the reverb inside the synth, reorder them, save their own preset and find it in the DAW browser, turn the 8 macros right in the DAW detail panel and automate them by readable names.
 
-## Границы
+## Scope
 
-Входит: расширение параметров с сохранением совместимости, новый DSP голоса (warp, унисон, фильтры, шум с сэмплами, модуляция), импорт и экспорт wavetable, простой редактор wavetable, общая библиотека эффектов `daw::fx` в `core/`, FX-рэк внутри Prisma, формат пресета `.prismapreset`, инструмент проверки пресетов, 150+ заводских пресетов, браузер пресетов в плагине, новый интерфейс, интеграция с DAW (компактное устройство, браузер, автоматизация, состояние, предпрослушивание).
+In scope: extending the parameters while keeping compatibility, new voice DSP (warp, unison, filters, sample-based noise, modulation), wavetable import and export, a simple wavetable editor, a shared effects library `daw::fx` in `core/`, an FX rack inside Prisma, the `.prismapreset` preset format, a preset checking tool, 150+ factory presets, a preset browser in the plugin, a new interface, DAW integration (compact device, browser, automation, state, preview).
 
-Не входит (фаза позже, не делать): второй фильтр голоса и последовательная/параллельная маршрутизация двух фильтров, MPE, арпеджиатор и шаговый секвенсор (Arp/Seq-пресеты делаются синхронными LFO), ресинтез произвольного аудио в wavetable (кроме нарезки WAV на кадры), спектральный и гранулярный осцилляторы Serum 2, мульти-сэмплы в шумовом осцилляторе, сайдчейн компрессора, лукахед в эффектах Prisma, конволюционный ревербератор, MIDI Learn внутри плагина, облачная библиотека пресетов. Синт Alloy из ARCHITECTURE.md здесь не начинается, но всё в `daw::fx` и `daw::dsp` пишется так, чтобы он мог это взять.
+Out of scope (a later phase, do not build): a second voice filter and serial/parallel routing of two filters, MPE, an arpeggiator and a step sequencer (Arp/Seq presets are made with synced LFOs), resynthesis of arbitrary audio into a wavetable (except slicing a WAV into frames), spectral and granular oscillators, multi-samples in the noise oscillator, compressor sidechain, lookahead in Prisma effects, a convolution reverb, MIDI Learn inside the plugin, a cloud preset library. The Alloy synth from ARCHITECTURE.md does not start here, but everything in `daw::fx` and `daw::dsp` is written so that it can reuse it.
 
-Правило 00, раздел 9 «Не трогать Prisma DSP и пресеты» на этот этап не действует: этот этап и есть работа над Prisma. Остальные правила 00 действуют полностью, особенно раздел 2 (реальное время).
+Rule 00, section 9 "Do not touch Prisma DSP and presets" does not apply to this phase: this phase is the work on Prisma. All other rules in 00 apply in full, especially section 2 (real time).
 
 ---
 
-## Задача 9.0. Базовая линия до изменений
+## Task 9.0. Baseline before changes
 
-Первым коммитом, до любых правок DSP:
+As the first commit, before any DSP edits:
 
-- `core/tests/golden/prisma_params_v1.txt`: по строке на каждый текущий параметр: `id kind min max def choicesCount`. Генерирует тест-утилита `--dump-param-golden`, файл коммитится руками один раз.
-- `core/tests/golden/legacy_presets.txt`: для каждого из 7 текущих заводских пресетов все значения параметров (`id=value`) и отпечаток звука: RMS и пик по каналам, плюс RMS 32 полос логарифмического спектра для фразы «Pluck/Arp» из 9.12 (рендер `PrismaSynth` 48 кГц, блок 256).
-- Эти файлы нельзя менять дальше в этапе. Тесты 1–3 из раздела «Тесты» опираются на них.
+- `core/tests/golden/prisma_params_v1.txt`: one line per current parameter: `id kind min max def choicesCount`. Generated by the test utility `--dump-param-golden`, the file is committed by hand once.
+- `core/tests/golden/legacy_presets.txt`: for each of the 7 current factory presets, all parameter values (`id=value`) and a sound fingerprint: RMS and peak per channel, plus the RMS of 32 bands of a logarithmic spectrum for the "Pluck/Arp" phrase from 9.12 (render with `PrismaSynth` at 48 kHz, block 256).
+- These files must not change for the rest of the phase. Tests 1–3 in the "Tests" section rely on them.
 
-## Задача 9.1. Стабильные параметры и состояние
+## Task 9.1. Stable parameters and state
 
-### Правила для `parameterDescriptors()`
+### Rules for `parameterDescriptors()`
 
-- Существующие `id`, `kind`, `min`, `max`, `def` и порядок вариантов выбора не меняются никогда. Новые параметры только **добавляются в конец списка**. Новые варианты выбора только **добавляются в конец** списка вариантов.
-- В `ParamDescriptor` добавить поля:
-  - `std::vector<std::string> choiceIds` — машинные имена вариантов (`"lp24"`, `"ladder24"`), в пресетах пишутся они, а не индексы;
-  - `bool modulatable` — можно ли сделать параметр целью мод-матрицы (все `Float` по умолчанию да, `Int`/`Bool`/`Choice` нет);
-  - `bool automatable = true` — для источников и целей мод-матрицы `false` (их список вариантов растёт, автоматизация по нормированному значению сломалась бы);
-  - `int version` — версия, в которой параметр появился (1 для старых, 2 для новых); передаётся в `juce::ParameterID { id, version }`.
-- Отображаемые имена новых параметров: «<Группа> <Параметр>», не длиннее 30 символов, на английском, как у старых («Env 4 Attack», «FX Delay Feedback»). Слой параметров JUCE группирует их через `AudioProcessorParameterGroup` по `group`.
+- Existing `id`, `kind`, `min`, `max`, `def` and the order of choice options never change. New parameters are only **appended to the end of the list**. New choice options are only **appended to the end** of the option list.
+- Add fields to `ParamDescriptor`:
+  - `std::vector<std::string> choiceIds`: machine names of the options (`"lp24"`, `"ladder24"`); presets store these, not indices;
+  - `bool modulatable`: whether the parameter can be a mod matrix destination (all `Float` yes by default, `Int`/`Bool`/`Choice` no);
+  - `bool automatable = true`: `false` for mod matrix sources and destinations (their option lists grow, so automation by normalized value would break);
+  - `int version`: the version in which the parameter appeared (1 for old ones, 2 for new ones); passed into `juce::ParameterID { id, version }`.
+- Display names of new parameters: "<Group> <Parameter>", at most 30 characters, in English, like the old ones ("Env 4 Attack", "FX Delay Feedback"). The JUCE parameter layer groups them through `AudioProcessorParameterGroup` by `group`.
 
-### Параметр таблицы осциллятора
+### Oscillator table parameter
 
-`oscA_table` / `oscB_table` остаются как есть (6 заводских таблиц фазы 0, вариант-лист заморожен). Выбор таблицы теперь живёт в нечисловом состоянии (`SynthStructure::tables`, ниже): ссылка `factory:<имя>` или `user:<sha1>`. Правило синхронизации:
-- выбор в интерфейсе любой из шести старых таблиц пишет и ссылку, и параметр;
-- выбор новой заводской или пользовательской таблицы пишет только ссылку, параметр не трогается;
-- изменение параметра хостом (старая автоматизация) переключает ссылку на `factory:<имя из старого списка>`.
+`oscA_table` / `oscB_table` stay as they are (the 6 factory tables from phase 0, the option list is frozen). Table selection now lives in the non-numeric state (`SynthStructure::tables`, below): a reference `factory:<name>` or `user:<sha1>`. Synchronization rule:
+- selecting any of the six old tables in the UI writes both the reference and the parameter;
+- selecting a new factory table or a user table writes only the reference, the parameter is not touched;
+- a change of the parameter by the host (old automation) switches the reference to `factory:<name from the old list>`.
 
-Шумовой сэмпл выбирается так же ссылкой (`SynthStructure::noise`).
+The noise sample is selected the same way, by reference (`SynthStructure::noise`).
 
-### Нечисловое состояние
+### Non-numeric state
 
 `core/include/daw/synth/PrismaStructure.h`:
 
 ```cpp
-struct LfoPoint { float x, y, curve; };            // x, y в [0, 1]; curve в [-1, 1]
+struct LfoPoint { float x, y, curve; };            // x, y in [0, 1]; curve in [-1, 1]
 struct SynthStructure
 {
     std::array<std::string, 2> tables { "factory:Basic Shapes", "factory:Basic Shapes" };
     std::string noise = "factory:White";
-    std::array<std::vector<LfoPoint>, 4> lfoShapes;   // пусто = форма не нарисована
-    std::array<std::string, 8> macroNames;            // "" = «Macro N»
-    std::array<FxId, 10> fxOrder;                     // порядок FX-рэка, см. 9.10
-    std::map<std::string, std::shared_ptr<const UserTable>> userTables;  // sha1 -> кадры
+    std::array<std::vector<LfoPoint>, 4> lfoShapes;   // empty = no shape drawn
+    std::array<std::string, 8> macroNames;            // "" = "Macro N"
+    std::array<FxId, 10> fxOrder;                     // FX rack order, see 9.10
+    std::map<std::string, std::shared_ptr<const UserTable>> userTables;  // sha1 -> frames
     std::map<std::string, std::shared_ptr<const UserSample>> userSamples;
 };
 ```
 
-Передача в звук по правилу 00: message thread собирает `std::shared_ptr<const SynthStructure>` и вместе с готовыми `WavetablePtr` (уже с mip-уровнями) публикует `RenderStructure` атомарной заменой указателя. Старый снимок удаляется на message thread после того, как аудиопоток отметил новое поколение (как в 01, задача 1.3). Построение mip-уровней пользовательской таблицы идёт в фоне (`juce::ThreadPool` в плагине, обычная функция в `core/`).
+Handing it to audio follows rule 00: the message thread builds a `std::shared_ptr<const SynthStructure>` and, together with ready `WavetablePtr`s (already with mip levels), publishes a `RenderStructure` by an atomic pointer swap. The old snapshot is deleted on the message thread after the audio thread has marked the new generation (as in 01, task 1.3). Building mip levels for a user table runs in the background (`juce::ThreadPool` in the plugin, a plain function in `core/`).
 
-### Состояние плагина
+### Plugin state
 
-`getStateInformation` пишет XML: корень `Prisma stateVersion=2`, внутри APVTS-параметры (как сейчас), узлы `STRUCTURE` (таблицы, шум, формы LFO, имена макросов, порядок FX), `USERTABLE sha1 name frames data=<base64 float32 LE>`, `USERSAMPLE …`, `PRESET name path category modified=0|1`, `UI scale tab`. Пользовательская таблица пишется, только если на неё ссылается осциллятор.
+`getStateInformation` writes XML: root `Prisma stateVersion=2`, inside it the APVTS parameters (as now), the nodes `STRUCTURE` (tables, noise, LFO shapes, macro names, FX order), `USERTABLE sha1 name frames data=<base64 float32 LE>`, `USERSAMPLE …`, `PRESET name path category modified=0|1`, `UI scale tab`. A user table is written only if an oscillator references it.
 
-`setStateInformation`: нет `stateVersion` → версия 1: параметры как есть, отсутствующие новые получают `def`, структура по умолчанию, ссылки таблиц из `oscX_table`, `program` (индекс 0–6) переводится в имя по замороженному массиву `kLegacyProgramNames = { "Init", "Supersaw Lead", "Reese Bass", "Wobble Bass", "Glass Pad", "Pluck", "Vox Sweep" }`. `stateVersion` больше 2 → загрузить известные параметры, остальное пропустить, не падать.
+`setStateInformation`: no `stateVersion` → version 1: parameters as they are, missing new ones get `def`, default structure, table references from `oscX_table`, `program` (index 0–6) is converted to a name through the frozen array `kLegacyProgramNames = { "Init", "Supersaw Lead", "Reese Bass", "Wobble Bass", "Glass Pad", "Pluck", "Vox Sweep" }`. `stateVersion` greater than 2 → load the known parameters, skip the rest, do not crash.
 
-## Задача 9.2. Модуляция: огибающие, LFO, макросы, матрица
+## Task 9.2. Modulation: envelopes, LFOs, macros, matrix
 
-### Огибающие
+### Envelopes
 
-4 огибающие: Env 1 — громкость (как сейчас), Env 2 по-прежнему подключена к `flt_env`, Env 3, Env 4 новая. Новые параметры у каждой: `envN_h` (hold, 0–5 с, `def` 0), `envN_ac`, `envN_dc`, `envN_rc` (кривизна атаки, спада, затухания, −1…1, `def` 0 = текущая форма; вычислить, какое значение даёт форму фазы 0, и сделать его `def`, тест 2 это проверит). Env 4 получает полный набор с теми же `def`, что у Env 3. Кривая: `y = (exp (c * k * t) − 1) / (exp (c * k) − 1)` при `c ≠ 0`, `k = 6`, линейна при `c = 0`. Огибающая считается на контрольной частоте (как сейчас, блок 16 сэмплов), громкостная — посэмплово с интерполяцией между точками блока.
+4 envelopes: Env 1 is volume (as now), Env 2 is still wired to `flt_env`, Env 3, and a new Env 4. New parameters for each: `envN_h` (hold, 0–5 s, `def` 0), `envN_ac`, `envN_dc`, `envN_rc` (curvature of attack, decay, release, −1…1, `def` 0 = the current shape; compute which value gives the phase 0 shape and make it the `def`, test 2 checks this). Env 4 gets the full set with the same `def` as Env 3. Curve: `y = (exp (c * k * t) − 1) / (exp (c * k) − 1)` for `c ≠ 0`, `k = 6`, linear for `c = 0`. Envelopes are computed at control rate (as now, a 16-sample block), the volume envelope per sample with interpolation between block points.
 
 ### LFO
 
-4 LFO. Новые параметры у каждого: `lfoN_oneshot` (Bool: с `retrig` = режим Env, LFO проходит один цикл и замирает), `lfoN_rise` (0–10 с, плавное появление), `lfoN_delay` (0–10 с), `lfoN_phase` (0–1, начальная фаза), `lfoN_smooth` (0–1, сглаживание выхода), `lfoN_uni` (Bool, униполярный выход 0…1 вместо −1…1). В `lfoN_shape` в конец добавляется вариант `Custom`. LFO 3 и 4 получают полный набор параметров.
+4 LFOs. New parameters for each: `lfoN_oneshot` (Bool: with `retrig` it is Env mode, the LFO runs one cycle and stops), `lfoN_rise` (0–10 s, fade-in), `lfoN_delay` (0–10 s), `lfoN_phase` (0–1, start phase), `lfoN_smooth` (0–1, output smoothing), `lfoN_uni` (Bool, unipolar output 0…1 instead of −1…1). A `Custom` option is appended to `lfoN_shape`. LFO 3 and 4 get the full parameter set.
 
-Форма `Custom`: от 2 до 32 точек `LfoPoint` в `SynthStructure::lfoShapes`, первая точка `x = 0`, последняя `x = 1`, `y` первой и последней совпадают (цикл без скачка) — редактор это обеспечивает. Между точками кривая той же формулы, что у огибающей, `curve` берётся у левой точки. Для аудиопотока форма заранее табулируется в 1024 значения внутри `RenderStructure`. Режим `retrig = 0` — свободный LFO: одна фаза на весь синт (живёт в `PrismaSynth`, а не в голосе), иначе фаза в каждом голосе.
+The `Custom` shape: 2 to 32 `LfoPoint`s in `SynthStructure::lfoShapes`, the first point at `x = 0`, the last at `x = 1`, the `y` of the first and last match (a cycle without a jump); the editor enforces this. Between points the curve uses the same formula as the envelope, `curve` is taken from the left point. For the audio thread the shape is pre-tabulated into 1024 values inside `RenderStructure`. Mode `retrig = 0` is a free LFO: one phase for the whole synth (it lives in `PrismaSynth`, not in the voice), otherwise the phase is per voice.
 
-### Макросы
+### Macros
 
-`macro1` … `macro8`: `Float` 0–1, `def` 0, автоматизируемые. Имена в `SynthStructure::macroNames`. Макрос — источник модуляции, сам ничего не делает.
+`macro1` … `macro8`: `Float` 0–1, `def` 0, automatable. Names in `SynthStructure::macroNames`. A macro is a modulation source and does nothing by itself.
 
-### Мод-матрица
+### Mod matrix
 
-- 32 слота. У слотов 1–8 остаются `modN_src`, `modN_dst`, `modN_amt`. Добавляются для всех 32: `modN_aux` (вспомогательный источник: выход умножается на него, `None` = 1), `modN_curve` (−1…1, кривизна источника, формула огибающей по модулю, знак сохраняется), `modN_bi` (Bool: источник приводится к −1…1). Слоты 9–32 получают ещё `src`, `dst`, `amt`.
-- Источники (`modSourceNames()`, индексы 0–9 как сейчас), в конец: `Env 4`, `LFO 3`, `LFO 4`, `Macro 1`…`Macro 8`, `Pitch Bend`, `Amp Env`, `Note Random` (новое случайное на каждую ноту, как старый `Random`, но биполярное), `Constant` (всегда 1).
-- Цели (`modDestNames()` / новая `modDestinations()`): 16 старых целей с теми же индексами, затем в порядке `parameterDescriptors()` все параметры с `modulatable = true`, которых нет среди старых. Каждая цель хранит `paramIndex` (или −1 для псевдоцелей вроде `Osc A Pitch`) и правило: смещение в нормированном диапазоне параметра, `amount = 1` проходит весь диапазон. Функция строит список один раз, он тоже append-only.
-- В пресете цель пишется **id параметра** (`"flt_cutoff"`) или именем псевдоцели (`"@oscA_pitch"`), источник — машинным именем (`"lfo1"`, `"macro3"`).
-- Расчёт: на контрольном блоке голос заполняет массив источников, проходит 32 слота, накапливает смещения в `std::array<float, kMaxModDest>` (фиксированный размер, без выделений) и применяет к нормированным значениям с ограничением 0…1. Пустые слоты (`src = None` или `dst = None`) пропускаются; список активных слотов строится один раз на блок аудио, а не в каждом голосе.
-- Цели эффектов (FX-рэк общий на весь синт) берут значения источников **последнего начатого голоса**, свободные LFO и макросы — свои глобальные значения. Так делает Serum, это задокументировать во всплывающей подсказке цели.
+- 32 slots. Slots 1–8 keep `modN_src`, `modN_dst`, `modN_amt`. Added for all 32: `modN_aux` (auxiliary source: the output is multiplied by it, `None` = 1), `modN_curve` (−1…1, source curvature, the envelope formula applied to the absolute value, sign preserved), `modN_bi` (Bool: the source is mapped to −1…1). Slots 9–32 also get `src`, `dst`, `amt`.
+- Sources (`modSourceNames()`, indices 0–9 as now), appended: `Env 4`, `LFO 3`, `LFO 4`, `Macro 1`…`Macro 8`, `Pitch Bend`, `Amp Env`, `Note Random` (a new random value per note, like the old `Random`, but bipolar), `Constant` (always 1).
+- Destinations (`modDestNames()` / a new `modDestinations()`): the 16 old destinations with the same indices, then, in `parameterDescriptors()` order, all parameters with `modulatable = true` that are not among the old ones. Each destination stores `paramIndex` (or −1 for pseudo-destinations such as `Osc A Pitch`) and a rule: an offset in the parameter's normalized range, `amount = 1` sweeps the whole range. The function builds the list once, and it is append-only too.
+- In a preset the destination is written as the **parameter id** (`"flt_cutoff"`) or the pseudo-destination name (`"@oscA_pitch"`), the source as a machine name (`"lfo1"`, `"macro3"`).
+- Computation: on each control block the voice fills the source array, walks the 32 slots, accumulates offsets in `std::array<float, kMaxModDest>` (fixed size, no allocations) and applies them to normalized values clamped to 0…1. Empty slots (`src = None` or `dst = None`) are skipped; the list of active slots is built once per audio block, not in each voice.
+- Effect destinations (the FX rack is shared by the whole synth) take source values from the **most recently started voice**; free LFOs and macros use their global values. Document this in the destination's tooltip.
 
-## Задача 9.3. Осцилляторы: warp и унисон
+## Task 9.3. Oscillators: warp and unison
 
 ### Warp
 
-У каждого осциллятора `oscX_warp` (Choice) и `oscX_warpAmt` (0–1, модулируемый). Варианты по порядку: `Off, Sync, Bend +, Bend -, Bend +/-, PWM, Asym +, Asym -, Mirror, Flip, Quantize, FM, AM, RM`. FM/AM/RM у осциллятора A берут сигнал B, у B — сигнал A.
+Each oscillator has `oscX_warp` (Choice) and `oscX_warpAmt` (0–1, modulatable). Options in order: `Off, Sync, Bend +, Bend -, Bend +/-, PWM, Asym +, Asym -, Mirror, Flip, Quantize, FM, AM, RM`. FM/AM/RM on oscillator A take the signal of B, on B the signal of A.
 
-| Режим | Что делает с фазой `p` ∈ [0, 1) или сигналом |
+| Mode | What it does to the phase `p` ∈ [0, 1) or the signal |
 |---|---|
-| Sync | `p' = frac (p * r)`, `r = 1 + 15 * amt²`; mip выбирается для приращения `inc * r` |
-| Bend + / − / +/- | `p' = p^e`, `e = 2^(±3 * amt)` (+/- — разные знаки для половин цикла) |
-| PWM | `w = 0.5 − 0.49 * amt`; `p' = p < w ? p * 0.5 / w : 0.5` (вторая часть цикла — тишина таблицы в нуле фазы), как PWM в Serum |
-| Asym + / − | фаза сжимается в одной половине и растягивается в другой, точка излома `0.5 ± 0.49 * amt` |
-| Mirror | `p' = p < 0.5 ? 2p : 2 − 2p` с плавным переходом `amt` между `p` и зеркальной фазой |
-| Flip | после точки `1 − amt` сигнал меняет знак |
-| Quantize | `p' = floor (p * N) / N`, `N = 2^(10 − 9 * amt)` (1024…2 шага) |
-| FM | фазовая модуляция: `p' = frac (p + amt * 4 * other)`, mip для `inc * (1 + 4 * amt)` |
+| Sync | `p' = frac (p * r)`, `r = 1 + 15 * amt²`; mip is chosen for the increment `inc * r` |
+| Bend + / − / +/- | `p' = p^e`, `e = 2^(±3 * amt)` (+/- uses different signs for the two halves of the cycle) |
+| PWM | `w = 0.5 − 0.49 * amt`; `p' = p < w ? p * 0.5 / w : 0.5` (the second part of the cycle is the table's value at phase zero, i.e. silence), classic pulse-width modulation applied to a wavetable |
+| Asym + / − | the phase is compressed in one half and stretched in the other, breakpoint at `0.5 ± 0.49 * amt` |
+| Mirror | `p' = p < 0.5 ? 2p : 2 − 2p` with a smooth `amt` blend between `p` and the mirrored phase |
+| Flip | after the point `1 − amt` the signal changes sign |
+| Quantize | `p' = floor (p * N) / N`, `N = 2^(10 − 9 * amt)` (1024…2 steps) |
+| FM | phase modulation: `p' = frac (p + amt * 4 * other)`, mip for `inc * (1 + 4 * amt)` |
 | AM / RM | `y * (1 − amt + amt * (0.5 + 0.5 * other))` / `y * (1 − amt + amt * other)` |
 
-- Порядок расчёта: сначала A, потом B. A берёт сигнал B с задержкой в один сэмпл (предыдущее значение), B берёт текущий A. Это фиксировано и описано в комментарии.
-- Режимы фазы ломают ограничение спектра mip-уровня. Параметр `osc_hq` (Bool, глобальный, `def` 0): когда включён и у осциллятора warp ≠ Off, этот осциллятор считается с передискретизацией 2× (полифазный IIR-полуполосный фильтр `daw::dsp::Halfband` из 9.8). Без `osc_hq` mip выбирается по оценке максимального наклона фазы (как в таблице), этого достаточно для тестов уровня −40 дБ.
+- Computation order: first A, then B. A takes the signal of B delayed by one sample (the previous value), B takes the current A. This is fixed and described in a comment.
+- Phase modes break the spectral band limit of the mip level. Parameter `osc_hq` (Bool, global, `def` 0): when it is on and an oscillator has warp ≠ Off, that oscillator is computed with 2× oversampling (the polyphase IIR halfband filter `daw::dsp::Halfband` from 9.8). Without `osc_hq` the mip is chosen from an estimate of the maximum phase slope (as in the table); this is enough for the −40 dB test thresholds.
 
-### Унисон
+### Unison
 
-- `oscX_uniMode` (Choice, `def` Linear): `Linear` (как сейчас, `def` даёт тот же звук), `Super` (неравномерная кривая расстройки как у JP-8000: внешние голоса уходят дальше, центральные ближе; таблица из 16 коэффициентов в коде), `Exp`, `Chord`, `Octaves`.
-- `oscX_uniChord` (Choice): `Major, Minor, Maj7, Min7, Sus2, Sus4, Fifth, Min9`. В режиме `Chord` голоса унисона по кругу получают интервалы аккорда (0, 4, 7, 12, … для Major), `detune` добавляется поверх. В режиме `Octaves` голоса раскладываются по октавам 0, +12, −12, +24…
-- `oscX_uniDrift` (0–1): медленный случайный дрейф каждого голоса (сглаженный шум 0,2–1 Гц, до ±`detune * 0.1`), детерминированный по зерну голоса.
-- `oscX_toFlt`, `sub_toFlt`, `noise_toFlt` (Bool, `def` 1): идёт ли источник через фильтр. Источник с 0 смешивается после фильтра.
+- `oscX_uniMode` (Choice, `def` Linear): `Linear` (as now, the `def` gives the same sound), `Super` (the classic non-uniform supersaw detune curve: outer voices spread further, central ones stay closer; a table of 16 coefficients in code), `Exp`, `Chord`, `Octaves`.
+- `oscX_uniChord` (Choice): `Major, Minor, Maj7, Min7, Sus2, Sus4, Fifth, Min9`. In `Chord` mode the unison voices take the chord intervals in rotation (0, 4, 7, 12, … for Major), `detune` is added on top. In `Octaves` mode the voices are spread across octaves 0, +12, −12, +24…
+- `oscX_uniDrift` (0–1): slow random drift of each voice (smoothed noise at 0.2–1 Hz, up to ±`detune * 0.1`), deterministic from the voice seed.
+- `oscX_toFlt`, `sub_toFlt`, `noise_toFlt` (Bool, `def` 1): whether the source goes through the filter. A source set to 0 is mixed in after the filter.
 
-## Задача 9.4. Шум с сэмплами
+## Task 9.4. Sample-based noise
 
-- `noise_level` остаётся. Новые: `noise_pitch` (−48…+48 полутонов, `def` 0), `noise_key` (Bool, следовать высоте ноты, `def` 0), `noise_phase` (0–1), `noise_rand` (0–1, случайная начальная позиция), `noise_oneshot` (Bool), `noise_pan`.
-- Заводские сэмплы генерируются кодом в `core/src/NoiseSamples.cpp` (без чужих записей): White, Pink, Brown, Blue, Digital (сдвиговый регистр), Crackle (винил), Metallic (сумма негармонических синусов), Breath (полосовой шум с огибающей), Hiss Loop, Riser (развёртка), Click, Tape. Длина 2 с при 48 кГц, петля без щелчка (кроссфейд 20 мс по краям). `"factory:White"` при `noise_pitch = 0` даёт статистически тот же белый шум, что фаза 0.
-- Пользовательский сэмпл: WAV до 10 с, моно или стерео (берётся среднее), читается и передискретизируется в 48 кГц в фоне; воспроизведение с линейной интерполяцией. Выбор через меню «Шум ▸ Загрузить WAV…».
+- `noise_level` stays. New: `noise_pitch` (−48…+48 semitones, `def` 0), `noise_key` (Bool, follow the note pitch, `def` 0), `noise_phase` (0–1), `noise_rand` (0–1, random start position), `noise_oneshot` (Bool), `noise_pan`.
+- Factory samples are generated by code in `core/src/NoiseSamples.cpp` (no third-party recordings): White, Pink, Brown, Blue, Digital (shift register), Crackle (vinyl), Metallic (sum of inharmonic sines), Breath (bandpass noise with an envelope), Hiss Loop, Riser (sweep), Click, Tape. Length 2 s at 48 kHz, a click-free loop (20 ms crossfade at the edges). `"factory:White"` with `noise_pitch = 0` gives statistically the same white noise as phase 0.
+- User sample: a WAV up to 10 s, mono or stereo (the average is taken), read and resampled to 48 kHz in the background; playback with linear interpolation. Selected through the menu "Noise ▸ Load WAV…".
 
-## Задача 9.5. Фильтры
+## Task 9.5. Filters
 
-В `flt_type` в конец добавить: `BP 24, Ladder LP 12, Ladder LP 24, Ladder HP 24, Comb +, Comb -, Formant, Dual LP, Dual BP, LP/HP`. Новые параметры фильтра: `flt_spread` (0–48 полутонов, для Dual и LP/HP), `flt_morph` (0–1, для Formant — гласная, для Comb — затухание в петле), `flt_mix` (0–1, `def` 1), `flt_pan` (−1…1, разносит срез левого и правого канала на ±1 октаву).
+Append to `flt_type`: `BP 24, Ladder LP 12, Ladder LP 24, Ladder HP 24, Comb +, Comb -, Formant, Dual LP, Dual BP, LP/HP`. New filter parameters: `flt_spread` (0–48 semitones, for Dual and LP/HP), `flt_morph` (0–1, the vowel for Formant, the in-loop damping for Comb), `flt_mix` (0–1, `def` 1), `flt_pan` (−1…1, spreads the cutoff of the left and right channels by ±1 octave).
 
-- **Ladder**: 4 однополюсных ZDF-звена с общей нелинейной петлёй (Zavalishin, «The Art of VA Filter Design», гл. 5), `tanh` на входе и в обратной связи, резонанс 0…1 → `k` 0…3,95, вход умножается на `1 + 0.5k` (компенсация потери баса). LP 12 — выход второго звена. HP 24 — комбинация выходов звеньев.
-- **Comb + / −**: линия задержки длиной `sampleRate / cutoff` с дробной частью через allpass-интерполяцию, обратная связь `±0.98 * resonance`, однополюсный LP в петле с частотой из `flt_morph`. Буфер в `prepare` на 20 Гц при максимальной частоте.
-- **Formant**: 3 параллельных BP SVF, таблица F1–F3 (частота, полоса, уровень) для гласных A E I O U, `flt_morph` плавно переходит A→E→I→O→U, `cutoff` сдвигает все форманты отношением `cutoff / 1000 Гц` в пределах ±2 октав, резонанс сужает полосы.
-- **Dual LP / Dual BP**: два звена 12 дБ параллельно на `cutoff · 2^(∓spread/24)`, сумма × 0,5. **LP/HP**: LP на `cutoff · 2^(spread/24)` и HP на `cutoff · 2^(−spread/24)` последовательно (полоса).
-- Все типы: срез и резонанс сглаживаются на контрольной частоте, нет NaN при резонансе 1 и срезе 20 кГц на 44,1 кГц, тип меняется без щелчка (кроссфейд 64 сэмпла между старым и новым при смене типа во время ноты).
+- **Ladder**: 4 one-pole ZDF stages with a shared nonlinear loop (Zavalishin, "The Art of VA Filter Design", ch. 5), `tanh` at the input and in the feedback, resonance 0…1 → `k` 0…3.95, the input is multiplied by `1 + 0.5k` (compensation for bass loss). LP 12 is the output of the second stage. HP 24 is a combination of the stage outputs.
+- **Comb + / −**: a delay line of length `sampleRate / cutoff` with the fractional part through allpass interpolation, feedback `±0.98 * resonance`, a one-pole LP in the loop with its frequency from `flt_morph`. The buffer is allocated in `prepare` for 20 Hz at the maximum sample rate.
+- **Formant**: 3 parallel BP SVFs, a table of F1–F3 (frequency, bandwidth, level) for the vowels A E I O U, `flt_morph` moves smoothly A→E→I→O→U, `cutoff` shifts all formants by the ratio `cutoff / 1000 Hz` within ±2 octaves, resonance narrows the bands.
+- **Dual LP / Dual BP**: two 12 dB stages in parallel at `cutoff · 2^(∓spread/24)`, sum × 0.5. **LP/HP**: LP at `cutoff · 2^(spread/24)` and HP at `cutoff · 2^(−spread/24)` in series (a band).
+- All types: cutoff and resonance are smoothed at control rate, no NaN at resonance 1 and cutoff 20 kHz at 44.1 kHz, the type changes without a click (a 64-sample crossfade between old and new when the type changes during a note).
 
-## Задача 9.6. Wavetable: импорт, экспорт, заводские таблицы
+## Task 9.6. Wavetables: import, export, factory tables
 
-- `core/include/daw/dsp/WavetableFile.h`: `std::optional<std::vector<std::vector<float>>> readWavetableWav (const uint8_t* data, size_t size, int splitHint, std::string* error)` и `std::vector<uint8_t> writeWavetableWav (frames, name)`. Свой разбор RIFF без JUCE: PCM 16/24/32 бит, float 32, моно или стерео (берётся левый канал), любая частота (частота не важна для кадров).
-- Длина кадра: если есть чанк `clm ` (Serum пишет текст вида `<!>2048 00000000 wavetable (www.xferrecords.com)`), берётся число после `<!>`. Иначе: длина кратна 2048 → кадры по 2048; длина ≤ 4096 и не кратна → один кадр, передискретизация в 2048 (через FFT, без потери гармоник ниже 1024-й); иначе диалог в интерфейсе спрашивает число кадров (`splitHint`), по умолчанию `длина / 2048` с передискретизацией каждого кадра. Кадры другой длины (256, 1024 из `clm`) передискретизируются в 2048 так же.
-- Не больше 256 кадров (лишние отбрасываются с предупреждением), пустой или битый файл — ошибка с текстом, без падения. Экспорт пишет float 32, моно, 2048 на кадр и чанк `clm ` в формате Serum, чтобы Serum и Vital открывали файл.
-- Пользовательская таблица хранится в состоянии и в пресете (9.11) с ключом `sha1` от данных кадров, поэтому одинаковые таблицы не дублируются. Копия кладётся в `User Library/Wavetables/` при импорте.
-- Заводские таблицы: довести список до 40+ (сейчас 6). Генерировать кодом или формулами из 9.7 (`tools/prisma_wtgen` пишет WAV в `resources/wavetables/prisma/`, CMake встраивает их в `core` скриптом `cmake/EmbedFiles.cmake`, который генерирует `.cpp` с массивами байтов; JUCE BinaryData в `core/` нельзя). Темы: аналоговые формы с разной шириной, аддитивные развёртки, вокальные форманты, FM-развёртки 1:1…1:8, фолдинг, sync-развёртки, «цифровые» (биты, квантование), спектральные пилы, органные регистры, колокола, шумные кадры. Чужие таблицы и сэмплы не брать.
-- `factory::tableNames()` растёт только в конец, первые 6 имён на своих местах.
+- `core/include/daw/dsp/WavetableFile.h`: `std::optional<std::vector<std::vector<float>>> readWavetableWav (const uint8_t* data, size_t size, int splitHint, std::string* error)` and `std::vector<uint8_t> writeWavetableWav (frames, name)`. Own RIFF parsing without JUCE: PCM 16/24/32 bit, float 32, mono or stereo (the left channel is taken), any sample rate (the rate does not matter for frames).
+- Frame length: if there is a `clm ` chunk (the common wavetable WAV convention, text like `<!>2048 00000000 wavetable (...)`), take the number after `<!>`. Otherwise: length is a multiple of 2048 → frames of 2048; length ≤ 4096 and not a multiple → one frame, resampled to 2048 (via FFT, without losing harmonics below the 1024th); otherwise a dialog in the UI asks for the number of frames (`splitHint`), by default `length / 2048` with each frame resampled. Frames of another length (256, 1024 from `clm`) are resampled to 2048 the same way.
+- At most 256 frames (extra ones are dropped with a warning), an empty or corrupt file is an error with a message, without a crash. Export writes float 32, mono, 2048 per frame and a `clm ` chunk in the same convention, so that other wavetable synths can open the file.
+- A user table is stored in the state and in the preset (9.11) keyed by the `sha1` of the frame data, so identical tables are not duplicated. A copy is placed in `User Library/Wavetables/` on import.
+- Factory tables: grow the list to 40+ (6 now). Generate them by code or with formulas from 9.7 (`tools/prisma_wtgen` writes WAVs into `resources/wavetables/prisma/`, CMake embeds them into `core` with the script `cmake/EmbedFiles.cmake`, which generates a `.cpp` with byte arrays; JUCE BinaryData is not allowed in `core/`). Themes: analog shapes with different widths, additive sweeps, vocal formants, FM sweeps 1:1…1:8, folding, sync sweeps, "digital" ones (bits, quantization), spectral saws, organ registers, bells, noisy frames. Do not take third-party tables or samples.
+- `factory::tableNames()` only grows at the end, the first 6 names stay in place.
 
-## Задача 9.7. Редактор wavetable
+## Task 9.7. Wavetable editor
 
-Кнопка «Edit» на осцилляторе открывает редактор поверх вкладки OSC (не отдельное окно).
+The "Edit" button on an oscillator opens the editor over the OSC tab (not a separate window).
 
-- Слева столбец миниатюр кадров: выбрать, перетащить порядок, «Добавить», «Дублировать», «Удалить» (минимум 1 кадр, максимум 256).
-- Центр — текущий кадр 2048 точек. Инструменты: карандаш (свободное рисование с линейной интерполяцией между событиями мыши), линия, сетка привязки по X (8/16/32/64/off) и по Y (off/16 уровней).
-- Снизу — гармоники: 256 столбиков амплитуды (дБ, 0 … −60) и в режиме «Фаза» 256 столбиков фазы. Правка столбика пересобирает кадр обратным FFT (`daw::dsp::FFT`). Переключатель «Кадр / Гармоники» выбирает, что сейчас источник правды.
-- **Формула**: поле ввода и кнопки «Применить к кадру» / «Ко всем кадрам». Переменные `x` (фаза 0…1), `y` (позиция кадра 0…1), `n` (номер кадра), `N` (число кадров). Функции `sin cos tan asin acos atan abs sqrt exp log pow min max sign floor ceil fmod clamp lerp tri saw sqr noise` и константа `pi`. Парсер — рекурсивный спуск в `core/include/daw/dsp/Formula.h`, компилирует в байткод, ошибки с позицией символа. Пример в подсказке: `sin(2*pi*x) + y*0.5*sin(6*pi*x)`.
-- **Морф**: выбрать два кадра (ключевые), «Заполнить между»: кадры между ними перезаписываются кроссфейдом по сэмплам или, с флажком «Спектрально», интерполяцией амплитуд гармоник при фазах ключевого кадра слева.
-- Обработка: «Нормализовать» (каждый кадр / всю таблицу), «Убрать DC», «Сгладить края цикла», «Обратить».
-- Своя история отмены редактора (`juce::UndoManager`, `Cmd+Z` пока редактор открыт). «Готово» сохраняет таблицу как пользовательскую (новый `sha1`) и подставляет её осциллятору, «Отмена» выходит без изменений, «Экспорт WAV…».
+- On the left, a column of frame thumbnails: select, drag to reorder, "Add", "Duplicate", "Delete" (minimum 1 frame, maximum 256).
+- In the center, the current frame of 2048 points. Tools: pencil (freehand drawing with linear interpolation between mouse events), line, snap grid on X (8/16/32/64/off) and on Y (off/16 levels).
+- At the bottom, harmonics: 256 amplitude bars (dB, 0 … −60) and, in "Phase" mode, 256 phase bars. Editing a bar rebuilds the frame by inverse FFT (`daw::dsp::FFT`). The "Frame / Harmonics" switch chooses which one is currently the source of truth.
+- **Formula**: an input field and the buttons "Apply to frame" / "Apply to all frames". Variables `x` (phase 0…1), `y` (frame position 0…1), `n` (frame number), `N` (number of frames). Functions `sin cos tan asin acos atan abs sqrt exp log pow min max sign floor ceil fmod clamp lerp tri saw sqr noise` and the constant `pi`. The parser is recursive descent in `core/include/daw/dsp/Formula.h`, compiles to bytecode, errors carry the character position. Example in the tooltip: `sin(2*pi*x) + y*0.5*sin(6*pi*x)`.
+- **Morph**: select two frames (keyframes), "Fill between": the frames between them are overwritten with a sample crossfade or, with the "Spectral" checkbox, by interpolating harmonic amplitudes using the phases of the left keyframe.
+- Processing: "Normalize" (each frame / whole table), "Remove DC", "Smooth cycle edges", "Reverse".
+- The editor has its own undo history (`juce::UndoManager`, `Cmd+Z` while the editor is open). "Done" saves the table as a user table (a new `sha1`) and assigns it to the oscillator, "Cancel" exits without changes, "Export WAV…".
 
-## Задача 9.8. Общая библиотека эффектов `daw::fx`
+## Task 9.8. Shared effects library `daw::fx`
 
-**Весь DSP эффектов живёт в `core/` в пространстве имён `daw::fx` (`core/include/daw/fx/`, `core/src/fx/`), без JUCE. Встроенные устройства DAW из этапа 06 и FX-рэк Prisma используют одни и те же классы.** Если в 06 эффекты были написаны в `app/`, в этой задаче их DSP переносится в `daw::fx` без изменения звука: рендер тестового сигнала до и после переноса совпадает (разница ≤ −120 дБ), устройства 06 становятся тонкими обёртками. Если в `daw::fx` уже есть нужный класс, его расширяют (новые режимы, параметры), а не пишут второй.
+**All effect DSP lives in `core/` in the namespace `daw::fx` (`core/include/daw/fx/`, `core/src/fx/`), without JUCE. The DAW's built-in devices from phase 06 and the Prisma FX rack use the same classes.** If in 06 the effects were written in `app/`, this task moves their DSP into `daw::fx` without changing the sound: a render of a test signal before and after the move matches (difference ≤ −120 dB), and the 06 devices become thin wrappers. If `daw::fx` already has the needed class, extend it (new modes, parameters) rather than writing a second one.
 
 ```cpp
 namespace daw::fx
@@ -174,8 +174,8 @@ class Effect
 {
 public:
     virtual ~Effect() = default;
-    virtual void prepare (double sampleRate, int maxBlockSize) = 0;  // все выделения здесь
-    virtual void reset() = 0;                                        // обнуляет линии и состояние
+    virtual void prepare (double sampleRate, int maxBlockSize) = 0;  // all allocations here
+    virtual void reset() = 0;                                        // clears lines and state
     virtual void process (float* left, float* right, int numSamples, const ProcessContext&) = 0;
     virtual int getLatencySamples() const noexcept { return 0; }
     virtual double getTailSeconds() const noexcept { return 0.0; }
@@ -183,43 +183,43 @@ public:
 }
 ```
 
-- У каждого эффекта POD-структура параметров (`DelayParams` и т. п.) и `setParams (const XParams&)`, вызываемый из аудиопотока перед `process`. Параметры сглаживаются внутри (линейный ход за 20 мс или пересчёт коэффициентов каждые 32 сэмпла), смена значения не щёлкает.
-- `mix` (сухой/обработанный) у каждого эффекта внутри класса. Если у эффекта есть задержка обработки, сухой сигнал задерживается на столько же.
-- Общие блоки в `core/include/daw/dsp/`: `Halfband` (полифазный IIR-полуполосный фильтр на allpass-звеньях, 2× и 4× каскадом, без задержки в целых сэмплах, ослабление ≥ 90 дБ в полосе задерживания), `Biquad` (RBJ, TDF-II), `DelayLine` (кольцевой буфер, кубическая интерполяция Эрмита), `Smoothed`, `EnvelopeFollower` (пик/RMS, атака/спад), `LinkwitzRiley4` (кроссовер LR4).
-- Тишина: эффект с хвостом считает, сколько сэмплов на входе тишина (|x| < 1e-6). Когда тишина длиннее хвоста и выход тоже затих, он делает `reset()` и дальше пропускает обработку. Так 16 дорожек с ревербератором не жгут процессор в паузах и не дают денормалей.
-- Лукахед и прочая задержка разрешены в `daw::fx` (06 может их использовать), но в Prisma все эффекты работают с нулевой задержкой: синт сообщает хосту латентность 0.
+- Each effect has a POD parameter struct (`DelayParams` and so on) and `setParams (const XParams&)`, called from the audio thread before `process`. Parameters are smoothed internally (a linear ramp over 20 ms or recomputing coefficients every 32 samples), changing a value does not click.
+- `mix` (dry/wet) is inside each effect class. If an effect has processing latency, the dry signal is delayed by the same amount.
+- Shared building blocks in `core/include/daw/dsp/`: `Halfband` (a polyphase IIR halfband filter on allpass stages, 2× and 4× cascaded, no integer-sample latency, ≥ 90 dB stopband attenuation), `Biquad` (RBJ, TDF-II), `DelayLine` (ring buffer, cubic Hermite interpolation), `Smoothed`, `EnvelopeFollower` (peak/RMS, attack/release), `LinkwitzRiley4` (LR4 crossover).
+- Silence: an effect with a tail counts how many input samples are silent (|x| < 1e-6). When the silence is longer than the tail and the output has also died away, it calls `reset()` and skips processing from then on. This way 16 tracks with a reverb do not burn CPU during pauses and do not produce denormals.
+- Lookahead and other latency are allowed in `daw::fx` (06 may use them), but in Prisma all effects run with zero latency: the synth reports latency 0 to the host.
 
-## Задача 9.9. Эффекты
+## Task 9.9. Effects
 
-Для каждого эффекта общий параметр `fx_<id>_on` (Bool, `def` 0) и `fx_<id>_mix`. Остальные параметры ниже (id без префикса `fx_<id>_`). Бюджет: 60 с стерео 48 кГц в Release в контейнере, все параметры на худшем значении.
+Every effect has the common parameters `fx_<id>_on` (Bool, `def` 0) and `fx_<id>_mix`. Other parameters are below (ids without the `fx_<id>_` prefix). Budget: 60 s of stereo at 48 kHz in Release in the container, all parameters at their worst-case values.
 
-| Эффект, id | Подход | Параметры | Бюджет |
+| Effect, id | Approach | Parameters | Budget |
 |---|---|---|---|
-| Hyper / Dimension, `hyper` | Hyper: до 7 голосов модулированных задержек 5–25 мс с медленными LFO на несоизмеримых частотах, голоса раскладываются по панораме. Dimension: перекрёстные короткие задержки L→R / R→L 8–30 мс через allpass, расширение без потери моно-совместимости | `rate`, `detune`, `unison` (1–7), `retrig`, `dimSize`, `dimMix` | ≤ 0,3 с |
-| Distortion, `dist` | Передискретизация 4× (`Halfband`) для всех режимов, кроме Downsample и Bitcrush (они шумят нарочно). Режимы: `Tube` (асимм. tanh), `Soft Clip`, `Hard Clip`, `Diode 1`, `Diode 2`, `Lin Fold`, `Sin Fold`, `Zero-Square`, `Downsample`, `Asym`, `Rectify`, `Bitcrush`. Фильтр SVF LP/BP/HP до или после | `mode`, `drive` (0–1 → 0…+36 дБ), `fltPos` (Off/Pre/Post), `fltType`, `fltFreq`, `fltQ`, `autoGain` | ≤ 0,6 с |
-| Flanger, `flanger` | Задержка 0,1–10 мс, LFO треугольник, обратная связь со знаком | `rate` / `sync` / `div`, `depth`, `feedback` (−0,95…0,95), `stereo` (0–180°) | ≤ 0,2 с |
-| Phaser, `phaser` | 2–12 однополюсных ZDF allpass с обратной связью, развёртка центра по октавам | `stages`, `freq` (20–18000), `depth` (0–5 окт.), `rate` / `sync` / `div`, `feedback`, `stereo` | ≤ 0,3 с |
-| Chorus, `chorus` | 2 голоса на канал, задержки 7–30 мс, LP в мокром сигнале | `rate`, `depth`, `delay`, `feedback`, `lpf` | ≤ 0,2 с |
-| Delay, `delay` | Буфер 2 с при максимальной частоте выделяется в `prepare`, чтение с интерполяцией, смена времени без «пилы» (сглаживание времени 50 мс). Режимы `Normal`, `Ping-Pong`, `Tap` (разное время L/R). В петле BP/HP/LP и мягкое ограничение `tanh` | `mode`, `timeL`, `timeR` (1–2000 мс), `sync`, `divL`, `divR` (список LFO + точки и триоли), `link`, `feedback` (0–1), `fltFreq`, `fltQ` | ≤ 0,2 с |
-| Compressor, `comp` | Режим `Single`: пик/RMS-детектор, мягкое колено, сглаживание гейна. Режим `Multiband` (OTT): кроссовер LR4 88 Гц и 2,5 кГц, в каждой полосе сжатие вниз выше `thrDown` и вверх ниже `thrUp` (подъём ≤ +24 дБ), уровни полос | `mode`, `threshold`, `ratio`, `attack`, `release`, `knee`, `makeup`, `depth` (OTT), `time` (OTT), `lowGain`, `midGain`, `highGain`, `upward` (вкл. сжатие вверх) | ≤ 0,5 с |
-| Reverb, `reverb` | `Hall`: FDN из 8 линий, матрица Хаусхолдера, модуляция длины линий, демпфирование в петле. `Plate`: схема Dattorro. Предзадержка до 250 мс | `mode`, `size`, `decay` (0,2–20 с), `damp`, `predelay`, `width`, `lowCut`, `highCut` | ≤ 0,6 с |
-| EQ, `eq` | 3 полосы `Biquad`: нижняя (Low Shelf / Peak / HP), средняя Peak, верхняя (High Shelf / Peak / LP) | `lowType`, `lowFreq`, `lowQ`, `lowGain`, `midFreq`, `midQ`, `midGain`, `highType`, `highFreq`, `highQ`, `highGain` | ≤ 0,1 с |
-| Filter, `filter` | Тот же `SynthFilter` со всеми типами из 9.5, стерео | `type`, `cutoff`, `res`, `drive`, `pan` | ≤ 0,2 с |
+| Hyper / Dimension, `hyper` | Hyper: up to 7 voices of modulated delays 5–25 ms with slow LFOs at incommensurate frequencies, voices spread across the stereo field. Dimension: cross-fed short delays L→R / R→L 8–30 ms through allpass, widening without losing mono compatibility | `rate`, `detune`, `unison` (1–7), `retrig`, `dimSize`, `dimMix` | ≤ 0.3 s |
+| Distortion, `dist` | 4× oversampling (`Halfband`) for all modes except Downsample and Bitcrush (they alias on purpose). Modes: `Tube` (asymmetric tanh), `Soft Clip`, `Hard Clip`, `Diode 1`, `Diode 2`, `Lin Fold`, `Sin Fold`, `Zero-Square`, `Downsample`, `Asym`, `Rectify`, `Bitcrush`. An SVF LP/BP/HP filter before or after | `mode`, `drive` (0–1 → 0…+36 dB), `fltPos` (Off/Pre/Post), `fltType`, `fltFreq`, `fltQ`, `autoGain` | ≤ 0.6 s |
+| Flanger, `flanger` | Delay 0.1–10 ms, triangle LFO, signed feedback | `rate` / `sync` / `div`, `depth`, `feedback` (−0.95…0.95), `stereo` (0–180°) | ≤ 0.2 s |
+| Phaser, `phaser` | 2–12 one-pole ZDF allpasses with feedback, center sweep in octaves | `stages`, `freq` (20–18000), `depth` (0–5 oct.), `rate` / `sync` / `div`, `feedback`, `stereo` | ≤ 0.3 s |
+| Chorus, `chorus` | 2 voices per channel, delays 7–30 ms, LP on the wet signal | `rate`, `depth`, `delay`, `feedback`, `lpf` | ≤ 0.2 s |
+| Delay, `delay` | A 2 s buffer at the maximum sample rate is allocated in `prepare`, interpolated reads, changing the time without a "zipper" (50 ms time smoothing). Modes `Normal`, `Ping-Pong`, `Tap` (different L/R times). BP/HP/LP and soft `tanh` limiting in the loop | `mode`, `timeL`, `timeR` (1–2000 ms), `sync`, `divL`, `divR` (the LFO division list plus dotted and triplets), `link`, `feedback` (0–1), `fltFreq`, `fltQ` | ≤ 0.2 s |
+| Compressor, `comp` | `Single` mode: peak/RMS detector, soft knee, gain smoothing. `Multiband` mode (aggressive upward/downward multiband): LR4 crossover at 88 Hz and 2.5 kHz, in each band downward compression above `thrDown` and upward compression below `thrUp` (boost ≤ +24 dB), band levels | `mode`, `threshold`, `ratio`, `attack`, `release`, `knee`, `makeup`, `depth` (Multiband), `time` (Multiband), `lowGain`, `midGain`, `highGain`, `upward` (enables upward compression) | ≤ 0.5 s |
+| Reverb, `reverb` | `Hall`: an FDN of 8 lines, Householder matrix, line length modulation, damping in the loop. `Plate`: Dattorro topology. Predelay up to 250 ms | `mode`, `size`, `decay` (0.2–20 s), `damp`, `predelay`, `width`, `lowCut`, `highCut` | ≤ 0.6 s |
+| EQ, `eq` | 3 `Biquad` bands: low (Low Shelf / Peak / HP), mid Peak, high (High Shelf / Peak / LP) | `lowType`, `lowFreq`, `lowQ`, `lowGain`, `midFreq`, `midQ`, `midGain`, `highType`, `highFreq`, `highQ`, `highGain` | ≤ 0.1 s |
+| Filter, `filter` | The same `SynthFilter` with all types from 9.5, stereo | `type`, `cutoff`, `res`, `drive`, `pan` | ≤ 0.2 s |
 
-- Если бюджет не выполняется, сначала оптимизировать (контрольная частота коэффициентов, без `std::pow`/`std::exp` в цикле по сэмплам), и только потом писать в отчёте фактическую цифру. Цифры всех десяти эффектов идут в отчёт.
-- Диапазоны и `def` каждого параметра выбрать по Serum и записать в `PrismaParams.cpp`; все частоты со `skewCentre` 1000 Гц, времена — со `skewCentre` на трети диапазона.
+- If a budget is not met, optimize first (control-rate coefficients, no `std::pow`/`std::exp` in the per-sample loop), and only then report the actual figure. The figures for all ten effects go into the report.
+- Choose the ranges and `def` of every parameter to match common practice for synth effects and record them in `PrismaParams.cpp`; all frequencies use `skewCentre` 1000 Hz, times use `skewCentre` at one third of the range.
 
-## Задача 9.10. FX-рэк внутри Prisma
+## Task 9.10. FX rack inside Prisma
 
-- `core/include/daw/synth/PrismaFxRack.h`: владеет 10 эффектами (по одному каждого типа, как в Serum), порядок из `SynthStructure::fxOrder`, по умолчанию `hyper, dist, flanger, phaser, chorus, delay, comp, reverb, eq, filter`. `FxId` — enum с этими значениями, в состоянии и пресете пишется строками.
-- `PrismaSynth::process` после суммы голосов и `master_gain` прогоняет рэк. Выключенный эффект не вызывается вовсе. Включение и выключение — кроссфейд 10 мс, без щелчка; выключенный эффект при следующем включении стартует после `reset()`.
-- Смена порядка приходит новым `RenderStructure`, рэк переходит на новый порядок кроссфейдом 20 мс (два прохода только во время перехода).
-- `getTailLengthSeconds` процессора = максимум из релиза Env 1 и хвостов включённых эффектов (ограничить 30 с). Латентность 0 (см. 9.8), тест 9 это проверяет.
-- Модуляция параметров эффектов — по правилу из 9.2 (последний голос, глобальные источники).
+- `core/include/daw/synth/PrismaFxRack.h`: owns 10 effects (one of each type), the order comes from `SynthStructure::fxOrder`, by default `hyper, dist, flanger, phaser, chorus, delay, comp, reverb, eq, filter`. `FxId` is an enum with these values, written as strings in the state and the preset.
+- `PrismaSynth::process` runs the rack after the voice sum and `master_gain`. A disabled effect is not called at all. Turning on and off is a 10 ms crossfade, without a click; a disabled effect starts after `reset()` the next time it is turned on.
+- An order change arrives as a new `RenderStructure`, and the rack moves to the new order with a 20 ms crossfade (two passes only during the transition).
+- The processor's `getTailLengthSeconds` = the maximum of the Env 1 release and the tails of enabled effects (capped at 30 s). Latency 0 (see 9.8), test 9 checks this.
+- Modulation of effect parameters follows the rule from 9.2 (last voice, global sources).
 
-## Задача 9.11. Формат пресета и библиотека
+## Task 9.11. Preset format and library
 
-### Файл `.prismapreset` (JSON, UTF-8)
+### The `.prismapreset` file (JSON, UTF-8)
 
 ```json
 {
@@ -229,7 +229,7 @@ public:
   "category": "Bass",
   "tags": ["dark", "dnb", "reese", "mono"],
   "author": "Prisma Factory",
-  "description": "Два расстроенных пилообразных с медленным фильтром.",
+  "description": "Two detuned saws with a slow filter.",
   "heavy": false,
   "params": { "oscA_on": 1, "oscA_oct": -1, "flt_type": "lp24", "flt_cutoff": 850, "mod1_src": "lfo1", "mod1_dst": "flt_cutoff", "mod1_amt": 0.08 },
   "structure": {
@@ -243,164 +243,164 @@ public:
 }
 ```
 
-- `params`: значения по id в единицах параметра (Гц, секунды, дБ), `Choice` — строкой из `choiceIds`, `Bool` — 0/1. Отсутствующий параметр получает `def`, поэтому заводские исходники пишут только отличия. `def` существующих параметров заморожены (9.1), это делает такие файлы надёжными. Сохранение из плагина пишет все параметры.
-- Неизвестный id или вариант при загрузке пропускается с предупреждением в журнал загрузки (не ошибка). `schema` больше поддерживаемой — загрузить, что понятно, показать «Пресет создан в более новой версии Prisma».
-- Разбор и запись в `core/`: `core/include/daw/util/Json.h` (свой небольшой JSON: объекты, массивы, строки с `\uXXXX`, числа, bool, null; без комментариев; сторонние библиотеки запрещены правилом 00), `core/include/daw/synth/PresetFile.h`: `std::optional<Preset> parsePreset (std::string_view, std::string* error)`, `std::string writePreset (const Preset&)`. `struct Preset` расширяется полями `category, tags, author, description, heavy, structure, userTables`.
-- Категории — enum `PresetCategory { Init, Bass, Lead, Pad, Keys, Pluck, ArpSeq, FX, Drums, Atmosphere, Chords }`, в файле строками `"Init" "Bass" "Lead" "Pad" "Keys" "Pluck" "Arp/Seq" "FX" "Drums" "Atmosphere" "Chords"`.
-- Теги только из словаря `core/src/PresetTags.cpp` (около 40: `dark, bright, warm, cold, aggressive, soft, wide, mono, evolving, static, dnb, dubstep, house, techno, trance, hiphop, lofi, cinematic, ambient, retro, analog, digital, metallic, vocal, glassy, noisy, clean, distorted, sync, fm, reese, supersaw, wobble, growl, sub, stab, riser, impact, gated, chord`). Неизвестный тег в заводском пресете — ошибка валидации.
+- `params`: values by id in the parameter's units (Hz, seconds, dB), `Choice` as a string from `choiceIds`, `Bool` as 0/1. A missing parameter gets `def`, so factory sources write only the differences. The `def` of existing parameters are frozen (9.1), which makes such files reliable. Saving from the plugin writes all parameters.
+- An unknown id or option on load is skipped with a warning in the load log (not an error). `schema` greater than supported: load what is understood and show "This preset was created in a newer version of Prisma".
+- Parsing and writing live in `core/`: `core/include/daw/util/Json.h` (own small JSON: objects, arrays, strings with `\uXXXX`, numbers, bool, null; no comments; third-party libraries are forbidden by rule 00), `core/include/daw/synth/PresetFile.h`: `std::optional<Preset> parsePreset (std::string_view, std::string* error)`, `std::string writePreset (const Preset&)`. `struct Preset` is extended with the fields `category, tags, author, description, heavy, structure, userTables`.
+- Categories are an enum `PresetCategory { Init, Bass, Lead, Pad, Keys, Pluck, ArpSeq, FX, Drums, Atmosphere, Chords }`, written in the file as the strings `"Init" "Bass" "Lead" "Pad" "Keys" "Pluck" "Arp/Seq" "FX" "Drums" "Atmosphere" "Chords"`.
+- Tags only from the dictionary in `core/src/PresetTags.cpp` (about 40: `dark, bright, warm, cold, aggressive, soft, wide, mono, evolving, static, dnb, dubstep, house, techno, trance, hiphop, lofi, cinematic, ambient, retro, analog, digital, metallic, vocal, glassy, noisy, clean, distorted, sync, fm, reese, supersaw, wobble, growl, sub, stab, riser, impact, gated, chord`). An unknown tag in a factory preset is a validation error.
 
-### Где лежат пресеты
+### Where presets live
 
-- Заводские: исходники `resources/presets/prisma/<Категория>/<Имя>.json`, встраиваются в `core` через `cmake/EmbedFiles.cmake` (тот же механизм, что для таблиц). `factoryPresets()` разбирает их один раз при первом вызове (ленивая статика) и возвращает «Init» первым, дальше по категории и имени.
-- Пользовательские: `~/Music/Prisma DAW/User Library/Presets/Prisma/**/*.prismapreset` (корень `User Library` как в 01, задача 1.6). Плагин в чужом хосте читает ту же папку; путь меняется в меню Prisma и хранится в `juce::PropertiesFile` «Prisma.settings».
-- Избранное: `User Library/Presets/Prisma/favourites.json` — список `{ "source": "factory"|"user", "name" | "path" }`.
-- `.dawpreset` с `deviceKind="prisma"` из 01 по-прежнему загружается. Сохранение пресета Prisma из DAW теперь пишет `.prismapreset`.
-- 7 старых пресетов переводятся в JSON с теми же значениями (тест 3), получают категории: Init → Init, Supersaw Lead → Lead, Reese Bass и Wobble Bass → Bass, Glass Pad → Pad, Pluck → Pluck, Vox Sweep → FX. C++-список в `PrismaParams.cpp` удаляется.
-- Программы AU/VST3: `getNumPrograms` = число заводских, порядок `factoryPresets()`. `setCurrentProgram` с индексом из старого проекта не используется: старое состояние переводится по имени (9.1).
+- Factory: sources in `resources/presets/prisma/<Category>/<Name>.json`, embedded into `core` through `cmake/EmbedFiles.cmake` (the same mechanism as for tables). `factoryPresets()` parses them once on the first call (lazy static) and returns "Init" first, then by category and name.
+- User: `~/Music/Prisma DAW/User Library/Presets/Prisma/**/*.prismapreset` (the `User Library` root as in 01, task 1.6). The plugin in another host reads the same folder; the path is changed in the Prisma menu and stored in the `juce::PropertiesFile` "Prisma.settings".
+- Favorites: `User Library/Presets/Prisma/favourites.json`, a list of `{ "source": "factory"|"user", "name" | "path" }`.
+- A `.dawpreset` with `deviceKind="prisma"` from 01 still loads. Saving a Prisma preset from the DAW now writes `.prismapreset`.
+- The 7 old presets are converted to JSON with the same values (test 3) and get categories: Init → Init, Supersaw Lead → Lead, Reese Bass and Wobble Bass → Bass, Glass Pad → Pad, Pluck → Pluck, Vox Sweep → FX. The C++ list in `PrismaParams.cpp` is removed.
+- AU/VST3 programs: `getNumPrograms` = the number of factory presets, in `factoryPresets()` order. `setCurrentProgram` with an index from an old project is not used: old state is converted by name (9.1).
 
-## Задача 9.12. Инструмент проверки пресетов и планка качества
+## Task 9.12. Preset checking tool and quality bar
 
-### Фразы предпрослушивания
+### Preview phrases
 
-`core/include/daw/synth/PreviewPhrase.h`: `daw::engine::MidiClip previewPhrase (PresetCategory)` (ноты в долях, как в клипах; темп задаёт тот, кто играет) — одна функция для браузера плагина, браузера DAW, инструмента и тестов. 120 BPM, 2 такта 4/4, скорость 100, плюс хвост 2 с (Pad и Atmosphere 4 с).
+`core/include/daw/synth/PreviewPhrase.h`: `daw::engine::MidiClip previewPhrase (PresetCategory)` (notes in beats, as in clips; the tempo is set by whoever plays it), one function for the plugin browser, the DAW browser, the tool and the tests. 120 BPM, 2 bars of 4/4, velocity 100, plus a 2 s tail (4 s for Pad and Atmosphere).
 
-| Категория | Фраза |
+| Category | Phrase |
 |---|---|
-| Bass | восьмые C2 C2 C3 C2 Eb2 C2 G1 Bb1, длина 0,9 восьмой, два раза |
+| Bass | eighths C2 C2 C3 C2 Eb2 C2 G1 Bb1, length 0.9 of an eighth, twice |
 | Lead | C4 ¼, Eb4 ¼, G4 ½ · F4 ¼, Eb4 ¼, D4 ¼, C4 ¼ |
-| Pad, Atmosphere | аккорд C3 Eb3 G3 Bb3 D4 держится 2 такта |
-| Keys | C3 Eb3 G3 на половину такта два раза, затем Ab2 C3 Eb3 два раза |
-| Chords (аккорд из одной ноты) | C3 ½, C3 ½, Ab2 ½, Bb2 ½ |
-| Pluck, Arp/Seq | шестнадцатые C4 Eb4 G4 Bb4 G4 Eb4 по кругу, длина 0,8 шестнадцатой |
-| Drums | C2 четвертями, скорость 110, длина шестнадцатая |
-| FX, Init | C3 держится 2 такта |
+| Pad, Atmosphere | chord C3 Eb3 G3 Bb3 D4 held for 2 bars |
+| Keys | C3 Eb3 G3 for half a bar twice, then Ab2 C3 Eb3 twice |
+| Chords (one-note chord) | C3 ½, C3 ½, Ab2 ½, Bb2 ½ |
+| Pluck, Arp/Seq | sixteenths C4 Eb4 G4 Bb4 G4 Eb4 in a loop, length 0.8 of a sixteenth |
+| Drums | C2 in quarters, velocity 110, sixteenth length |
+| FX, Init | C3 held for 2 bars |
 
 ### `tools/prisma_preset`
 
-Консольная программа на `core` (без JUCE, как `prisma_render`):
-- `validate <файл|папка>` — разбор, словарь тегов, уникальность имён, обязательные поля, ≥ 2 названных макроса с хотя бы одним маршрутом на каждый, `ModWheel` или макрос что-то делает, скорость нажатия на что-то влияет (кроме FX и Atmosphere).
-- `measure <…>` — рендер фразы при 48 кГц, блок 256, вывод: громкость LUFS (BS.1770-4 с гейтингом по всей фразе с хвостом; использовать `daw::dsp::Loudness` из этапа 04, если его нет — создать в `core/` здесь, 04 потом его же и использует), пиковый уровень сэмплов и true-peak (4×), DC, наличие NaN/Inf/денормалей в выходе, скорость рендера в разах от реального времени, число голосов в пике.
-- `normalize <…>` — подстраивает `master_gain` к цели громкости и переписывает файл (только поле `master_gain`, остальное как было, порядок ключей сохраняется).
-- `render <файл> out.wav` — для прослушивания на Mac.
-- `similarity <папка>` — отпечаток каждого пресета (32 логарифмические полосы спектра средние по фразе + огибающая RMS по 20 мс) и попарное косинусное сходство внутри категории.
+A console program on `core` (no JUCE, like `prisma_render`):
+- `validate <file|folder>`: parsing, the tag dictionary, unique names, required fields, ≥ 2 named macros with at least one route each, `ModWheel` or a macro does something, velocity affects something (except FX and Atmosphere).
+- `measure <…>`: renders the phrase at 48 kHz, block 256, outputs: loudness in LUFS (BS.1770-4 with gating over the whole phrase including the tail; use `daw::dsp::Loudness` from phase 04, and if it does not exist, create it in `core/` here, 04 will then use the same one), sample peak level and true peak (4×), DC, presence of NaN/Inf/denormals in the output, render speed as a multiple of real time, peak voice count.
+- `normalize <…>`: adjusts `master_gain` to the loudness target and rewrites the file (only the `master_gain` field, everything else as it was, key order preserved).
+- `render <file> out.wav`: for listening on the Mac.
+- `similarity <folder>`: a fingerprint of each preset (32 logarithmic spectrum bands averaged over the phrase + an RMS envelope at 20 ms) and pairwise cosine similarity within a category.
 
-### Планка
+### The bar
 
-| Проверка | Норма |
+| Check | Requirement |
 |---|---|
-| Громкость | −14 ±1 LUFS; Pad, Atmosphere −16 ±2; FX −16 ±3 |
-| Пик | сэмплы ≤ −1 dBFS, true-peak ≤ −0,5 dBTP |
-| DC | \|среднее\| ≤ 0,001 |
-| Чистота | нет NaN, Inf, денормалей в выходе; после хвоста активных голосов 0 и выход ровно 0 |
-| Процессор | ≥ 20× реального времени в контейнере (Release); с `"heavy": true` ≥ 10×, таких не больше 10 на библиотеку |
-| Непохожесть | косинусное сходство любой пары в категории ≤ 0,995 |
+| Loudness | −14 ±1 LUFS; Pad, Atmosphere −16 ±2; FX −16 ±3 |
+| Peak | samples ≤ −1 dBFS, true peak ≤ −0.5 dBTP |
+| DC | \|mean\| ≤ 0.001 |
+| Cleanliness | no NaN, Inf, denormals in the output; after the tail, active voices are 0 and the output is exactly 0 |
+| CPU | ≥ 20× real time in the container (Release); with `"heavy": true` ≥ 10×, at most 10 such presets in the library |
+| Distinctness | cosine similarity of any pair in a category ≤ 0.995 |
 
-CI запускает `prisma_preset validate` и `measure --check` по всей библиотеке, нарушение любой нормы — красный CI.
+CI runs `prisma_preset validate` and `measure --check` over the whole library; violating any requirement turns CI red.
 
-## Задача 9.13. Заводская библиотека: 150+ пресетов
+## Task 9.13. Factory library: 150+ presets
 
-| Категория | Минимум | Что должно быть |
+| Category | Minimum | What must be there |
 |---|---|---|
-| Bass | 25 | саб, Reese, wobble (LFO по синку), growl (FM/формант + дисторшн), FM, акустический-подобный, 808-подобный с глайдом, OTT-бас, плак-бас, моно-сабы для house |
-| Lead | 20 | супер-пила, sync-лид, FM-лид, quad-лид, вокальный (Formant), ретро-квадрат, пищащий с вибрато от mod wheel |
-| Pad | 20 | тёплые аналоговые, стеклянные, медленно меняющиеся (LFO по позиции таблицы), темные, с Hyper и Reverb |
-| Keys | 12 | электропиано-подобные (FM), орган (аддитивные таблицы), колокола, mallet |
-| Pluck | 15 | короткие пилы, FM-плаки, Comb-плаки, house stab |
-| Arp/Seq | 12 | гейт синхронным LFO с формой Custom, трансовые, ритмы по позиции таблицы |
-| FX | 12 | райзеры (огибающие 4–8 с на высоту и шум Riser), импакты, развёртки, шумовые всплески |
-| Drums | 12 | бочки (огибающая высоты на синус), снейры (шум + тон), хэты (Metallic), перкуссия, зап |
-| Atmosphere | 12 | текстуры с шумами Crackle/Tape, дрон, ветер, холодные цифровые |
-| Chords | 10 | аккорды из одной ноты: унисон `Chord`, интервалы осцилляторов |
+| Bass | 25 | sub, Reese, wobble (tempo-synced LFO), growl (FM/formant + distortion), FM, acoustic-like, 808-like with glide, multiband-compressed bass, pluck bass, mono subs for house |
+| Lead | 20 | supersaw, sync lead, FM lead, square lead, vocal (Formant), retro square, squeaky with mod wheel vibrato |
+| Pad | 20 | warm analog, glassy, slowly evolving (LFO on table position), dark, with Hyper and Reverb |
+| Keys | 12 | electric piano-like (FM), organ (additive tables), bells, mallet |
+| Pluck | 15 | short saws, FM plucks, Comb plucks, house stab |
+| Arp/Seq | 12 | gating with a synced LFO with a Custom shape, trance, rhythms on table position |
+| FX | 12 | risers (4–8 s envelopes on pitch and the Riser noise), impacts, sweeps, noise bursts |
+| Drums | 12 | kicks (pitch envelope on a sine), snares (noise + tone), hats (Metallic), percussion, zap |
+| Atmosphere | 12 | textures with Crackle/Tape noise, drone, wind, cold digital |
+| Chords | 10 | one-note chords: `Chord` unison, oscillator intervals |
 
-- Всего не меньше 150 без Init. Имена: английские, Title Case, ≤ 24 символа, уникальные во всей библиотеке, без префиксов категории («Reese Bass» допустимо, «BA Reese» нет). `author` — «Prisma Factory».
-- Каждый пресет: 2–8 названных макросов, mod wheel или макрос дают заметное изменение, разумная полифония (басы и лиды `mono = 1` или `poly ≤ 4`), эффекты включены там, где звук этого требует, ни один пресет не включает все 10 эффектов сразу.
-- Способ работы для исполнителя: писать JSON по рецепту категории, гонять `prisma_preset measure` и `similarity`, править, затем `normalize`. Рецепты (типичные значения: таблицы, warp, фильтр, огибающие, маршруты, эффекты) для каждой подкатегории записать в `resources/presets/prisma/README.md` — это единственный дополнительный документ этапа, он нужен следующему автору пресетов.
-- Пресеты делаются партиями по категориям, каждая партия — отдельный коммит, CI зелёный после каждой.
+- At least 150 in total, excluding Init. Names: English, Title Case, ≤ 24 characters, unique across the whole library, no category prefixes ("Reese Bass" is fine, "BA Reese" is not). `author` is "Prisma Factory".
+- Every preset: 2–8 named macros, the mod wheel or a macro gives a noticeable change, sensible polyphony (basses and leads `mono = 1` or `poly ≤ 4`), effects enabled where the sound calls for them, no preset enables all 10 effects at once.
+- Workflow for the implementer: write JSON following the category recipe, run `prisma_preset measure` and `similarity`, adjust, then `normalize`. Write the recipes (typical values: tables, warp, filter, envelopes, routes, effects) for each subcategory into `resources/presets/prisma/README.md`; this is the only extra document in the phase, and the next preset author needs it.
+- Presets are made in batches by category, each batch is a separate commit, CI green after each.
 
-## Задача 9.14. Браузер пресетов в плагине
+## Task 9.14. Preset browser in the plugin
 
-- Полоса пресета в шапке: ◀ ▶ (предыдущий / следующий в текущем отфильтрованном списке), имя (щелчок открывает браузер), `*` после имени при изменениях, кнопка «Сохранить», звезда избранного, меню (Сохранить как…, Переименовать, Показать в Finder, Инициализировать).
-- Браузер — панель поверх вкладок: слева категории (с количеством) и «Избранное», «Мои пресеты»; сверху поиск (без регистра, по имени, тегам, автору, описанию; кириллица и латиница) и строка тегов-фильтров (выбранные теги объединяются по «и»); в центре список (имя, категория, звезда, метка «user»); справа карточка: автор, теги, описание, макросы. Стрелки ↑/↓ двигают выбор и сразу загружают пресет, `Enter` закрывает браузер, `Esc` возвращает пресет, который был до открытия.
-- Загрузка пресета: на message thread, параметры через `setValueNotifyingHost`, структура новым снимком. Звучащие ноты не обрываются, но голоса сбрасывают фильтры и линии (`reset`), эффекты рэка — `reset()` с кроссфейдом 10 мс, чтобы не было взрыва хвоста ревербератора старого пресета.
-- «Сохранить» спрашивает имя, категорию, теги (выбор из словаря), описание; пишет в `User Library/Presets/Prisma/<Категория>/<Имя>.prismapreset`; список обновляется сразу.
-- Случайный пресет (делать последним в этапе, если время осталось): кнопка с кубиком, меню «Слегка» (±15 % от текущих значений) и «Полностью» (в пределах `randomMin/randomMax`, которые добавляются в дескриптор только для участвующих параметров), замки на группах OSC A, OSC B, FILTER, ENV, LFO, FX. Результат — одна транзакция отмены.
+- Preset bar in the header: ◀ ▶ (previous / next in the current filtered list), the name (a click opens the browser), `*` after the name when modified, a "Save" button, a favorite star, a menu (Save As…, Rename, Show in Finder, Initialize).
+- The browser is a panel over the tabs: on the left, categories (with counts) and "Favorites", "My Presets"; at the top, search (case-insensitive, by name, tags, author, description; Cyrillic and Latin) and a row of tag filters (selected tags are combined with AND); in the center, the list (name, category, star, a "user" label); on the right, a card: author, tags, description, macros. The ↑/↓ arrows move the selection and load the preset immediately, `Enter` closes the browser, `Esc` restores the preset that was loaded before opening.
+- Loading a preset: on the message thread, parameters through `setValueNotifyingHost`, the structure as a new snapshot. Sounding notes are not cut off, but voices reset their filters and lines (`reset`), and rack effects `reset()` with a 10 ms crossfade, so that the old preset's reverb tail does not explode.
+- "Save" asks for the name, category, tags (picked from the dictionary), description; writes to `User Library/Presets/Prisma/<Category>/<Name>.prismapreset`; the list updates immediately.
+- Random preset (do it last in the phase, if time remains): a dice button, a menu with "Slightly" (±15% of the current values) and "Fully" (within `randomMin/randomMax`, which are added to the descriptor only for participating parameters), locks on the groups OSC A, OSC B, FILTER, ENV, LFO, FX. The result is one undo transaction.
 
-## Задача 9.15. Интерфейс: каркас, масштаб, тема
+## Task 9.15. Interface: frame, scale, theme
 
-- Базовый размер редактора 1100 × 720. Масштаб 75, 100, 125, 150, 175, 200 % из меню и свободное растягивание за угол с сохранением пропорций (`ComponentBoundsConstrainer` с фиксированным соотношением). Реализация: всё раскладывается в базовых координатах во внутреннем компоненте, редактор задаёт ему `AffineTransform::scale`. Масштаб запоминается в состоянии плагина (`UI scale`) и в настройках как значение по умолчанию для новых экземпляров.
-- Всё рисуется векторно (`juce::Path`, шрифты), растровых картинок интерфейса нет. Тяжёлые статичные слои (сетка, фоны панелей, 3D-вид таблицы) кэшируются в `juce::Image` с учётом масштаба и плотности экрана (`Desktop::getDisplays().getDisplayForRect (…)->scale`) и пересобираются при смене масштаба, темы или данных — так на Retina чётко.
-- Тема: токены `Theme` из 01, задача 1.8. Структура токенов и разбор JSON выносятся из `app/Source/ui/Theme` в общую статическую библиотеку `ui/common/` (CMake-цель `daw_ui`, зависит только от `juce_gui_basics`), её используют и приложение, и плагин. `ThemeManager` остаётся в приложении.
-- У Prisma своя тема по умолчанию `prisma.json` (цвета из нынешнего `prisma_ui::colours`: фон #121419, панель #1c2027, край #2a303a, текст #d8dee9, вторичный #7d8796, акцент #4fd1c5, акцент 2 #a78bfa; цвета источников модуляции — палитра). Меню Prisma → «Тема»: Prisma / Призма / Неон / Студия / Бумага. Внутри DAW есть пункт «Как в DAW», при нём редактор подписан на `ThemeManager` и перекрашивается на лету. Литеральные цвета в `paint()` запрещены (правило 00), `prisma_ui::colours` удаляется.
-- Тексты: короткие подписи на панелях остаются английскими терминами, как во всех синтах (OSC A, CUTOFF, RES, ENV 1), меню, подсказки, диалоги, браузер — на русском, в `plugins/prisma/Source/PrismaStrings.h`.
-- Подсказки: `juce::TooltipWindow` с задержкой 700 мс, у каждой ручки — название, текущее значение, что делает и список модуляций. Внизу строка информации (как InfoBar в 01) с тем же текстом для элемента под мышью. В меню — «Подсказки вкл/выкл».
-- `ModKnob` (наследник `juce::Slider`): вертикальное перетаскивание, `Shift` — точно, двойной щелчок — значение по умолчанию, `Cmd`-щелчок — ввод числа, колесо мыши, значение во всплывающей метке при перетаскивании, правая кнопка: «Сбросить», «Ввести значение…», список модуляций этой ручки, «Убрать все модуляции». Привязка к параметру через `ParameterAttachment`, жест перетаскивания — `beginChangeGesture` / `endChangeGesture` (хосты пишут автоматизацию корректно).
-- Отмена в плагине: `juce::UndoManager` процессора для параметров APVTS и структуры (маршруты, порядок FX, формы LFO, таблицы), `Cmd+Z` / `Cmd+Shift+Z` при фокусе на редакторе. Жест ручки — одна транзакция.
+- Base editor size 1100 × 720. Scale 75, 100, 125, 150, 175, 200% from the menu and free resizing by the corner with a locked aspect ratio (`ComponentBoundsConstrainer` with a fixed ratio). Implementation: everything is laid out in base coordinates in an inner component, and the editor applies `AffineTransform::scale` to it. The scale is remembered in the plugin state (`UI scale`) and in the settings as the default for new instances.
+- Everything is drawn as vectors (`juce::Path`, fonts), there are no raster UI images. Heavy static layers (grid, panel backgrounds, the 3D table view) are cached in a `juce::Image` taking into account the scale and screen density (`Desktop::getDisplays().getDisplayForRect (…)->scale`) and rebuilt when the scale, theme or data change, so it stays sharp on Retina.
+- Theme: the `Theme` tokens from 01, task 1.8. The token structure and the JSON parsing move from `app/Source/ui/Theme` into a shared static library `ui/common/` (CMake target `daw_ui`, depends only on `juce_gui_basics`), used by both the app and the plugin. `ThemeManager` stays in the app.
+- Prisma has its own default theme `prisma.json` (colors from the current `prisma_ui::colours`: background #121419, panel #1c2027, border #2a303a, text #d8dee9, secondary #7d8796, accent #4fd1c5, accent 2 #a78bfa; modulation source colors are a palette). Prisma menu → "Theme": Prisma / Prism / Neon / Studio / Paper. Inside the DAW there is a "Match DAW" item; with it the editor subscribes to `ThemeManager` and recolors on the fly. Literal colors in `paint()` are forbidden (rule 00), `prisma_ui::colours` is removed.
+- Text: short labels on panels stay as the usual English synth terms (OSC A, CUTOFF, RES, ENV 1); menus, tooltips, dialogs and the browser are in English by default with Russian as a second language, in `plugins/prisma/Source/PrismaStrings.h`.
+- Tooltips: `juce::TooltipWindow` with a 700 ms delay; every knob shows its name, current value, what it does and its list of modulations. At the bottom, an info line (like the InfoBar in 01) with the same text for the element under the mouse. In the menu: "Tooltips On/Off".
+- `ModKnob` (a subclass of `juce::Slider`): vertical drag, `Shift` for fine control, double click for the default value, `Cmd`-click to type a number, mouse wheel, the value in a popup label while dragging, right click: "Reset", "Enter Value…", the list of this knob's modulations, "Remove All Modulations". Binding to the parameter through `ParameterAttachment`, the drag gesture is `beginChangeGesture` / `endChangeGesture` (so hosts record automation correctly).
+- Undo in the plugin: the processor's `juce::UndoManager` for APVTS parameters and the structure (routes, FX order, LFO shapes, tables), `Cmd+Z` / `Cmd+Shift+Z` while the editor has focus. A knob gesture is one transaction.
 
-## Задача 9.16. Интерфейс: вкладки
+## Task 9.16. Interface: tabs
 
-Шапка (всегда видна): логотип PRISMA, вкладки `OSC · MOD · FX · MATRIX · GLOBAL`, полоса пресета, мини-осциллограф, ручка Master, голоса и нагрузка, меню. Низ (всегда виден): полоса источников модуляции — ENV 1–4, LFO 1–4, MACRO 1–8 (ручки с именами), VEL, NOTE, WHEEL; у каждого источника ручка-«захват» для перетаскивания (9.17). Под ней по кнопке — экранная клавиатура (`KeyboardPanel` как сейчас).
+Header (always visible): the PRISMA logo, the tabs `OSC · MOD · FX · MATRIX · GLOBAL`, the preset bar, a mini oscilloscope, the Master knob, voices and load, the menu. Bottom (always visible): the modulation source strip: ENV 1–4, LFO 1–4, MACRO 1–8 (knobs with names), VEL, NOTE, WHEEL; each source has a "grab" handle for dragging (9.17). Below it, behind a button, the on-screen keyboard (`KeyboardPanel` as now).
 
-- **OSC**: слева столбец SUB (вкл, октава, уровень, в фильтр) и NOISE (выбор сэмпла, уровень, высота, ключ, фаза, панорама, в фильтр). В центре OSC A и OSC B: вид таблицы (2D/3D), имя таблицы с ◀ ▶ и меню (заводские по папкам, «Импорт WAV…», «Экспорт WAV…», «Edit…»), WT POS, WARP (режим и количество), UNISON, DETUNE, BLEND, MODE, OCT/SEMI/FINE, PHASE, RAND, PAN, LEVEL. Справа FILTER: меню типа по группам (Normal, Ladder, Multi, Misc), кривая АЧХ фильтра с маркером среза, который тянется мышью (X — срез, Y — резонанс), CUTOFF, RES, DRIVE, MIX, SPREAD, MORPH, PAN, KEY, ENV AMT, кнопки маршрута A B N S. Под осцилляторами компактный редактор выбранного в нижней полосе ENV или LFO.
-- **MOD**: четыре редактора огибающих (графика с точками A/H/D/S/R, кривые тянутся за середину отрезка) и четыре редактора LFO: сетка (4/8/16/32 по X), добавление точки двойным щелчком, удаление правой кнопкой, кривая тянется за середину, `Shift` — без привязки, готовые формы в меню (синус, треугольник, пила, квадрат, гейт 1/16, ступеньки), режимы TRIG / ENV / FREE, синк, деление, RISE, DELAY, PHASE, SMOOTH, UNI. Бегущая точка текущей фазы LFO последнего голоса.
-- **FX**: слева рэк из 10 строк (выключатель, имя, ≡ для перетаскивания порядка), справа панель выбранного эффекта с ручками и дисплеем: EQ — кривая с тремя точками, компрессор — индикаторы ослабления по полосам, дилей — время L/R в мс или долях, ревербератор — силуэт хвоста, дисторшн — кривая передачи.
-- **MATRIX**: таблица 32 строк: источник (меню), кривая (мини-график, тянется вверх/вниз), количество (биполярный горизонтальный ползунок), цель (иерархическое меню по группам с поиском), aux-источник, uni/bi, ×. Пустые строки скрываются кнопкой «Только занятые». Здесь же переименование макросов.
-- **GLOBAL**: голосоведение (POLY, MONO, LEGATO, GLIDE, `glide_always`), BEND, `master_tune` (−100…100 центов), `osc_hq`, VEL SENS, большой осциллограф и спектр, путь к User Library, «О программе» (версия, лицензия AGPLv3, OFL шрифтов).
+- **OSC**: on the left, a column with SUB (on, octave, level, to filter) and NOISE (sample selection, level, pitch, key, phase, pan, to filter). In the center, OSC A and OSC B: the table view (2D/3D), the table name with ◀ ▶ and a menu (factory tables by folder, "Import WAV…", "Export WAV…", "Edit…"), WT POS, WARP (mode and amount), UNISON, DETUNE, BLEND, MODE, OCT/SEMI/FINE, PHASE, RAND, PAN, LEVEL. On the right, FILTER: a type menu grouped (Normal, Ladder, Multi, Misc), the filter's frequency response curve with a cutoff marker that can be dragged with the mouse (X is cutoff, Y is resonance), CUTOFF, RES, DRIVE, MIX, SPREAD, MORPH, PAN, KEY, ENV AMT, route buttons A B N S. Below the oscillators, a compact editor for the ENV or LFO selected in the bottom strip.
+- **MOD**: four envelope editors (graphics with A/H/D/S/R points, curves are dragged by the middle of a segment) and four LFO editors: a grid (4/8/16/32 on X), adding a point with a double click, deleting with a right click, the curve is dragged by its middle, `Shift` disables snapping, ready shapes in a menu (sine, triangle, saw, square, gate 1/16, steps), modes TRIG / ENV / FREE, sync, division, RISE, DELAY, PHASE, SMOOTH, UNI. A running dot shows the current LFO phase of the last voice.
+- **FX**: on the left, a rack of 10 rows (on/off switch, name, ≡ to drag the order), on the right, the panel of the selected effect with knobs and a display: EQ, a curve with three points; compressor, gain reduction meters per band; delay, L/R time in ms or beats; reverb, a tail silhouette; distortion, a transfer curve.
+- **MATRIX**: a table of 32 rows: source (menu), curve (a mini graph, dragged up/down), amount (a bipolar horizontal slider), destination (a hierarchical menu by group with search), aux source, uni/bi, ×. Empty rows are hidden with the "Used Only" button. Macros are also renamed here.
+- **GLOBAL**: voicing (POLY, MONO, LEGATO, GLIDE, `glide_always`), BEND, `master_tune` (−100…100 cents), `osc_hq`, VEL SENS, a large oscilloscope and spectrum, the User Library path, "About" (version, AGPLv3 license, OFL for fonts).
 
-## Задача 9.17. Модуляция перетаскиванием и живое отображение
+## Task 9.17. Drag-and-drop modulation and live display
 
-- Перетаскивание: захват источника — источник `DragAndDropContainer` с описанием `{ "prismaModSource": "<id>" }`. Каждая `ModKnob` модулируемого параметра — цель: при наведении подсвечивается цветом источника. Бросание создаёт маршрут в первом свободном слоте с `amount = +0,25` (одна транзакция «Модуляция LFO 1 → Cutoff»). Если такой маршрут уже есть — ничего не создаётся, маршрут выделяется. Нет свободного слота — подсказка «Все 32 слота модуляции заняты».
-- Кольцо: вокруг ручки дуга цвета источника от базового значения до базового + глубина (биполярная — в обе стороны). Несколько маршрутов — несколько колец с отступом 2 px, до 4, дальше метка «+N». `Alt`-перетаскивание по ручке меняет глубину выделенного маршрута этой ручки (выделяется щелчком по кольцу или последним созданием). Щелчок по захвату источника выделяет его: тогда все ручки показывают только его кольца.
-- Живое значение: аудиопоток в конце блока пишет в `std::array<std::atomic<float>, kMaxModDest>` модулированные нормированные значения последнего начатого голоса (и глобальные для FX), плюс счётчик активных голосов. Интерфейс читает их таймером 30 Гц и рисует на ручке точку текущего значения. Если голосов нет — точки нет. Перерисовываются только ручки, у которых значение изменилось больше чем на 0,002.
-- Те же атомики дают бегущие точки LFO и огибающих в MOD.
+- Dragging: a source's grab handle is a `DragAndDropContainer` source with the description `{ "prismaModSource": "<id>" }`. Every `ModKnob` of a modulatable parameter is a target: on hover it highlights in the source's color. Dropping creates a route in the first free slot with `amount = +0.25` (one transaction "Modulation LFO 1 → Cutoff"). If such a route already exists, nothing is created and the route is selected. If there is no free slot, the hint "All 32 modulation slots are in use".
+- Ring: around the knob, an arc in the source's color from the base value to base + depth (bipolar goes both ways). Several routes give several rings with a 2 px gap, up to 4, beyond that a "+N" label. `Alt`-dragging the knob changes the depth of this knob's selected route (selected by clicking its ring or by having just been created). Clicking a source's grab handle selects it: then all knobs show only its rings.
+- Live value: at the end of each block the audio thread writes into `std::array<std::atomic<float>, kMaxModDest>` the modulated normalized values of the most recently started voice (and the global ones for FX), plus an active voice counter. The UI reads them on a 30 Hz timer and draws a dot for the current value on the knob. If there are no voices, there is no dot. Only knobs whose value changed by more than 0.002 are repainted.
+- The same atomics drive the running dots of LFOs and envelopes in MOD.
 
-## Задача 9.18. Визуализация
+## Task 9.18. Visualization
 
-- Вид таблицы 2D: текущий кадр с учётом позиции и warp (через ту же функцию фазы, что в звуке, 512 точек). 3D: стопка до 64 кадров (прореживание, если больше) в изометрии, текущий кадр подсвечен акцентом. Переключатель 2D/3D у каждого осциллятора, 3D кэшируется в изображение и пересобирается только при смене таблицы.
-- Осциллограф и спектр: аудиопоток пишет моно-сумму выхода в SPSC-кольцо на 4096 сэмплов (`juce::AbstractFifo`, без блокировок). Осциллограф синхронизируется по переходу через ноль с привязкой к периоду последней ноты. Спектр — FFT 4096 с окном Ханна, логарифмическая ось 20 Гц–20 кГц, сглаживание по времени 0,8. Обновление 30 Гц, мини-вид в шапке и большой в GLOBAL. Когда редактор закрыт, аудиопоток в кольцо не пишет (флаг `std::atomic<bool> scopeWanted`).
+- 2D table view: the current frame with position and warp applied (through the same phase function as in the audio, 512 points). 3D: a stack of up to 64 frames (decimated if there are more) in isometric view, the current frame highlighted with the accent. A 2D/3D switch on each oscillator; 3D is cached as an image and rebuilt only when the table changes.
+- Oscilloscope and spectrum: the audio thread writes the mono sum of the output into a 4096-sample SPSC ring (`juce::AbstractFifo`, lock-free). The oscilloscope triggers on a zero crossing locked to the period of the last note. Spectrum: FFT 4096 with a Hann window, logarithmic axis 20 Hz–20 kHz, time smoothing 0.8. Update at 30 Hz, a mini view in the header and a large one in GLOBAL. When the editor is closed, the audio thread does not write into the ring (flag `std::atomic<bool> scopeWanted`).
 
-## Задача 9.19. Интеграция с DAW
+## Task 9.19. DAW integration
 
-- **Компактное устройство** (детальная панель, 01, задача 1.4, ширина 470 px): полоса пресета с ◀ ▶ и именем (щелчок — меню категорий с подменю пресетов), мини-вид таблицы осц. A, 8 макро-ручек с именами из пресета (неназванные тусклые «Macro N»), ряд из 10 точек-индикаторов включённых эффектов. Правая кнопка по пустому месту: «Показать: Макросы / Основные параметры» (второй вариант — 8 ручек из 01). Двойной щелчок по имени макроса в DAW переименовывает его (пишет в структуру Prisma, транзакция отмены DAW).
-- **Браузер DAW** (01, задача 1.5): категория «Пресеты» → Prisma показывает папки по категориям `PresetCategory`, заводские и пользовательские `.prismapreset`; поиск ищет и по тегам и автору. Предпрослушивание играет фразу категории из 9.12 вместо общего арпеджио. Перетаскивание пресета работает как в 01 (новая дорожка, замена, применение к устройству), применение к устройству — одна транзакция с состоянием до и после.
-- **Автоматизация** (06): список параметров группируется по `group`. Макросы показываются как «Macro 1: Cutoff»: параметр макроса — свой класс-наследник `AudioParameterFloat` с переопределённым `getName`, после переименования процессор вызывает `updateHostDisplay (ChangeDetails().withParameterInfoChanged (true))`. Параметры с `automatable = false` в список автоматизации не попадают.
-- **Состояние в проекте**: `DEVICE state` = `getStateInformation` Prisma (версия 2 с пользовательскими таблицами). Проект фазы 1–8 с Prisma открывается и звучит так же (тест 13).
-- **Сборки**: AU, VST3, Standalone собираются; в CI `auval -strict -v aumu Prsm Dawp` проходит. Число параметров вырастет до нескольких сотен — это нормально для AU и VST3, но проверить, что `auval` не жалуется на время инициализации (>2 с — оптимизировать ленивую статику дескрипторов и разбор пресетов: заводские разбираются при первом обращении к списку, а не в конструкторе процессора).
-- **Производительность**: правило 00, раздел 7 (16 дорожек Prisma × 8 голосов, пресет Init) выполняется по-прежнему; дополнительно в отчёт — тот же прогон с пресетами «Reese Bass» и самым тяжёлым заводским. `tools/prisma_render` получает ключи `--preset <имя>` и `--bench-fx`.
+- **Compact device** (detail panel, 01, task 1.4, width 470 px): a preset bar with ◀ ▶ and the name (a click opens a menu of categories with preset submenus), a mini table view of osc A, 8 macro knobs with names from the preset (unnamed ones dimmed as "Macro N"), a row of 10 indicator dots for enabled effects. Right click on empty space: "Show: Macros / Main Parameters" (the second option is the 8 knobs from 01). Double-clicking a macro name in the DAW renames it (writes to the Prisma structure, a DAW undo transaction).
+- **DAW browser** (01, task 1.5): the "Presets" category → Prisma shows folders by `PresetCategory`, factory and user `.prismapreset`; search also matches tags and author. Preview plays the category phrase from 9.12 instead of the generic arpeggio. Dragging a preset works as in 01 (new track, replace, apply to device); applying to a device is one transaction with the state before and after.
+- **Automation** (06): the parameter list is grouped by `group`. Macros are shown as "Macro 1: Cutoff": the macro parameter is its own subclass of `AudioParameterFloat` with an overridden `getName`; after a rename the processor calls `updateHostDisplay (ChangeDetails().withParameterInfoChanged (true))`. Parameters with `automatable = false` do not appear in the automation list.
+- **State in the project**: `DEVICE state` = Prisma's `getStateInformation` (version 2 with user tables). A phase 1–8 project with Prisma opens and sounds the same (test 13).
+- **Builds**: AU, VST3, Standalone build; in CI `auval -strict -v aumu Prsm Dawp` passes. The parameter count grows to several hundred; that is fine for AU and VST3, but check that `auval` does not complain about initialization time (>2 s: optimize the lazy static for descriptors and preset parsing; factory presets are parsed on the first access to the list, not in the processor constructor).
+- **Performance**: rule 00, section 7 (16 Prisma tracks × 8 voices, Init preset) is still met; in addition, the report includes the same run with the "Reese Bass" preset and the heaviest factory preset. `tools/prisma_render` gets the flags `--preset <name>` and `--bench-fx`.
 
-## Тесты
+## Tests
 
-В `core/tests/` (новые файлы `prisma_compat_tests.cpp`, `prisma_dsp_tests.cpp`, `fx_tests.cpp`, `preset_tests.cpp`) и `tests/` (процессор, редактор, интеграция):
+In `core/tests/` (new files `prisma_compat_tests.cpp`, `prisma_dsp_tests.cpp`, `fx_tests.cpp`, `preset_tests.cpp`) and `tests/` (processor, editor, integration):
 
-1. **Стабильность id.** Каждая строка `prisma_params_v1.txt` совпадает с текущим дескриптором (id, тип, диапазон, `def`, варианты выбора не меньше и первые совпадают по имени). Новые параметры стоят после всех старых. Нет дублей id.
-2. **Звук по умолчанию.** Все новые параметры с `def` и пустая структура: 7 старых пресетов дают отпечаток из `legacy_presets.txt` с отклонением RMS ≤ 0,1 дБ по каждой полосе.
-3. **Перевод старых пресетов.** JSON-версии 7 пресетов дают те же значения параметров, что в `legacy_presets.txt` (посимвольно для `Int`/`Choice`, ±1e-6 для `Float`).
-4. **Частота.** Нота 69, каждый warp-режим с `amt = 0` и Sync / Bend / PWM с `amt = 0,5`: основная частота 440 Гц ±0,5 цента (FFT 65536 с параболической интерполяцией пика). Унисон `Chord Major` из 3 голосов даёт пики на 440, 554,4, 659,3 Гц ±1 цент.
-5. **Алиасинг.** Пила, нота 100, 48 кГц: энергия на негармонических частотах ≤ −60 дБ от основной без warp; Sync 0,7 с `osc_hq` ≤ −50 дБ, без — ≤ −40 дБ. Distortion Tube и Soft Clip, синус 5 кГц, `drive = 1`: продукты, не кратные 5 кГц, ≤ −55 дБ; Hard Clip ≤ −35 дБ.
-6. **Без NaN.** Для каждого типа фильтра, warp-режима, эффекта: 10 с случайных параметров (фиксированное зерно, смена каждые 512 сэмплов), включая крайние значения, — нет NaN, Inf, |x| ≤ 8.
-7. **Null-тест обхода.** Каждый эффект с `mix = 0` даёт выход, равный входу (≤ −120 дБ); выключенный эффект — побитно равный. EQ с нулевым усилением полос и Filter LP на 20 кГц — разница ≤ −60 дБ ниже 15 кГц.
-8. **Перенос 06.** Если DSP устройств 06 переносился в `daw::fx`: рендер каждого устройства до и после совпадает (≤ −120 дБ).
-9. **Латентность.** Для каждого эффекта Prisma измеренная задержка импульса (максимум взаимной корреляции, `mix = 1`, линейные режимы) равна `getLatencySamples()` = 0 ±1 сэмпл (IIR-фазовый сдвиг допускается). `PrismaProcessor::getLatencySamples() == 0`.
-10. **Хвосты и тишина.** После последней ноты и хвоста ревербератора выход ровно 0, денормалей нет, `getNumActiveVoices() == 0`, и следующие 1000 блоков тишины рендерятся минимум в 5 раз быстрее блоков со звуком.
-11. **Wavetable-файлы.** Синтетический WAV с `clm <!>2048`, 16 кадров, float 32 → 16 кадров, данные совпадают; PCM 16 бит; без `clm` длиной 2048·8; одиночный цикл 600 сэмплов → 1 кадр с той же формой (корреляция ≥ 0,999); битый заголовок, 0 байт, 300 кадров (обрезка до 256 с предупреждением). Экспорт → импорт даёт те же кадры.
-12. **Формулы.** `sin(2*pi*x)` даёт синус (ошибка ≤ 1e-5), ошибки синтаксиса возвращают позицию; деление на ноль не даёт NaN в кадре (заменяется 0).
-13. **Состояние.** Процессор с изменёнными параметрами, пользовательской таблицей, формой LFO, порядком FX и именами макросов: `getState` → новый процессор `setState` → `getState` даёт тот же XML; звук первых 2 с совпадает посэмплово. Состояние версии 1 (сохранённое кодом фазы 0, лежит в `tests/data/prisma_state_v1.bin`) загружается и звучит как в тесте 2. Состояние с `stateVersion=99` не роняет процессор.
-14. **Библиотека.** Все заводские пресеты (≥ 150 без Init, по категориям не меньше минимумов из 9.13) разбираются без ошибок и предупреждений, проходят нормы 9.12 (громкость, пик, DC, NaN, скорость, непохожесть). Имена уникальны, теги из словаря.
-15. **Формат пресета.** `writePreset` → `parsePreset` даёт тот же `Preset`; неизвестный id и тег пропускаются с предупреждением; `schema` 3 загружается.
-16. **Мод-матрица.** LFO 1 → `flt_cutoff`, `amount = 1`: нормированный срез проходит 0…1; два маршрута на одну цель складываются; `aux` = 0 гасит маршрут; `curve` меняет форму как формула; цель эффекта берёт значение последнего голоса.
-17. **Реальное время.** С `DAW_RT_CHECKS=ON`: 2000 блоков с 16 голосами, все эффекты включены, параллельно смена пресетов, порядка FX, пользовательской таблицы и форм LFO — 0 выделений в аудиопотоке, нет NaN.
-18. **Интерфейс** (`tests/`, без отображения): редактор создаётся и уничтожается на масштабах 75 и 200 % без утечек; бросание источника на ручку создаёт маршрут в первом свободном слоте; повтор не создаёт второй.
+1. **Id stability.** Every line of `prisma_params_v1.txt` matches the current descriptor (id, type, range, `def`, choice options are not fewer and the first ones match by name). New parameters come after all old ones. No duplicate ids.
+2. **Default sound.** All new parameters at `def` and an empty structure: the 7 old presets give the fingerprint from `legacy_presets.txt` with an RMS deviation ≤ 0.1 dB in every band.
+3. **Old preset conversion.** The JSON versions of the 7 presets give the same parameter values as in `legacy_presets.txt` (exact for `Int`/`Choice`, ±1e-6 for `Float`).
+4. **Pitch.** Note 69, every warp mode with `amt = 0` and Sync / Bend / PWM with `amt = 0.5`: fundamental 440 Hz ±0.5 cent (FFT 65536 with parabolic peak interpolation). Unison `Chord Major` with 3 voices gives peaks at 440, 554.4, 659.3 Hz ±1 cent.
+5. **Aliasing.** Saw, note 100, 48 kHz: energy at inharmonic frequencies ≤ −60 dB relative to the fundamental without warp; Sync 0.7 with `osc_hq` ≤ −50 dB, without it ≤ −40 dB. Distortion Tube and Soft Clip, a 5 kHz sine, `drive = 1`: products that are not multiples of 5 kHz ≤ −55 dB; Hard Clip ≤ −35 dB.
+6. **No NaN.** For every filter type, warp mode and effect: 10 s of random parameters (fixed seed, changed every 512 samples), including extreme values: no NaN, Inf, |x| ≤ 8.
+7. **Bypass null test.** Every effect with `mix = 0` gives an output equal to the input (≤ −120 dB); a disabled effect gives a bit-identical output. EQ with zero band gains and Filter LP at 20 kHz: difference ≤ −60 dB below 15 kHz.
+8. **06 migration.** If the DSP of the 06 devices was moved into `daw::fx`: each device's render before and after matches (≤ −120 dB).
+9. **Latency.** For every Prisma effect, the measured impulse delay (cross-correlation maximum, `mix = 1`, linear modes) equals `getLatencySamples()` = 0 ±1 sample (IIR phase shift is allowed). `PrismaProcessor::getLatencySamples() == 0`.
+10. **Tails and silence.** After the last note and the reverb tail the output is exactly 0, no denormals, `getNumActiveVoices() == 0`, and the next 1000 silent blocks render at least 5 times faster than blocks with sound.
+11. **Wavetable files.** A synthetic WAV with `clm <!>2048`, 16 frames, float 32 → 16 frames, data matches; PCM 16 bit; no `clm` with length 2048·8; a single 600-sample cycle → 1 frame with the same shape (correlation ≥ 0.999); a corrupt header, 0 bytes, 300 frames (truncated to 256 with a warning). Export → import gives the same frames.
+12. **Formulas.** `sin(2*pi*x)` gives a sine (error ≤ 1e-5), syntax errors return the position; division by zero does not put NaN into the frame (replaced with 0).
+13. **State.** A processor with changed parameters, a user table, an LFO shape, an FX order and macro names: `getState` → a new processor `setState` → `getState` gives the same XML; the sound of the first 2 s matches sample for sample. A version 1 state (saved by phase 0 code, stored in `tests/data/prisma_state_v1.bin`) loads and sounds as in test 2. A state with `stateVersion=99` does not crash the processor.
+14. **Library.** All factory presets (≥ 150 excluding Init, each category at least the minimum from 9.13) parse without errors or warnings and meet the 9.12 requirements (loudness, peak, DC, NaN, speed, distinctness). Names are unique, tags come from the dictionary.
+15. **Preset format.** `writePreset` → `parsePreset` gives the same `Preset`; an unknown id and tag are skipped with a warning; `schema` 3 loads.
+16. **Mod matrix.** LFO 1 → `flt_cutoff`, `amount = 1`: the normalized cutoff sweeps 0…1; two routes to one destination add up; `aux` = 0 mutes the route; `curve` changes the shape per the formula; an effect destination takes the value of the last voice.
+17. **Real time.** With `DAW_RT_CHECKS=ON`: 2000 blocks with 16 voices, all effects enabled, while presets, FX order, the user table and LFO shapes change in parallel: 0 allocations on the audio thread, no NaN.
+18. **Interface** (`tests/`, headless): the editor is created and destroyed at 75 and 200% scale without leaks; dropping a source on a knob creates a route in the first free slot; repeating it does not create a second one.
 
-## Готово, когда
+## Done when
 
-- [ ] Тесты 1–3 зелёные: старые проекты и пресеты звучат как раньше, id параметров не изменились.
-- [ ] Импортирована таблица из Serum (`.wav` с `clm`) и экспортированная Prisma таблица открывается в Vital (ручная проверка на Mac, скриншот).
-- [ ] Все 14 режимов warp, 16 типов фильтра, 4 огибающие, 4 LFO с рисуемой формой, 8 макросов и 32 слота матрицы работают; тесты 4–6, 16 зелёные.
-- [ ] Десять эффектов в рэке переставляются, включаются без щелчков, укладываются в бюджет 9.9 (цифры в отчёте), DSP в `daw::fx` используется и Prisma, и устройствами 06; тесты 7–10 зелёные.
-- [ ] 150+ заводских пресетов по категориям проходят `prisma_preset validate` и `measure --check` в CI; `resources/presets/prisma/README.md` с рецептами есть.
-- [ ] Браузер в плагине: категории, теги, поиск, избранное, ◀ ▶, сохранение своего пресета; свой пресет виден в браузере DAW без перезапуска.
-- [ ] Редактор масштабируется 75–200 % и чёткий на Retina; скриншоты всех пяти вкладок на 100 % и вкладки OSC на 200 % в теме Prisma, плюс OSC во всех четырёх темах DAW (Xvfb, Standalone `Prisma_artefacts/Release/Standalone/Prisma`), итоговые в `media/`.
-- [ ] LFO перетаскивается на срез: кольцо глубины, `Alt`-перетаскивание меняет глубину, точка живого значения движется.
-- [ ] В DAW: компактное устройство с 8 макросами и стрелками пресетов, предпрослушивание фразой категории, автоматизация показывает «Macro 1: Cutoff», проект сохраняется и открывается с тем же звуком (тест 13).
-- [ ] `auval -strict` проходит, VST3 и Standalone собираются, правило 00, раздел 7 выполняется (цифры в отчёте).
-- [ ] Все тесты из списка написаны и зелёные, старые тоже. CI зелёный, DMG собирается.
-- [ ] README обновлён: возможности Prisma, горячие клавиши редактора, скриншоты; ARCHITECTURE.md — строка Prisma в таблице инструментов.
+- [ ] Tests 1–3 are green: old projects and presets sound as before, parameter ids have not changed.
+- [ ] A wavetable made in another wavetable synth (a `.wav` with `clm`) is imported, and a table exported by Prisma opens in another wavetable synth (manual check on the Mac, screenshot).
+- [ ] All 14 warp modes, 16 filter types, 4 envelopes, 4 LFOs with drawable shapes, 8 macros and 32 matrix slots work; tests 4–6, 16 are green.
+- [ ] The ten effects in the rack can be reordered, switch on without clicks, fit the 9.9 budget (figures in the report), the DSP in `daw::fx` is used by both Prisma and the 06 devices; tests 7–10 are green.
+- [ ] 150+ factory presets by category pass `prisma_preset validate` and `measure --check` in CI; `resources/presets/prisma/README.md` with recipes exists.
+- [ ] Browser in the plugin: categories, tags, search, favorites, ◀ ▶, saving your own preset; your own preset is visible in the DAW browser without a restart.
+- [ ] The editor scales 75–200% and is sharp on Retina; screenshots of all five tabs at 100% and the OSC tab at 200% in the Prisma theme, plus OSC in all four DAW themes (Xvfb, Standalone `Prisma_artefacts/Release/Standalone/Prisma`), final ones in `media/`.
+- [ ] An LFO is dragged onto the cutoff: depth ring, `Alt`-drag changes the depth, the live value dot moves.
+- [ ] In the DAW: a compact device with 8 macros and preset arrows, preview with the category phrase, automation shows "Macro 1: Cutoff", the project saves and opens with the same sound (test 13).
+- [ ] `auval -strict` passes, VST3 and Standalone build, rule 00, section 7 is met (figures in the report).
+- [ ] All tests in the list are written and green, the old ones too. CI is green, the DMG builds.
+- [ ] README updated: Prisma features, editor shortcuts, screenshots; ARCHITECTURE.md: the Prisma row in the instruments table.

@@ -1,134 +1,134 @@
-# Prisma Voice — вокальная коррекция и изменение тембра
+# Prisma Voice: vocal correction and timbre change
 
-Отдельный плагин **VST3 / AU / Standalone**, подготовленный для дальнейшей интеграции тимлидом
-в экосистему DAW. Рабочее название — Prisma Voice; юридическая доступность бренда не проверена.
-Документацию подготовил Codex 17 октября 2026 года по реализованной версии.
+A standalone **VST3 / AU / Standalone** plugin, prepared for later integration into the DAW ecosystem
+by the team lead. The working name is Prisma Voice; the legal availability of the brand has not been checked.
+Documentation prepared by Codex on October 17, 2026, for the implemented version.
 
-## Два сценария
+## Two scenarios
 
-**Live / Auto** обрабатывает звук непрерывно. Один и тот же плагин можно поставить на живой
-микрофонный вход либо на дорожку с уже записанным вокалом: отдельный импорт для этого не нужен.
+**Live / Auto** processes audio continuously. The same plugin can be placed on a live
+microphone input or on a track with already recorded vocals: no separate import is needed for that.
 
-**Phrase editor** работает с локальной фразой: импорт или захват входа, распознавание нот,
-ручная смена их целевой высоты, пересчёт, прослушивание и WAV. Ручные правки этого редактора
-не подменяют автоматически клип хоста: для возврата результата используется экспорт файла.
-ARA и нативная связь с клипами Prisma пока не реализованы.
+**Phrase editor** works with a local phrase: import or input capture, note detection,
+manually changing their target pitch, re-rendering, listening and WAV. Manual edits in this editor
+do not automatically replace the host's clip: a file export is used to bring the result back.
+ARA and a native link with Prisma clips are not implemented yet.
 
-![Автоматическая обработка](../../media/voicer-preview.png)
+![Automatic processing](../../media/voicer-preview.png)
 
-## Автоматическая обработка
+## Automatic processing
 
-1. Загрузить плагин **эффектом на аудиодорожку** с сухим одноголосным вокалом.
-2. Для живого входа включить мониторинг в хосте. В Standalone выбрать устройство и вход
-   через Options; при необходимости разрешить доступ к микрофону. Использовать наушники.
-3. Выбрать тонику и лад: Chromatic, Major, Minor или Minor pentatonic.
-4. Настроить Correction и Retune, затем характер голоса и дополнительные эффекты.
-5. Сравнить обработку с исходником кнопкой Compare dry, следить за уровнем выхода.
+1. Load the plugin **as an effect on an audio track** with a dry monophonic vocal.
+2. For a live input, enable monitoring in the host. In the Standalone, choose the device and input
+   via Options; allow microphone access if needed. Use headphones.
+3. Choose the root and scale: Chromatic, Major, Minor or Minor pentatonic.
+4. Set Correction and Retune, then the voice character and the extra effects.
+5. Compare the processing with the source using the Compare dry button, and watch the output level.
 
-| Настройка | Поведение |
+| Setting | Behavior |
 | --- | --- |
-| Correction | Сила притяжения к ближайшей разрешённой ноте |
-| Retune | Сглаживание изменения коррекции, от мгновенного до 300 мс |
-| Natural drift | Небольшая зона около целевой ноты без полного выпрямления высоты; не отдельный анализатор вибрато |
-| Transpose | Общая транспозиция от −12 до +12 полутонов |
-| Formant | Изменение спектрального характера голоса от −12 до +12 полутонов |
-| Preserve formants | Компенсация изменения формант при транспозиции |
-| Wet / dry | Смесь исходника и обработки с выравниванием алгоритмической задержки |
-| Compression | Базовое динамическое выравнивание с фиксированным порогом |
-| De-ess | Динамическое ослабление высокочастотной составляющей |
-| Drive | Насыщение |
-| Doubler | Короткие различающиеся задержки по каналам |
-| Echo | Эхо с фиксированным временем около 240 мс и обратной связью |
-| Reverb | Реверберация |
-| Output | Общий уровень |
+| Correction | Strength of the pull toward the nearest allowed note |
+| Retune | Smoothing of correction changes, from instant to 300 ms |
+| Natural drift | A small zone around the target note without full pitch straightening; not a separate vibrato analyzer |
+| Transpose | Overall transposition from −12 to +12 semitones |
+| Formant | Change of the voice's spectral character from −12 to +12 semitones |
+| Preserve formants | Compensation of formant changes during transposition |
+| Wet / dry | Mix of the source and the processing, aligned for algorithmic latency |
+| Compression | Basic dynamic leveling with a fixed threshold |
+| De-ess | Dynamic attenuation of the high-frequency content |
+| Drive | Saturation |
+| Doubler | Short delays that differ per channel |
+| Echo | Echo with a fixed time of about 240 ms and feedback |
+| Reverb | Reverberation |
+| Output | Overall level |
 
-Показаны распознанная и целевая ноты, история измеренной высоты, уровни и задержка DSP.
-Все перечисленные параметры автоматизируются и сохраняются хостом. Автоопределения тональности
-нет: Chromatic — начальный вариант, музыкальный лад выбирается пользователем.
+The detected and target notes, the measured pitch history, levels and DSP latency are shown.
+All listed parameters are automatable and saved by the host. There is no automatic key
+detection: Chromatic is the initial choice, and the musical scale is chosen by the user.
 
-**Текущая алгоритмическая задержка — 40 мс при 48 кГц**, дополнительно к аудиоустройству.
-Плагин сообщает её хосту; движок учитывает её в dry/wet, а экспорт фразы удаляет соответствующий
-преролл. Это ещё не комфортный малозадержечный мониторинг для всех исполнителей.
-До публичного live-релиза нужно снизить задержку и проверить качество на настоящем вокале.
+**The current algorithmic latency is 40 ms at 48 kHz**, on top of the audio device.
+The plugin reports it to the host; the engine accounts for it in dry/wet, and the phrase export removes the corresponding
+pre-roll. This is not yet comfortable low-latency monitoring for every performer.
+Before a public live release, the latency has to be reduced and the quality checked on real vocals.
 
-## Редактор фразы
+## Phrase editor
 
-![Ручная работа с фразой](../../media/voicer-editor-preview.png)
+![Manual phrase editing](../../media/voicer-editor-preview.png)
 
-- **Import**: WAV, AIFF, FLAC или MP3, один или два канала, до 30 секунд, 8–192 кГц.
-  Более длинный файл отклоняется, а не обрезается незаметно.
-- **Capture input**: запись сухого входа самого плагина, до его обработки. Максимум 30 секунд;
-  **Stop** завершает захват. Хост должен реально передавать аудио: кнопка не включает запись
-  дорожки и не запускает транспорт DAW.
-- После остановки выполняется локальный анализ. Прежде чем закрывать редактор или сохранять
-  проект, лучше дождаться завершения анализа. Закрытие редактора запрашивает остановку захвата.
-- Серые сегменты представляют распознанные ноты. Выбрать сегмент и изменить **Note target**;
-  ручная цель может отстоять от исходной ноты не более чем на октаву. Вручную заданная нота
-  имеет приоритет над ладом; сила и скорость коррекции остаются общими.
-- **Reset note** снимает ручную цель. **Undo / Redo**, Cmd+Z / Cmd+Shift+Z отменяют правки
-  целей внутри текущего сеанса редактора.
-- **Render edits** пересчитывает фразу с текущими параметрами и ручными целями. Изменение
-  параметров после рендера требует нового пересчёта: готовый результат является снимком настроек.
-- **Audition** проигрывает результат через выход плагина, временно заменяя его живую обработку.
-  Это локальное прослушивание, не синхронизация с транспортом. Хост должен продолжать аудиообработку.
-- **Export WAV** сохраняет 24-битный WAV с частотой исходной фразы. При превышении 0 dBFS
-  экспорт блокируется: уменьшить Output и пересчитать. Автонормализация не применяется.
-  При пространственных эффектах экспорт содержит дополнительный хвост.
+- **Import**: WAV, AIFF, FLAC or MP3, one or two channels, up to 30 seconds, 8–192 kHz.
+  A longer file is rejected rather than silently truncated.
+- **Capture input**: recording of the plugin's own dry input, before its processing. Maximum 30 seconds;
+  **Stop** ends the capture. The host must actually pass audio: the button does not arm the
+  track or start the DAW transport.
+- After stopping, local analysis runs. Before closing the editor or saving
+  the project, it is better to wait for the analysis to finish. Closing the editor requests that the capture stop.
+- Gray segments are the detected notes. Select a segment and change **Note target**;
+  a manual target can be at most an octave away from the original note. A manually set note
+  takes priority over the scale; correction strength and speed remain global.
+- **Reset note** clears the manual target. **Undo / Redo**, Cmd+Z / Cmd+Shift+Z undo target
+  edits within the current editor session.
+- **Render edits** re-renders the phrase with the current parameters and manual targets. Changing
+  parameters after a render requires a new render: the finished result is a snapshot of the settings.
+- **Audition** plays the result through the plugin output, temporarily replacing its live processing.
+  This is local listening, not synchronized with the transport. The host must keep processing audio.
+- **Export WAV** saves a 24-bit WAV at the source phrase's sample rate. If the result exceeds 0 dBFS,
+  export is blocked: lower Output and render again. No automatic normalization is applied.
+  With spatial effects, the export contains an extra tail.
 
-Исходная фраза и ручные цели сохраняются в состоянии плагина вместе с параметрами.
-Аудио хранится внутри состояния, поэтому проект может заметно увеличиться: это осознанный
-простой способ сделать отдельный плагин переносимым до нативной интеграции.
-Завершённый, ещё не проанализированный захват также может сохраняться как исходная фраза;
-незавершённая запись не считается готовым сохранённым дублем.
-История Undo и пересчитанный кэш прослушивания в состояние не включаются.
+The source phrase and the manual targets are saved in the plugin state together with the parameters.
+The audio is stored inside the state, so the project can grow noticeably: this is a deliberately
+simple way to make a standalone plugin portable until native integration.
+A finished capture that has not been analyzed yet can also be saved as the source phrase;
+an unfinished recording is not considered a finished saved take.
+The Undo history and the rendered audition cache are not included in the state.
 
-## Границы этой версии
+## Limits of this version
 
-Это первая рабочая версия, не подтверждённая замена AutoTune или Melodyne.
+This is a first working version, not a proven replacement for dedicated pitch-correction tools.
 
-- Рассчитана на сухой **одноголосный вокал**; хор, полный микс, сильная реверберация и шум
-  могут давать ошибки распознавания. Диапазон оценивания высоты приблизительно 65–1000 Гц.
-- Редактор меняет целевую высоту сегментов. Нет растяжения отдельных слогов, перетаскивания
-  границ нот, детальной кривой вибрато, полифонии и отдельных формант для каждой ноты.
-- Изменение тембра выполняется DSP-обработкой. AI-конверсии, клонирования голосов и нейросетевых
-  моделей нет. Гармонизатор и полноценная очистка шумного вокала также не заявлены.
-- Текущие параметры и простой набор эффектов требуют прослушивания и настройки на реальных
-  записях. Численные DSP-тесты не подтверждают естественность голоса.
-- Проверена сборка для Apple Silicon. Проверки в сторонних DAW, AU validation, микрофонного
-  маршрута, Intel/universal и полного пользовательского сценария с выбором файлов ещё нужны.
-- Локальная тестовая сборка имеет ad-hoc подпись, а не Developer ID / нотарификацию Apple.
+- It is designed for a dry **monophonic vocal**; a choir, a full mix, heavy reverb and noise
+  can cause detection errors. The pitch estimation range is approximately 65–1000 Hz.
+- The editor changes the target pitch of segments. There is no stretching of individual syllables, no dragging of
+  note boundaries, no detailed vibrato curve, no polyphony and no per-note formants.
+- Timbre change is done with DSP processing. There is no AI conversion, voice cloning or neural
+  network models. A harmonizer and full cleanup of noisy vocals are also not claimed.
+- The current parameters and the simple effect set need listening and tuning on real
+  recordings. Numerical DSP tests do not confirm how natural the voice sounds.
+- The build for Apple Silicon has been checked. Checks in third-party DAWs, AU validation, the microphone
+  route, Intel/universal and the full user scenario with file selection are still needed.
+- The local test build has an ad-hoc signature, not a Developer ID / Apple notarization.
 
-## Материалы разработчику
+## Developer materials
 
-- [Сборка и карта исходников](../../plugins/voicer/README.md).
-- [Передача тимлиду: API, состояние и интеграционные риски](../VOICER-HANDOFF.md).
-- [Зависимости, версии и лицензии](../../plugins/voicer/ThirdParty/UPSTREAM.md).
-- [Синтетическая проверка звука](../../media/voicer-dsp-test.wav): исходник, автокоррекция, ручная цель.
+- [Build and source map](../../plugins/voicer/README.md).
+- [Handoff to the team lead: API, state and integration risks](../VOICER-HANDOFF.md).
+- [Dependencies, versions and licenses](../../plugins/voicer/ThirdParty/UPSTREAM.md).
+- [Synthetic sound check](../../media/voicer-dsp-test.wav): source, auto correction, manual target.
 
-Код интеграции следует AGPLv3 репозитория. Signalsmith Stretch/Linear — MIT, Onest — SIL OFL;
-их уведомления сохранены и включаются в комплект. Обработка локальная, облачных сервисов нет.
+The integration code follows the repository's AGPLv3. Signalsmith Stretch/Linear are MIT, Onest is SIL OFL;
+their notices are kept and included in the bundle. Processing is local, with no cloud services.
 
-## Если запись не видна или не слышна
+## If the recording is not visible or audible
 
-В Standalone открыть **Options → Audio/MIDI Settings**, выбрать микрофон и снять
-**Mute audio input**. JUCE изначально отключает вход для защиты от обратной связи;
-использовать наушники. Разрешить доступ к микрофону в настройках macOS.
-При речи должен двигаться **INPUT** (шкала теперь логарифмическая, от −60 dBFS).
-В DAW проверить маршрутизацию входа и непрерывную аудиообработку.
+In the Standalone, open **Options → Audio/MIDI Settings**, choose the microphone and uncheck
+**Mute audio input**. JUCE disables the input by default to protect against feedback;
+use headphones. Allow microphone access in the macOS settings.
+When speaking, **INPUT** should move (the meter is now logarithmic, from −60 dBFS).
+In a DAW, check the input routing and continuous audio processing.
 
-После Capture input → Stop редактор показывает волну исходника независимо от распознавания
-нот. **Play original** позволяет услышать исходную запись без рендера. Для обработанного
-результата нужны **Render edits → Audition**. Если захвачена тишина, строка состояния
-прямо сообщает об этом; отсутствие нот само по себе не означает отсутствие аудио.
+After Capture input → Stop, the editor shows the source waveform regardless of note
+detection. **Play original** lets you hear the source recording without rendering. For the processed
+result you need **Render edits → Audition**. If silence was captured, the status line
+says so directly; the absence of notes by itself does not mean there is no audio.
 
-### Записать и затем послушать в отдельном приложении
+### Record and then listen in the standalone app
 
-В Standalone микрофон теперь по умолчанию **не выводится на колонки**, но поступает
-на индикатор INPUT, в анализатор и в запись. В Options нужно включить сам вход
-(снять Mute audio input) и выбрать микрофон. Затем Capture input → Stop →
-Render edits → Audition. Исходник доступен через Play original.
+In the Standalone, the microphone is now **not sent to the speakers** by default, but it does reach
+the INPUT meter, the analyzer and the recording. In Options you need to enable the input itself
+(uncheck Mute audio input) and choose the microphone. Then Capture input → Stop →
+Render edits → Audition. The source is available via Play original.
 
-**Monitor input (headphones)** отдельно включает живую обработку в наушники.
-Начало записи и запуск прослушивания автоматически выключают этот мониторинг.
-Его разрешение не сохраняется между запусками. В VST3/AU маршрутом мониторинга
-управляет DAW, этот переключатель скрыт и обработка дорожки остаётся включённой.
+**Monitor input (headphones)** separately enables live processing into headphones.
+Starting a recording or starting an audition automatically turns this monitoring off.
+Its enabled state is not saved between launches. In VST3/AU the monitoring route
+is controlled by the DAW, this switch is hidden and the track processing stays on.

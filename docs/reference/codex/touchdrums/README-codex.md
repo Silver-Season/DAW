@@ -1,151 +1,151 @@
-# Prisma Touch — инструмент для игры касаниями
+# Prisma Touch: an instrument played by touch
 
-Самостоятельный элемент проекта DAW: драм-инструмент в форматах **VST3, AU и Standalone**.
-Рабочее название — **Prisma Touch**. Он существует отдельно от wavetable-синтезатора Prisma;
-встроенным Drum Rack станции пока не является.
+A standalone part of the DAW project: a drum instrument in **VST3, AU and Standalone** formats.
+The working name is **Prisma Touch**. It exists separately from the Prisma wavetable synth
+and is not yet the DAW's built-in drum machine.
 
-Документацию подготовил **Codex**, 17 октября 2026 года, по реализованному коду и результатам
-проверки. Идея и направление продукта — Silver-Season; реализация этой версии выполнена
-с помощью Codex. Это описание текущей версии, а не обещание готовности к публичному релизу.
+Documentation prepared by **Codex** on October 17, 2026, based on the implemented code and test
+results. The idea and product direction are by Silver-Season; this version was implemented
+with the help of Codex. This describes the current version and is not a promise of readiness for a public release.
 
-![Интерфейс Prisma Touch](../../media/touchdrums-preview.png)
+![Prisma Touch interface](../../media/touchdrums-preview.png)
 
-## Замысел
+## Concept
 
-Превратить обычный трекпад Mac в небольшую ударную поверхность: пользователь касается
-разных его частей пальцами и играет барабаны без физического клика. Для первого теста
-инструмент сам выдаёт звук, поэтому внешний драм-плагин не нужен.
+Turn an ordinary Mac trackpad into a small percussion surface: the user touches
+different parts of it with their fingers and plays drums without a physical click. For the first test
+the instrument produces sound itself, so no external drum plugin is needed.
 
-Интерфейс следует визуальному языку проекта: фон `#07080d`, светлый текст `#e6e8f2`,
-голубой и фиолетовый акценты, цветовые метки голосов и шрифт Onest. Пэды крупные,
-с волновой миниатюрой, названием звука и MIDI-нотой. Касания и срабатывания отображаются
-на поле. Интерфейс отрисовывается средствами JUCE и поддерживает высокую плотность пикселей.
+The interface follows the project's visual language: background `#07080d`, light text `#e6e8f2`,
+light blue and purple accents, colored voice labels and the Onest font. The pads are large,
+with a waveform thumbnail, the sound's name and its MIDI note. Touches and triggers are shown
+on the surface. The interface is drawn with JUCE and supports high pixel density.
 
-## Быстрый старт
+## Quick start
 
-1. Запустить `Prisma Touch.app` либо загрузить VST3/AU как инструмент в хосте.
-2. В отдельном приложении при необходимости выбрать выход и буфер через
-   **Options → Audio/MIDI Settings**. Начать можно с буфера 128 сэмплов;
-   подходящее значение зависит от устройства и нагрузки.
-3. Нажать **Enable touch**, навести курсор на поле пэдов и поднять пальцы с трекпада.
-4. Касаться поверхности: вся физическая площадь трекпада соответствует сетке **2 × 4**.
-   Верхняя половина — первый ряд, нижняя — второй.
-5. Для нового удара поднять и снова опустить палец. Перемещение уже лежащего пальца
-   перемещает маркер, но не запускает соседние звуки.
-6. **Esc** выключает режим касаний. **Stop sound** выключает его и гасит звучащие голоса.
+1. Launch `Prisma Touch.app` or load the VST3/AU as an instrument in a host.
+2. In the standalone app, if needed, choose the output and buffer via
+   **Options → Audio/MIDI Settings**. A buffer of 128 samples is a good start;
+   the right value depends on the device and load.
+3. Press **Enable touch**, move the cursor over the pad area and lift your fingers off the trackpad.
+4. Touch the surface: the whole physical area of the trackpad maps to a **2 × 4** grid.
+   The top half is the first row, the bottom half is the second.
+5. For a new hit, lift and lower the finger again. Moving a finger that is already resting
+   moves the marker but does not trigger neighboring sounds.
+6. **Esc** turns touch mode off. **Stop sound** turns it off and silences the sounding voices.
 
-Начало последовательности касаний macOS направляет области под курсором.
-Это работа в активном окне инструмента, а не глобальный перехват трекпада.
-При потере окном ключевого фокуса режим выключается. После переключения обратно его
-нужно включить снова. Привычные системные жесты могут влиять на получение касаний.
+macOS directs the start of a touch sequence to the area under the cursor.
+This works in the instrument's active window and is not a global trackpad capture.
+When the window loses key focus, the mode turns off. After switching back it
+has to be enabled again. Familiar system gestures may affect touch delivery.
 
-## Набор звуков и управление
+## Sound set and controls
 
-Встроен один оригинальный синтезированный набор **Prism / Circuit**.
-Сэмплы создаются кодом при подготовке аудио; загруженных сторонних записей нет.
+One original synthesized kit is built in: **Prism / Circuit**.
+The samples are generated by code when audio is prepared; there are no third-party recordings.
 
-| Пэд | Звук | MIDI-нота | Клавиша |
+| Pad | Sound | MIDI note | Key |
 | --- | --- | --- | --- |
-| 1 | Kick — бочка | 36 | A |
-| 2 | Snare — малый | 38 | S |
-| 3 | Closed hat — закрытый хэт | 42 | D |
-| 4 | Open hat — открытый хэт | 46 | F |
-| 5 | Clap — хлопок | 39 | J |
-| 6 | Low tom — низкий том | 45 | K |
-| 7 | Rim — рим | 37 | L |
-| 8 | Perc — перкуссия | 75 | ; |
+| 1 | Kick | 36 | A |
+| 2 | Snare | 38 | S |
+| 3 | Closed hat | 42 | D |
+| 4 | Open hat | 46 | F |
+| 5 | Clap | 39 | J |
+| 6 | Low tom | 45 | K |
+| 7 | Rim | 37 | L |
+| 8 | Perc | 75 | ; |
 
-При выключенных касаниях звуки можно проверять кликом по пэдам. Клавиатура работает
-в сфокусированном редакторе; раскладка указана латинскими буквами.
+With touch off, the sounds can be checked by clicking the pads. The keyboard works
+in the focused editor; the layout is given in Latin letters.
 
-- **Pad level** — уровень выбранного голоса. Пэд выбирается при игре или клике.
-- **Kit tune** — общий строй, от −12 до +12 полутонов; применяется к новым ударам.
-- **Touch velocity** — фиксированная сила новых ударов от касаний, мыши и клавиатуры.
-  Это ручная настройка, не измерение давления пальца.
-- **Master** — общий уровень с плавным изменением усиления.
-- **Output** — индикатор уровня. На выходе используется мягкое ограничение амплитуды.
+- **Pad level**: level of the selected voice. A pad is selected by playing or clicking it.
+- **Kit tune**: overall tuning, from −12 to +12 semitones; applies to new hits.
+- **Touch velocity**: a fixed velocity for new hits from touch, mouse and keyboard.
+  This is a manual setting, not a measurement of finger pressure.
+- **Master**: overall level with smooth gain changes.
+- **Output**: a level meter. Soft amplitude limiting is applied at the output.
 
-Поддерживаются 64 одновременно звучащих голоса. Закрытый хэт приглушает уже звучащие
-открытые хэты коротким спадом. Звуки играют как one-shot; отпускание пальца не обрезает хвост.
-Внешние MIDI-ноты сохраняют входную velocity и позицию внутри аудиоблока.
-Уровни, строй и сила касания сохраняются хостом вместе с состоянием плагина.
-Режим захвата касаний при новом открытии редактора выключен.
+Up to 64 simultaneous voices are supported. The closed hat chokes open hats that are already sounding
+with a short decay. Sounds play as one-shots; lifting the finger does not cut the tail.
+External MIDI notes keep their incoming velocity and position inside the audio block.
+Levels, tuning and touch velocity are saved by the host together with the plugin state.
+Touch capture mode is off when the editor is opened again.
 
-[Послушать демо набора](../../media/touchdrums-demo.wav).
-Это офлайн-паттерн из MIDI-нот, не запись игры пальцами и не встроенный секвенсор.
+[Listen to the kit demo](../../media/touchdrums-demo.wav).
+This is an offline pattern of MIDI notes, not a recording of finger playing and not a built-in sequencer.
 
-## Устройство реализации
+## Implementation
 
-| Файл | Ответственность |
+| File | Responsibility |
 | --- | --- |
-| `plugins/touchdrums/CMakeLists.txt` | Форматы, ресурсы, шрифты и тестовая цель |
-| `Source/Processor.*` | Генерация набора, голоса, MIDI, параметры и состояние |
-| `Source/Editor.*` | Интерфейс, клавиатура, выбор пэда и визуализация |
-| `Source/PadLayout.h` | Единое отображение координат в восемь пэдов |
-| `Source/TouchSurface_mac.mm` | Нативная поверхность AppKit и жизненный цикл касаний |
-| `Source/TouchSurface_fallback.cpp` | Работа без захвата трекпада на других платформах |
-| `Tests.cpp` | Проверки обработки звука и экспорт превью/демо |
+| `plugins/touchdrums/CMakeLists.txt` | Formats, resources, fonts and the test target |
+| `Source/Processor.*` | Kit generation, voices, MIDI, parameters and state |
+| `Source/Editor.*` | Interface, keyboard, pad selection and visualization |
+| `Source/PadLayout.h` | A single mapping from coordinates to the eight pads |
+| `Source/TouchSurface_mac.mm` | The native AppKit surface and the touch lifecycle |
+| `Source/TouchSurface_fallback.cpp` | Operation without trackpad capture on other platforms |
+| `Tests.cpp` | Audio processing checks and export of the preview/demo |
 
-В таблице пути `Source/…` и `Tests.cpp` указаны относительно `plugins/touchdrums/`.
+In the table, the `Source/…` and `Tests.cpp` paths are relative to `plugins/touchdrums/`.
 
-Касания приходят через публичные `NSTouch`/`NSView` API, с отдельной идентичностью каждого
-контакта и обработкой окончания/отмены. Закрытых системных фреймворков и глобальных
-перехватчиков ввода нет. Мышиные события в режиме касаний поглощаются, чтобы системный
-«тап как клик» не давал второй удар.
+Touches arrive through the public `NSTouch`/`NSView` APIs, with a separate identity for each
+contact and handling of end/cancel. There are no private system frameworks or global
+input hooks. Mouse events are swallowed in touch mode so that the system
+"tap to click" does not produce a second hit.
 
-UI передаёт удары аудиопотоку через ограниченную SPSC-очередь. При переполнении событие
-отбрасывается с индикацией `INPUT BUSY`; аудиопоток не ждёт интерфейс. Голоса имеют фиксированную
-ёмкость, подготовленные сэмплы в процессе воспроизведения не меняются.
+The UI passes hits to the audio thread through a bounded SPSC queue. On overflow the event
+is dropped and `INPUT BUSY` is shown; the audio thread does not wait for the UI. Voices have a fixed
+capacity, and prepared samples do not change during playback.
 
-## Сборка и проверенное состояние
+## Build and verified state
 
-Команды сборки, пути установки и экспорт служебных материалов находятся в
-[README инструмента](../../plugins/touchdrums/README.md).
-Цели: `PrismaTouch_VST3`, `PrismaTouch_AU`, `PrismaTouch_Standalone`, `touchdrum_tests`.
-Автоматическая установка плагинов отключена.
+Build commands, install paths and export of auxiliary materials are in the
+[instrument README](../../plugins/touchdrums/README.md).
+Targets: `PrismaTouch_VST3`, `PrismaTouch_AU`, `PrismaTouch_Standalone`, `touchdrum_tests`.
+Automatic plugin installation is disabled.
 
-На 17 октября 2026 года проверены:
+As of October 17, 2026, the following were verified:
 
-- Оптимизированные сборки для Apple Silicon: VST3, AU, Standalone.
-- Успешное создание VST3-манифеста штатным сканером JUCE.
-- Восемь звучащих голосов, временная позиция MIDI-удара, остановка, переполнение очереди,
-  завершение хвостов, сохранение параметров и подготовка на 96 кГц.
-- Отсутствие вызовов `new/delete` в проверяемых проходах обработки аудио,
-  с помощью `RtCheck` проекта.
-- Отрисовка реального редактора, открытие Standalone, включение режима касаний и выход по Esc.
-- Целостность тестового ZIP и строгая проверка локальных ad-hoc подписей трёх пакетов после распаковки.
+- Optimized builds for Apple Silicon: VST3, AU, Standalone.
+- Successful creation of the VST3 manifest by the standard JUCE scanner.
+- Eight sounding voices, timing position of a MIDI hit, stop, queue overflow,
+  tail completion, parameter saving and preparation at 96 kHz.
+- No `new/delete` calls in the checked audio processing passes,
+  using the project's `RtCheck`.
+- Rendering the real editor, opening the Standalone, enabling touch mode and exiting with Esc.
+- Integrity of the test ZIP and strict verification of the local ad-hoc signatures of the three bundles after unpacking.
 
-Подробности окружения и сборки: [технический статус](../TOUCHDRUMS-STATUS.md).
-Тестовые сборки не являются подписанным Developer ID и нотарифицированным публичным релизом.
+Environment and build details: [technical status](../TOUCHDRUMS-STATUS.md).
+Test builds are not a Developer ID signed and notarized public release.
 
-## Что ещё не подтверждено
+## Not yet confirmed
 
-Главная следующая проверка — реальная одновременная игра несколькими пальцами на трекпаде,
-включая отдых пальцев, системные жесты, быстрые повторные удары и переключение окон.
-Автоматизированная проверка мышью и клавиатурой этого не подтверждает.
+The main next check is real simultaneous playing with several fingers on the trackpad,
+including resting fingers, system gestures, fast repeated hits and window switching.
+Automated mouse and keyboard checks do not confirm this.
 
-Также нужны проверки внутри Ableton и других хостов, при нескольких экземплярах плагина,
-на Intel/universal-сборке и с разными буферами аудиоустройства.
-Наличие собранного AU ещё не означает прохождения всех проверок конкретного AU-хоста.
+Checks are also needed inside different hosts, with several plugin instances,
+on an Intel/universal build and with different audio device buffers.
+Having a built AU does not yet mean it passes all checks of a particular AU host.
 
-## Возможные следующие шаги
+## Possible next steps
 
-Эти пункты пока не реализованы и не входят в завершённую версию:
+These items are not implemented yet and are not part of the finished version:
 
-- MIDI-выход для управления внешними драм-инструментами и записи нот в хосте.
-- Пользовательские сэмплы, другие наборы и сохраняемые раскладки.
-- Настраиваемые зоны, роллы и управление параметрами жестами.
-- Дополнительные способы задания velocity; давление нельзя обещать без отдельной проверки API.
-- Локализация и дальнейшая проверка доступности интерфейса.
-- Подготовка установщика, подписи, нотарификации и публикации.
+- MIDI output for controlling external drum instruments and recording notes in the host.
+- User samples, other kits and saved layouts.
+- Configurable zones, rolls and parameter control with gestures.
+- Additional ways to set velocity; pressure cannot be promised without a separate check of the API.
+- Localization and further accessibility checks of the interface.
+- Preparing an installer, signing, notarization and publishing.
 
-Перед добавлением функций имеет смысл сначала проверить удобство самой игры и задержку.
-После первого теста разработка приостановлена по решению пользователя; этот список —
-возможные направления, а не обязательство выполнить их автоматически.
+Before adding features, it makes sense to first check the playability itself and the latency.
+After the first test, development was paused by the user's decision; this list is
+a set of possible directions, not a commitment to carry them out automatically.
 
-## Лицензии и название
+## Licenses and name
 
-Исходный код и оригинальные звуки следуют AGPLv3 репозитория. Onest распространяется
-по SIL OFL; текст лицензии сохранён в ресурсах и включён в тестовый комплект.
-Prisma Touch остаётся рабочим названием. Его юридическая доступность как бренда отдельно
-не подтверждена; найденное ранее совпадение Prisma в музыкальном ПО требует дальнейшей проверки.
+The source code and the original sounds follow the repository's AGPLv3. Onest is distributed
+under the SIL OFL; the license text is kept in the resources and included in the test bundle.
+Prisma Touch remains a working name. Its legal availability as a brand has not been separately
+confirmed; a previously found match for Prisma in music software needs further checking.

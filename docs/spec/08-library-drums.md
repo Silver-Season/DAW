@@ -1,37 +1,37 @@
-# 08. Библиотека звуков, Drum Rack и Sampler
+# 08. Sound library, Drum Machine and Sampler
 
-## Цель
+## Goal
 
-Дать DAW собственные звуки и барабаны. Появляются встроенный инструмент **Sampler** (зоны по нотам и силе нажатия, петли, огибающие, фильтр Prisma), устройство **Drum Rack** (сетка пэдов, у каждого своя цепочка, choke-группы, микшер и посылы внутри рэка), заводская библиотека, которую мы сами синтезируем инструментом `tools/drumgen` (без чужих сэмплов и без лицензионных вопросов), и единая система пресетов для всех устройств: теги, рейтинг, коллекции, предпрослушивание, режим hot-swap, пакеты `.dawpack`.
+Give the DAW its own sounds and drums. This stage adds a built-in **Sampler** instrument (zones by note and velocity, loops, envelopes, the Prisma filter), a **Drum Machine** device (a pad grid where every pad has its own chain, choke groups, a mixer and sends inside the device), a factory library that we synthesize ourselves with the `tools/drumgen` tool (no third-party samples and no licensing questions), and one preset system for all devices: tags, rating, collections, preview, hot-swap mode, `.dawpack` packs.
 
-В конце пользователь может: открыть браузер, выбрать категорию «Барабаны», прослушать кит «909 Club» одним щелчком, перетащить его на пустое место (создастся MIDI-дорожка с Drum Rack), бросить на пэд свой WAV из Finder, разрезать петлю на пэды, сохранить кит как `.dawkit`, нажать на устройстве Reverb кнопку hot-swap и перебрать заводские пресеты стрелками, не отрываясь от музыки.
+At the end the user can: open the browser, pick the "Drums" category, preview the "909 Club" kit with one click, drag it onto empty space (a MIDI track with a Drum Machine is created), drop their own WAV from Finder onto a pad, slice a loop onto pads, save the kit as `.dawkit`, press the hot-swap button on a Reverb device and step through factory presets with the arrow keys without stopping the music.
 
-## Границы
+## Scope
 
-Входит: Sampler (DSP в `core/`, устройство в `app/`), Drum Rack, нарезка петли на пэды, генератор заводских звуков `tools/drumgen`, генератор петель и MIDI-грувов, раскладка и индекс библиотеки, единый формат пресета для всех типов устройств, редактор тегов, рейтинг, коллекции, hot-swap, аудиопревью пресетов, импорт и экспорт пакетов `.dawpack`, резервная копия пользовательской библиотеки, заводские пресеты эффектов этапа 06 и 50 заводских цепочек.
+In scope: Sampler (DSP in `core/`, device in `app/`), Drum Machine, slicing a loop onto pads, the factory sound generator `tools/drumgen`, the loop and MIDI groove generator, library layout and index, one preset format for every device type, tag editor, rating, collections, hot-swap, audio previews of presets, import and export of `.dawpack` packs, backup of the user library, factory presets for the stage 06 effects and 50 factory chains.
 
-Не входит: сами эффекты и их DSP (06, здесь только пресеты к ним), warp и time-stretch петель (07; петли здесь кладутся без растяжения, генерируются сразу в нужных темпах), полноценный скрипт Launchkey и Maschine (`ControlSurface`, фаза 3; здесь только точка подключения, задача 8.6), гранулярный и спектральный режимы (Alloy, фаза 2–3), запись сэмплов в Sampler со входа (берётся готовый аудиоклип из 05), облачная синхронизация библиотеки.
+Out of scope: the effects themselves and their DSP (06, only their presets are here), warp and time-stretching of loops (07; loops here are placed without stretching and are generated at the needed tempos), a full Launchkey and Maschine script (`ControlSurface`, phase 3; only a hook point here, task 8.6), granular and spectral modes (Alloy, phases 2–3), recording samples into the Sampler from an input (a finished audio clip from 05 is used), cloud sync of the library.
 
-Опирается на: модель, браузер, формат `.dawpreset` и `.dawchain` (01, задачи 1.1, 1.5, 1.6), аудиоклипы и чтение файлов (05), встроенные эффекты, посылы и возвраты (06), детектор онсетов (07, если уже есть; иначе свой, задача 8.7).
+Depends on: the model, the browser, the `.dawpreset` and `.dawchain` formats (01, tasks 1.1, 1.5, 1.6), audio clips and file reading (05), built-in effects, sends and returns (06), the onset detector (07, if it already exists; otherwise our own, task 8.7).
 
 ---
 
-## Задача 8.1. Sampler: DSP в `core/`
+## Task 8.1. Sampler: DSP in `core/`
 
-Создать `core/include/daw/sampler/` и `core/src/sampler/`: `SampleData`, `Zone`, `SamplerVoice`, `SamplerEngine`, `Resampler`, `SamplerParams`. Без JUCE, как Prisma.
+Create `core/include/daw/sampler/` and `core/src/sampler/`: `SampleData`, `Zone`, `SamplerVoice`, `SamplerEngine`, `Resampler`, `SamplerParams`. No JUCE, like Prisma.
 
-### Данные
+### Data
 
 ```cpp
-struct SampleData                       // неизменяем после загрузки, делится shared_ptr
+struct SampleData                       // immutable after loading, shared via shared_ptr
 {
     double sampleRate;
-    int numChannels;                    // 1 или 2
+    int numChannels;                    // 1 or 2
     int64_t numFrames;
-    std::vector<float> frames;          // interleaved; для потоковых — только голова (см. 8.3)
-    std::array<std::vector<float>, 3> mips;   // уменьшенные копии /2, /4, /8 для транспонирования вверх
+    std::vector<float> frames;          // interleaved; for streamed samples only the head (see 8.3)
+    std::array<std::vector<float>, 3> mips;   // downsampled copies /2, /4, /8 for transposing up
     bool streamed;
-    std::string path;                   // для потоковых и для «Показать в Finder»
+    std::string path;                   // for streamed samples and for "Show in Finder"
 };
 
 struct Zone
@@ -39,286 +39,286 @@ struct Zone
     std::shared_ptr<const SampleData> sample;
     int keyLow = 0, keyHigh = 127, rootKey = 60;
     int velLow = 1, velHigh = 127;
-    int keyFadeLow = 0, keyFadeHigh = 0, velFadeLow = 0, velFadeHigh = 0;  // ширина кроссфейда зон
+    int keyFadeLow = 0, keyFadeHigh = 0, velFadeLow = 0, velFadeHigh = 0;  // zone crossfade width
     double tuneCents = 0, gainDb = 0, pan = 0;
-    int64_t start = 0, end = -1;        // -1 = до конца
+    int64_t start = 0, end = -1;        // -1 = to the end
     enum class Loop { off, forward, pingPong, untilRelease } loop = Loop::off;
-    int64_t loopStart = 0, loopEnd = 0, loopCrossfade = 0;   // в кадрах
-    int roundRobinGroup = 0;            // 0 = без round-robin
+    int64_t loopStart = 0, loopEnd = 0, loopCrossfade = 0;   // in frames
+    int roundRobinGroup = 0;            // 0 = no round-robin
     int roundRobinIndex = 0;
 };
 ```
 
-### Голос и параметры
+### Voice and parameters
 
-- **Выбор зон**: при note-on берутся все зоны, у которых нота и сила нажатия попадают в диапазон (с учётом ширины кроссфейда, тогда громкость зоны — линейный вес). Слои играют одновременно.
-- **Round-robin**: у зон с одинаковой группой (> 0), попавших под ноту, берётся следующая по `roundRobinIndex` по кругу; режим «случайный» с фиксированным зерном (`std::mt19937` в движке, зерно задаётся в тестах). Счётчик хранится на группу.
-- **Высота**: `rate = sampleRate / outRate * 2^((note − rootKey + tuneCents/100 + transpose + fine + pitchBend·range)/12)`. Транспонирование ±48 полутонов, точная ±100 центов, диапазон питч-бенда 0–24.
-- **Glide**: время 0–2000 мс, режимы «всегда» и «только легато», по логарифму частоты (как в Prisma).
-- **Режимы голосов**: poly (1–64 голоса, по умолчанию 16), mono, legato (ретригер огибающих выключен, позиция сэмпла продолжается). Кража голоса: самый старый в release, затем самый тихий. Украденный голос гасится за 5 мс, а не обрывается.
-- **Огибающие**: две ADSR из `daw::dsp::Envelope` (громкость и фильтр), плюс hold и кривизна атаки/спада. Чувствительность громкости к силе нажатия 0–100 %. Огибающая фильтра действует на срез в ±96 полутонов.
-- **Фильтр**: переиспользовать `daw::dsp::SVF` / `SynthFilter` из Prisma (LP/HP/BP/notch, 12/24 дБ), срез, резонанс, драйв, слежение за клавиатурой 0–100 %. Код Prisma не менять; если нужен новый метод, он добавляется без изменения поведения Prisma (тесты Prisma остаются зелёными).
-- **LFO**: один на голос (sine/tri/saw/square/S&H, синхронизация с темпом), назначения: высота, срез, громкость, панорама.
-- **Модуляция начала**: `sampleStartMod` 0–100 % длины, от силы нажатия или случайно; начало ограничивается `end − 64`.
-- **Петля с кроссфейдом**: в режиме forward последние `loopCrossfade` кадров перед `loopEnd` смешиваются с кадрами перед `loopStart` по закону равной мощности. Кроссфейд не длиннее `loopStart − start` и половины петли; функция `clampLoop` в `core/` с тестом. Для pingPong кроссфейд не нужен. `untilRelease`: петля до note-off, потом дочитывается хвост.
-- **Параметры** описываются массивом дескрипторов, как `daw::synth::parameterDescriptors()` у Prisma (id, имя, диапазон, по умолчанию), чтобы автоматизация (06) и 8 ручек в панели работали одинаково.
+- **Zone selection**: on note-on, every zone whose note and velocity ranges contain the note is taken (including the crossfade width; then the zone's gain is a linear weight). Layers play simultaneously.
+- **Round-robin**: among zones with the same group (> 0) that match the note, the next one by `roundRobinIndex` is taken, cycling; a "random" mode with a fixed seed (`std::mt19937` in the engine, the seed is set in tests). The counter is stored per group.
+- **Pitch**: `rate = sampleRate / outRate * 2^((note − rootKey + tuneCents/100 + transpose + fine + pitchBend·range)/12)`. Transpose ±48 semitones, fine ±100 cents, pitch-bend range 0–24.
+- **Glide**: time 0–2000 ms, "always" and "legato only" modes, along the log of frequency (as in Prisma).
+- **Voice modes**: poly (1–64 voices, default 16), mono, legato (envelope retrigger off, the sample position continues). Voice stealing: the oldest voice in release first, then the quietest. A stolen voice fades out over 5 ms instead of being cut.
+- **Envelopes**: two ADSRs from `daw::dsp::Envelope` (amplitude and filter), plus hold and attack/decay curvature. Amplitude velocity sensitivity 0–100 %. The filter envelope acts on the cutoff within ±96 semitones.
+- **Filter**: reuse `daw::dsp::SVF` / `SynthFilter` from Prisma (LP/HP/BP/notch, 12/24 dB), cutoff, resonance, drive, key tracking 0–100 %. Do not change Prisma code; if a new method is needed, it is added without changing Prisma's behavior (Prisma tests stay green).
+- **LFO**: one per voice (sine/tri/saw/square/S&H, tempo sync), destinations: pitch, cutoff, amplitude, pan.
+- **Start modulation**: `sampleStartMod` 0–100 % of the length, from velocity or random; the start is clamped to `end − 64`.
+- **Loop with crossfade**: in forward mode the last `loopCrossfade` frames before `loopEnd` are mixed with the frames before `loopStart` using an equal-power law. The crossfade is no longer than `loopStart − start` and half the loop; a `clampLoop` function in `core/` with a test. PingPong needs no crossfade. `untilRelease`: loop until note-off, then play the tail.
+- **Parameters** are described by an array of descriptors, like Prisma's `daw::synth::parameterDescriptors()` (id, name, range, default), so that automation (06) and the 8 knobs in the panel work the same way.
 
-### Ресемплинг (решение)
+### Resampling (decision)
 
-`Resampler` с двумя качествами, выбор в устройстве («Обычное» / «Высокое»), по умолчанию «Обычное»:
-- **Обычное**: 4-точечная кубическая интерполяция Эрмита. Дешёвая, без заметных артефактов при транспонировании вниз и умеренно вверх.
-- **Высокое**: windowed sinc, 16 точек (8 с каждой стороны), окно Кайзера β = 8, таблица на 512 фаз с линейной интерполяцией между фазами. Таблица строится один раз в `prepare`.
-- **Против алиасинга при транспонировании вверх** — мип-копии сэмпла (/2, /4, /8), построенные при загрузке полуполосным FIR-фильтром (не в аудиопотоке). Голос с `rate > 1` берёт уровень `floor(log2(rate))` (не выше 3) и делит `rate` на 2^уровень. Оверсэмплинг голоса не делаем: мип-копии дешевле и дают тот же результат. Потоковые сэмплы мип-копий не имеют: в «Высоком» качестве sinc для них масштабируется по частоте среза `1/rate` (длиннее окно не нужно, достаточно сдвинуть ядро), в «Обычном» алиасинг допускается.
-- Число голосов на CPU мерить `tools/prisma_render`-подобным инструментом `tools/sampler_render` (16 голосов, 44,1 кГц, буфер 256) и сообщать цифры в отчёте.
+`Resampler` with two qualities, chosen in the device ("Normal" / "High"), default "Normal":
+- **Normal**: 4-point cubic Hermite interpolation. Cheap, with no noticeable artifacts when transposing down and moderately up.
+- **High**: windowed sinc, 16 taps (8 on each side), Kaiser window β = 8, a 512-phase table with linear interpolation between phases. The table is built once in `prepare`.
+- **Anti-aliasing when transposing up**: mip copies of the sample (/2, /4, /8), built at load time with a half-band FIR filter (not on the audio thread). A voice with `rate > 1` takes level `floor(log2(rate))` (at most 3) and divides `rate` by 2^level. No per-voice oversampling: mip copies are cheaper and give the same result. Streamed samples have no mip copies: in "High" quality the sinc for them is scaled by the cutoff `1/rate` (no longer window is needed, shifting the kernel is enough); in "Normal" aliasing is accepted.
+- Measure voices per CPU with a `tools/sampler_render` tool similar to `tools/prisma_render` (16 voices, 44.1 kHz, buffer 256) and give the numbers in the report.
 
-## Задача 8.2. Sampler как устройство
+## Task 8.2. Sampler as a device
 
-- `DEVICE kind="sampler"` в модели. Дочерний узел `ZONES` с `ZONE` (поля как у `Zone`, `samplePath` относительный к папке проекта или к библиотеке, `sampleHash`). Параметры — свойства `DEVICE` по id дескрипторов.
-- Движок: `SamplerProcessor` (обёртка `juce::AudioProcessor` над `SamplerEngine`, как Prisma в 01). Набор зон публикуется снимком `std::shared_ptr<const ZoneMap>` (правило 00, раздел 2); играющие голоса держат свой `shared_ptr` на сэмпл, поэтому замена зон во время игры не рвёт звук.
-- Сэмплы, брошенные в проект, копируются в `Samples/Imported/` (как в 05). Сэмплы из заводской библиотеки не копируются, ссылка вида `factory:Drums/909 Club/Kick.wav`.
-- **Компактный вид** (ширина 520 px): волна выбранной зоны с маркерами start, end, loopStart, loopEnd и зоной кроссфейда (тащатся мышью, `Shift` — точно, магнит к пересечению нуля по умолчанию включён), 8 ручек: transpose, срез, резонанс, атака, release, glide, sample start mod, громкость.
-- **Полный вид** (окно ↗): карта зон «нота × сила нажатия» (прямоугольники, тянутся за края, `Cmd+A`, `Delete`), список зон с полями, вкладки «Огибающие», «Фильтр», «LFO», «Голоса».
-- **Импорт мультисэмпла**: бросание папки или нескольких файлов на Sampler. Нота берётся из имени файла функцией `parseNoteName` в `core/`: ищется последнее вхождение вида `C#3`, `Db3`, `c3`, `A-1`, `_60_` (число 0–127); соглашение октав: C3 = 60 (как в Ableton), с переключателем в диалоге «C4 = 60». Сила нажатия — из суффиксов `v1..v16`, `pp/p/mp/mf/f/ff`, `soft/med/hard`; round-robin — из `rr1..rr8`. Затем зоны раскладываются: каждая зона покрывает ноты от середины между своим корнем и соседним снизу до середины с соседним сверху. Если нота не найдена ни в одном имени — файлы раскладываются хроматически от C3 по алфавиту, и строка подсказок говорит об этом.
-- **Петля из файла**: если в WAV есть чанк `smpl`, а в AIFF — `MARK`/`INST`, точки петли и корневая нота берутся оттуда.
+- `DEVICE kind="sampler"` in the model. A child node `ZONES` with `ZONE` children (fields as in `Zone`, `samplePath` relative to the project folder or the library, `sampleHash`). Parameters are `DEVICE` properties keyed by descriptor id.
+- Engine: `SamplerProcessor` (a `juce::AudioProcessor` wrapper around `SamplerEngine`, like Prisma in 01). The zone set is published as a snapshot `std::shared_ptr<const ZoneMap>` (rule 00, section 2); playing voices hold their own `shared_ptr` to the sample, so replacing zones during playback does not break the sound.
+- Samples dropped into the project are copied into `Samples/Imported/` (as in 05). Samples from the factory library are not copied; the reference looks like `factory:Drums/909 Club/Kick.wav`.
+- **Compact view** (width 520 px): the waveform of the selected zone with start, end, loopStart, loopEnd markers and the crossfade region (dragged with the mouse, `Shift` for fine control, snap to zero crossings on by default), 8 knobs: transpose, cutoff, resonance, attack, release, glide, sample start mod, volume.
+- **Full view** (↗ window): a "note × velocity" zone map (rectangles, edges are draggable, `Cmd+A`, `Delete`), a zone list with fields, tabs "Envelopes", "Filter", "LFO", "Voices".
+- **Multisample import**: dropping a folder or several files onto the Sampler. The note is taken from the file name by the `parseNoteName` function in `core/`: it looks for the last occurrence of the form `C#3`, `Db3`, `c3`, `A-1`, `_60_` (a number 0–127); octave convention: C3 = 60, with a "C4 = 60" switch in the dialog. Velocity comes from the suffixes `v1..v16`, `pp/p/mp/mf/f/ff`, `soft/med/hard`; round-robin from `rr1..rr8`. Then the zones are laid out: each zone covers notes from the midpoint between its root and the neighbor below to the midpoint with the neighbor above. If no note is found in any name, the files are laid out chromatically from C3 in alphabetical order, and the info bar says so.
+- **Loop from the file**: if a WAV has a `smpl` chunk, or an AIFF has `MARK`/`INST`, the loop points and the root note are taken from there.
 
-### Крайние случаи
+### Edge cases
 
-- Сэмпл не найден при открытии проекта: зона остаётся в модели, рисуется красным с именем файла, звук зоны — тишина. Пункт меню «Найти недостающие сэмплы…» ищет по имени и `sampleHash` в папке проекта, «Местах» и библиотеке.
-- Частота файла отличается от частоты карты: учитывается в `rate`, файл не пересчитывается.
-- Файл длиннее 2^31 кадров или с более чем 2 каналами: загружаются первые 2 канала, в строке подсказок — сообщение.
-- Пустая карта зон: Sampler пропускает MIDI насквозь и молчит, в компактном виде надпись «Перетащите сюда сэмпл или папку».
+- Sample not found when opening a project: the zone stays in the model, is drawn in red with the file name, and the zone's sound is silence. The menu command "Find Missing Samples…" searches by name and `sampleHash` in the project folder, Places and the library.
+- The file's sample rate differs from the device's rate: accounted for in `rate`, the file is not converted.
+- A file longer than 2^31 frames or with more than 2 channels: the first 2 channels are loaded, with a message in the info bar.
+- Empty zone map: the Sampler passes MIDI through and stays silent; the compact view shows "Drop a sample or folder here".
 
-## Задача 8.3. Чтение с диска против памяти
+## Task 8.3. Disk streaming versus memory
 
-- Порог в настройках («Библиотека»): файлы короче 20 с **или** меньше 32 МБ после декодирования грузятся целиком в RAM. Остальные — потоково.
-- Потоковый сэмпл держит в RAM голову (первые 65 536 кадров) и для каждого голоса кольцевой буфер на 3 × 32 768 кадров. Фоновый поток `SampleStreamer` (один на приложение, `juce::TimeSliceThread`) дочитывает буферы заранее. Аудиопоток только читает готовые кадры; если данных нет (диск не успел), голос выдаёт тишину, ставит атомарный флаг `underrun`, а интерфейс показывает «Диск не успевает» в строке подсказок. Блокировок и ожидания в аудиопотоке нет.
-- Голова позволяет начать звук мгновенно; `sampleStartMod` для потоковых ограничен головой.
-- Чтение файлов — `juce::AudioFormatReader` в `app/`; `core/` получает интерфейс `ISampleSource` с методом `read (int64_t frame, float* dst, int n)`, чтобы тесты подменяли диск.
+- A threshold in the settings ("Library"): files shorter than 20 s **or** smaller than 32 MB after decoding are loaded fully into RAM. The rest are streamed.
+- A streamed sample keeps its head (the first 65,536 frames) in RAM, plus a ring buffer of 3 × 32,768 frames per voice. A background thread `SampleStreamer` (one per application, `juce::TimeSliceThread`) fills the buffers ahead of time. The audio thread only reads ready frames; if data is missing (the disk did not keep up), the voice outputs silence and sets an atomic `underrun` flag, and the UI shows "Disk too slow" in the info bar. No locks and no waiting on the audio thread.
+- The head lets the sound start instantly; `sampleStartMod` for streamed samples is limited to the head.
+- File reading is `juce::AudioFormatReader` in `app/`; `core/` gets an `ISampleSource` interface with a `read (int64_t frame, float* dst, int n)` method so tests can substitute the disk.
 
-## Задача 8.4. Drum Rack: модель и движок
+## Task 8.4. Drum Machine: model and engine
 
 ```
-DEVICE kind="drumrack"  name  viewOffset=36  selectedPad=36  showMixer=1
+DEVICE kind="drummachine"  name  viewOffset=36  selectedPad=36  showMixer=1
 ├── PADS
-│   └── PAD  note=0..127  name  colour=<индекс палитры>  choke=0 (0 = нет, 1..16)
-│            volumeDb=0  pan=0  mute=0  solo=0  outNote=60 (какую ноту получает инструмент пэда)
-│      ├── DEVICES        (цепочка пэда: первое — инструмент, дальше эффекты; формат как у дорожки)
+│   └── PAD  note=0..127  name  colour=<palette index>  choke=0 (0 = none, 1..16)
+│            volumeDb=0  pan=0  mute=0  solo=0  outNote=60 (the note the pad's instrument receives)
+│      ├── DEVICES        (the pad's chain: first the instrument, then effects; same format as a track)
 │      └── SENDS  └── SEND  returnId  levelDb=-inf
 └── RETURNS
     └── RETURN  id  name  volumeDb=0  └── DEVICES
 ```
 
-- 128 пэдов, видимое окно 4 × 4. Пэд создаётся в модели лениво, когда на него что-то кладут; пустой пэд узла не имеет.
-- **Ноты**: 128 пэдов покрывают все MIDI-ноты 0–127, как в Ableton. Видно окно 4 × 4 пэда, оно прокручивается рядами по 4 (колесо или обзор всех 128 слева). `viewOffset` — нота нижнего левого пэда, по умолчанию C1 (36 по соглашению C3 = 60), далее вправо и вверх. Пэд получает MIDI своей ноты и передаёт инструменту `outNote` (по умолчанию 60, чтобы Sampler играл сэмпл в исходной высоте).
-- **Choke**: note-on пэда в группе `g` гасит все звучащие голоса других пэдов той же группы за 3 мс (команда `chokeAll` инструменту пэда; у Sampler — быстрый release, у сторонних плагинов — all-notes-off по их MIDI). Типичный случай: открытый и закрытый хэт.
-- **Mute и solo** внутри рэка независимы от дорожки.
-- **Микшер пэдов**: громкость, панорама, посылы в возвраты рэка. Возвраты рэка (до 6) — свои цепочки эффектов, их выход суммируется с пэдами внутри рэка до выхода устройства. Посылы до фейдера пэда не делаем (только после), чтобы не плодить вариантов.
-- **Движок**: `DrumRackProcessor` содержит снимок `DrumRackGraph` (как `PlaybackGraph` в 01: неизменяемый, публикуется атомарно, старое удаляется на message thread). Пэды без звучащих голосов и без хвоста эффектов пропускаются: у каждого пэда счётчик тишины, после 2 с ниже −120 dBFS и без входящих нот его цепочка не вызывается. Буферы всех пэдов выделены в `prepare`.
-- **PDC внутри рэка**: задержки цепочек пэдов выравниваются так же, как дорожки в 06 (рэк сообщает наружу максимум).
-- **Крайние случаи**: удаление пэда, который сейчас звучит, гасит его за 5 мс; изменение `choke` во время игры действует со следующего note-on; инструмент пэда, который грузится асинхронно (сторонний плагин), до готовности молчит, пэд рисуется с индикатором; вложенный Drum Rack в цепочке пэда запрещён (бросание не подсвечивается), чтобы не было рекурсии.
-- MIDI-клип дорожки с Drum Rack в пиано-ролле (02) показывает строки с именами пэдов вместо клавиатуры, только непустые пэды (переключатель «все»).
+- 128 pads, a visible 4 × 4 window. A pad is created in the model lazily when something is put on it; an empty pad has no node.
+- **Notes**: 128 pads cover all MIDI notes 0–127. A 4 × 4 window of pads is visible; it scrolls by rows of 4 (mouse wheel or the overview of all 128 on the left). `viewOffset` is the note of the bottom-left pad, by default C1 (36 under the C3 = 60 convention), then rightward and upward. A pad receives MIDI for its note and passes `outNote` to the instrument (default 60, so the Sampler plays the sample at its original pitch).
+- **Choke**: a note-on of a pad in group `g` silences all sounding voices of other pads in the same group within 3 ms (a `chokeAll` command to the pad's instrument; for the Sampler a fast release, for third-party plugins all-notes-off over their MIDI). Typical case: open and closed hi-hat.
+- **Mute and solo** inside the device are independent of the track.
+- **Pad mixer**: volume, pan, sends to the device's returns. The device's returns (up to 6) have their own effect chains; their output is summed with the pads inside the device before the device output. No pre-fader sends (post-fader only), to avoid multiplying variants.
+- **Engine**: `DrumMachineProcessor` holds a `DrumMachineGraph` snapshot (like `PlaybackGraph` in 01: immutable, published atomically, the old one is deleted on the message thread). Pads with no sounding voices and no effect tail are skipped: each pad has a silence counter, and after 2 s below −120 dBFS with no incoming notes its chain is not called. Buffers for all pads are allocated in `prepare`.
+- **PDC inside the device**: the latencies of pad chains are aligned the same way as tracks in 06 (the device reports the maximum outward).
+- **Edge cases**: deleting a pad that is currently sounding fades it out over 5 ms; changing `choke` during playback takes effect from the next note-on; a pad instrument that loads asynchronously (a third-party plugin) stays silent until ready, and the pad is drawn with an indicator; a nested Drum Machine in a pad chain is forbidden (the drop is not highlighted), to avoid recursion.
+- A MIDI clip on a track with a Drum Machine shows, in the piano roll (02), rows with pad names instead of a keyboard, only non-empty pads (an "all" toggle).
 
-## Задача 8.5. Drum Rack: интерфейс
+## Task 8.5. Drum Machine: interface
 
-- **Компактный вид** (ширина 640 px): слева видимое окно 4 × 4, справа обзор всех 128 пэдов (32 ряда по 4 мелкими квадратиками, точка — пэд с содержимым, рамка — видимое окно, тянется мышью), затем панель выбранного пэда: имя, цепочка пэда в миниатюре (устройства одной строкой, щелчок раскрывает цепочку пэда во второй строке детальной панели), микшер пэда.
-- **Пэд** рисуется цветом пэда (палитра темы), имя, номер ноты (`C1`), кнопки M и S, индикатор группы choke. Играющий пэд вспыхивает (яркость по силе нажатия, затухание 150 мс). Щелчок по пэду выделяет и играет ноту со силой 100 (как в Ableton с включённым предпрослушиванием); `Alt`-щелчок только выделяет.
-- **Перетаскивание на пэд** (одна транзакция на бросание):
-  - аудиофайл из браузера или Finder → на пэд ставится Sampler с этим сэмплом (если на пэде уже Sampler — заменяется сэмпл в его первой зоне, `Cmd` при бросании — добавить слоем);
-  - инструмент, пресет инструмента, цепочка → заменяют цепочку пэда;
-  - эффект → в конец цепочки пэда;
-  - несколько файлов → раскладываются на пэды начиная с целевого;
-  - пэд на пэд → перенос, с `Alt` — копия, с `Cmd` — обмен.
-- Правая кнопка по пэду: Переименовать, Цвет, Группа choke ▸, Копировать, Вставить, Очистить, Сохранить пэд как пресет…
-- **Сохранение кита**: меню ▾ устройства → «Сохранить кит…» → `User Library/Drums/<имя>.dawkit`. Это обычный пресет единого формата (8.10) с `deviceKind="drumrack"`: сэмплы, которых нет в заводской библиотеке, копируются рядом с китом (`<имя>.dawkit` + `<имя> Samples/`), ссылки относительные.
+- **Compact view** (width 640 px): on the left the visible 4 × 4 window, to the right an overview of all 128 pads (32 rows of 4 small squares, a dot marks a pad with content, a frame marks the visible window and can be dragged with the mouse), then the selected pad's panel: name, a miniature of the pad's chain (devices in one row, a click expands the pad's chain in the second row of the detail panel), the pad's mixer.
+- **A pad** is drawn in the pad's color (theme palette), with its name, note number (`C1`), M and S buttons, and a choke group indicator. A playing pad flashes (brightness by velocity, 150 ms decay). A click on a pad selects it and plays the note at velocity 100 (if preview is on); `Alt`-click only selects.
+- **Dragging onto a pad** (one transaction per drop):
+  - an audio file from the browser or Finder → a Sampler with that sample is put on the pad (if the pad already has a Sampler, the sample in its first zone is replaced; `Cmd` while dropping adds it as a layer);
+  - an instrument, instrument preset or chain → replaces the pad's chain;
+  - an effect → appended to the end of the pad's chain;
+  - several files → laid out on pads starting from the target one;
+  - pad onto pad → move, with `Alt` copy, with `Cmd` swap.
+- Right-click on a pad: Rename, Color, Choke Group ▸, Copy, Paste, Clear, Save Pad as Preset…
+- **Saving a kit**: the device ▾ menu → "Save Kit…" → `User Library/Drums/<name>.dawkit`. This is an ordinary preset in the unified format (8.10) with `deviceKind="drummachine"`: samples that are not in the factory library are copied next to the kit (`<name>.dawkit` + `<name> Samples/`), references are relative.
 
-## Задача 8.6. Пэды контроллеров
+## Task 8.6. Controller pads
 
-- `app/Source/control/PadMapping.h`: таблица «MIDI-канал + нота входа → пэд» на устройство MIDI-входа, по умолчанию тождественная. Встроенные профили: Novation Launchkey MK3/MK4 (Drum Mode: ноты 36–51, канал 10), Maschine MK3 в режиме MIDI (шаблон NI по умолчанию: ноты 36–51, канал 1). Выбор профиля — в настройках MIDI у входа.
-- Прокрутка окна рэка с контроллера и подсветка пэдов цветами — задел: интерфейс `IPadFeedback { setPadColour (note, rgb); setViewOffset (note); }`, который позже реализует слой `ControlSurface` (фаза 3). В этом этапе только пустая реализация и вызовы из Drum Rack при смене цвета и прокрутке окна.
+- `app/Source/control/PadMapping.h`: a "MIDI channel + input note → pad" table per MIDI input device, identity by default. Built-in profiles: Novation Launchkey MK3/MK4 (Drum Mode: notes 36–51, channel 10), Maschine MK3 in MIDI mode (default NI template: notes 36–51, channel 1). The profile is chosen in the MIDI settings for the input.
+- Scrolling the device window from the controller and lighting pads in color are groundwork: an interface `IPadFeedback { setPadColour (note, rgb); setViewOffset (note); }`, which the `ControlSurface` layer (phase 3) implements later. In this stage only an empty implementation and calls from the Drum Machine when a color changes and when the window scrolls.
 
-## Задача 8.7. Нарезка петли на пэды
+## Task 8.7. Slicing a loop onto pads
 
-- Правая кнопка по аудиоклипу (05) или по аудиофайлу в браузере → «Нарезать в Drum Rack». Диалог: режим (по транзиентам / по долям 1/4, 1/8, 1/16 / равными частями 2–64), чувствительность 0–100 % (для транзиентов), «Создать MIDI-клип» (вкл. по умолчанию).
-- **Детектор онсетов**: если в `core/` уже есть детектор этапа 07, использовать его. Если нет — `core/include/daw/analysis/OnsetDetector.h`: спектральный поток. Окно Ханна 1024, шаг 256, `FFT` из `core/src/FFT.cpp`, логарифмическая амплитуда `log(1 + 10·|X|)`, положительная разность с предыдущим кадром, сумма по бинам; адаптивный порог = медиана за ±8 кадров × (1 + 2·(1 − чувствительность)) + δ; пики — локальные максимумы, минимальное расстояние 50 мс. Позиция уточняется назад до ближайшего пересечения нуля в пределах 5 мс. Тот же класс потом сможет забрать 07.
-- Результат: новая MIDI-дорожка (или замена рэка на выделенной), Drum Rack, где пэд `i` — Sampler с той же ссылкой на файл и `start/end` среза (файл не копируется по кускам), короткий fade 2 мс на конце среза, и MIDI-клип, который проигрывает срезы в исходном порядке и ритме. Больше 128 срезов — берутся первые 128, сообщение в строке подсказок.
-- Темп исходника для MIDI-клипа: из метаданных файла, из имени (`_120bpm`, `120 BPM`), иначе по длине клипа и числу долей; если не удалось — темп проекта.
+- Right-click on an audio clip (05) or an audio file in the browser → "Slice to Drum Machine". Dialog: mode (by transients / by beats 1/4, 1/8, 1/16 / equal parts 2–64), sensitivity 0–100 % (for transients), "Create MIDI clip" (on by default).
+- **Onset detector**: if `core/` already has the stage 07 detector, use it. If not, `core/include/daw/analysis/OnsetDetector.h`: spectral flux. Hann window 1024, hop 256, `FFT` from `core/src/FFT.cpp`, log magnitude `log(1 + 10·|X|)`, positive difference from the previous frame, summed over bins; adaptive threshold = median over ±8 frames × (1 + 2·(1 − sensitivity)) + δ; peaks are local maxima with a minimum spacing of 50 ms. The position is refined backward to the nearest zero crossing within 5 ms. Stage 07 can later take over the same class.
+- Result: a new MIDI track (or replacing the device on the selected one), a Drum Machine where pad `i` is a Sampler with the same file reference and the slice's `start/end` (the file is not copied in pieces), a short 2 ms fade at the end of the slice, and a MIDI clip that plays the slices in the original order and rhythm. More than 128 slices: the first 128 are taken, with a message in the info bar.
+- Source tempo for the MIDI clip: from the file metadata, from the name (`_120bpm`, `120 BPM`), otherwise from the clip length and number of beats; if that fails, the project tempo.
 
-## Задача 8.8. Заводские звуки: `tools/drumgen`
+## Task 8.8. Factory sounds: `tools/drumgen`
 
-Принцип: все заводские барабаны, перкуссия и петли синтезируются нашим кодом, детерминированно, из рецептов в репозитории. Никаких чужих сэмплов по умолчанию, поэтому вопросов лицензии нет: результат распространяется под той же лицензией, что и проект.
+Principle: all factory drums, percussion and loops are synthesized by our code, deterministically, from recipes in the repository. No third-party samples by default, so there are no licensing questions: the output is distributed under the same license as the project.
 
-### Устройство инструмента
+### How the tool is built
 
-- `core/include/daw/drumgen/` — DSP-блоки и рецепты (без JUCE), `tools/drumgen.cpp` — консольная программа. Запись WAV 24 бит, 48 кГц, моно для кика, снейра, томов, хлопка; стерео для тарелок, хэтов с шириной, петель. WAV пишется своим маленьким писателем в `core/` (RIFF, `fmt `, `data`, `smpl` с корневой нотой), чтобы инструмент не зависел от JUCE.
-- Рецепт — JSON в `content/drumgen/recipes/<kit>.json`: список звуков, у каждого тип генератора и параметры. Шум — `xoshiro128**` с зерном из рецепта. Повторный запуск даёт побайтно тот же файл (тест).
-- Блоки: синус с огибающей высоты (экспонента `f(t) = f_end + (f_start − f_end)·e^(−t/τ)`), генератор щелчка (импульс через BP), белый и розовый шум, 6 квадратных осцилляторов с некратными частотами (металл 808), SVF из Prisma, waveshaper `tanh` и жёсткое ограничение, огибающие AD/AHD с кривизной, бит-кратер и понижение частоты (lo-fi), простая модальная резонансная модель (банк из 4–12 резонаторов, для томов, колокольчиков, ковбелла, акустических барабанов), короткий ревербератор (комната 0,2–0,8 с) только для «акустических» китов, финальная нормализация пика к −1 dBFS и fade-out 5 мс.
+- `core/include/daw/drumgen/`: DSP blocks and recipes (no JUCE); `tools/drumgen.cpp`: the console program. Writes WAV 24-bit, 48 kHz, mono for kick, snare, toms, clap; stereo for cymbals, hats with width, loops. WAV is written by our own small writer in `core/` (RIFF, `fmt `, `data`, `smpl` with the root note), so the tool does not depend on JUCE.
+- A recipe is JSON in `content/drumgen/recipes/<kit>.json`: a list of sounds, each with a generator type and parameters. Noise is `xoshiro128**` with a seed from the recipe. Running again produces a byte-identical file (test).
+- Blocks: a sine with a pitch envelope (exponential `f(t) = f_end + (f_start − f_end)·e^(−t/τ)`), a click generator (an impulse through a BP), white and pink noise, 6 square oscillators at inharmonic frequencies (808 metal), the SVF from Prisma, a `tanh` waveshaper and hard limiting, AD/AHD envelopes with curvature, a bitcrusher and sample-rate reduction (lo-fi), a simple modal resonator model (a bank of 4–12 resonators, for toms, bells, cowbell, acoustic drums), a short reverb (room 0.2–0.8 s) only for "acoustic" kits, final peak normalization to −1 dBFS and a 5 ms fade-out.
 
-### Рецепты (базовые значения, каждый кит варьирует)
+### Recipes (base values, each kit varies them)
 
-Стартовые рецепты восьми ударов есть в прототипе Codex: [`docs/reference/codex/touchdrums/Processor.cpp`](../reference/codex/touchdrums/Processor.cpp), функция `buildKit`. Их можно перенести как кит «Prisma Touch» после пересчёта под блоки ниже.
+Starter recipes for eight hits exist in the Codex prototype: [`docs/reference/codex/touchdrums/Processor.cpp`](../reference/codex/touchdrums/Processor.cpp), function `buildKit`. They can be carried over as the "Prisma Touch" kit after recalculating them for the blocks below.
 
 
-| Звук | Рецепт |
+| Sound | Recipe |
 |---|---|
-| Kick 808 | синус, высота 150 → 48 Гц, τ = 40 мс, громкость AD 1 мс / 600–1500 мс, `tanh` драйв 1,5, щелчок 3 мс на 3 кГц −18 дБ |
-| Kick 909 | синус 230 → 55 Гц, τ = 25 мс, спад 350 мс, шумовой щелчок 8 мс через HP 2 кГц −10 дБ, драйв 2,5 |
-| Kick acoustic | модальная модель (мембрана: 60, 96, 128, 155 Гц), удар — шум 4 мс через LP 1,5 кГц, спад 250 мс, комната 0,25 с −20 дБ |
-| Snare 808 | два синуса 180 и 330 Гц, спад 120 мс; шум через HP 1,2 кГц, спад 180 мс, смесь 0,6 |
-| Snare 909 | тело 200 → 170 Гц, спад 90 мс; шум через BP 5 кГц Q 0,7, спад 220 мс, драйв 1,8 |
-| Clap | шум через BP 1,2 кГц Q 1,5; 4 всплеска с интервалом 10 мс и спадом 8 мс, затем хвост 180 мс |
-| Closed hat | 6 квадратов (205,3; 304,4; 369,6; 522,7; 540; 800 Гц ×1,0–1,6 по киту) через BP 10 кГц и HP 7 кГц, спад 40–60 мс |
-| Open hat | то же, спад 350–600 мс; в ките стоит в одной choke-группе с закрытым |
-| Tom low/mid/high | синус 120/170/240 → ×0,7, τ = 60 мс, спад 400 мс; для акустики — модальная модель |
-| Crash / Ride | металл из 6 квадратов + шум, BP 6–9 кГц, спад 1,8 с / 2,5 с; ride с выделенным «колоколом» 2 модами 780 и 1050 Гц |
-| Rim / Clave | резонатор 1,7 кГц / 2,5 кГц, спад 30–60 мс |
-| Cowbell | два квадрата 540 и 800 Гц через BP 2,6 кГц, спад 300 мс |
-| Shaker / Tambourine | шум через HP 6 кГц, огибающая из 2–3 зёрен по 20 мс; бубен — плюс металл 6 квадратов |
-| Conga / Bongo | модальная модель, 2–4 моды, спад 150–300 мс, удар шумом |
-| Lo-fi версии | любой звук выше + бит-кратер 8–12 бит, частота 11–22 кГц, LP 6 кГц, лёгкая сатурация |
+| Kick 808 | sine, pitch 150 → 48 Hz, τ = 40 ms, amplitude AD 1 ms / 600–1500 ms, `tanh` drive 1.5, click 3 ms at 3 kHz −18 dB |
+| Kick 909 | sine 230 → 55 Hz, τ = 25 ms, decay 350 ms, noise click 8 ms through HP 2 kHz −10 dB, drive 2.5 |
+| Kick acoustic | modal model (membrane: 60, 96, 128, 155 Hz), strike is 4 ms of noise through LP 1.5 kHz, decay 250 ms, room 0.25 s −20 dB |
+| Snare 808 | two sines 180 and 330 Hz, decay 120 ms; noise through HP 1.2 kHz, decay 180 ms, mix 0.6 |
+| Snare 909 | body 200 → 170 Hz, decay 90 ms; noise through BP 5 kHz Q 0.7, decay 220 ms, drive 1.8 |
+| Clap | noise through BP 1.2 kHz Q 1.5; 4 bursts 10 ms apart with 8 ms decay, then a 180 ms tail |
+| Closed hat | 6 squares (205.3; 304.4; 369.6; 522.7; 540; 800 Hz ×1.0–1.6 per kit) through BP 10 kHz and HP 7 kHz, decay 40–60 ms |
+| Open hat | the same, decay 350–600 ms; in the kit it is in the same choke group as the closed hat |
+| Tom low/mid/high | sine 120/170/240 → ×0.7, τ = 60 ms, decay 400 ms; for acoustic kits the modal model |
+| Crash / Ride | metal from 6 squares + noise, BP 6–9 kHz, decay 1.8 s / 2.5 s; ride with a distinct "bell" of 2 modes at 780 and 1050 Hz |
+| Rim / Clave | resonator 1.7 kHz / 2.5 kHz, decay 30–60 ms |
+| Cowbell | two squares 540 and 800 Hz through BP 2.6 kHz, decay 300 ms |
+| Shaker / Tambourine | noise through HP 6 kHz, an envelope of 2–3 grains of 20 ms each; tambourine adds 6-square metal |
+| Conga / Bongo | modal model, 2–4 modes, decay 150–300 ms, noise strike |
+| Lo-fi versions | any sound above + bitcrusher 8–12 bits, sample rate 11–22 kHz, LP 6 kHz, light saturation |
 
-### Состав заводской библиотеки (цели)
+### Factory library contents (targets)
 
-- **Киты**: 20 штук по 16 пэдов: «808 Classic», «808 Deep», «909 Club», «909 Hard», «Acoustic Room», «Acoustic Dry», «Brush Jazz», «Lo-fi Tape», «Lo-fi Dusty», «Minimal», «Techno Warehouse», «House Garage», «Trap», «Drill», «Boom Bap», «Electro», «Industrial», «Percussion World», «Latin Perc», «Glitch». Раскладка пэдов в каждом стандартная (кик C1, римшот C#1, снейр D1, хлопок D#1, закрытый хэт F#1, открытый A#1 и т. д., как GM-барабаны), чтобы MIDI-грувы подходили ко всем китам.
-- **One-shot**: не меньше 400 (звуки китов плюс вариации: по 3–5 вариантов высоты и спада для каждого типа).
-- **Петли**: 100 штук. Генерируются тем же инструментом: 25 паттернов (из `content/drumgen/patterns/*.json`, сетка 1/16, сила нажатия, свинг) × китом × темпами 90, 120, 128, 140, 174. Имя содержит темп: `Boom Bap 01 90bpm.wav`. Петли 2 или 4 такта, точно по длине.
-- **MIDI**: 50 файлов: 30 барабанных грувов (те же паттерны плюс вариации, GM-ноты), 20 последовательностей аккордов (I–V–vi–IV, ii–V–I и др., в C, с подписью тональности в имени). Пишутся маленьким писателем SMF в `core/`.
-- **Пресеты Sampler**: 30 мультисэмплов из Prisma-рендеров (тот же `tools/prisma_render` по нотам C1–C6 через терцию) — «Prisma Keys», «Prisma Pad» и т. п., чтобы показать мультисэмпловый режим.
+- **Kits**: 20 kits of 16 pads: "808 Classic", "808 Deep", "909 Club", "909 Hard", "Acoustic Room", "Acoustic Dry", "Brush Jazz", "Lo-fi Tape", "Lo-fi Dusty", "Minimal", "Techno Warehouse", "House Garage", "Trap", "Drill", "Boom Bap", "Electro", "Industrial", "Percussion World", "Latin Perc", "Glitch". The pad layout in each is standard (kick C1, rimshot C#1, snare D1, clap D#1, closed hat F#1, open hat A#1 and so on, as in GM drums), so MIDI grooves fit every kit.
+- **One-shots**: at least 400 (kit sounds plus variations: 3–5 pitch and decay variants for each type).
+- **Loops**: 100. Generated by the same tool: 25 patterns (from `content/drumgen/patterns/*.json`, 1/16 grid, velocity, swing) × kit × tempos 90, 120, 128, 140, 174. The name includes the tempo: `Boom Bap 01 90bpm.wav`. Loops are 2 or 4 bars, exact in length.
+- **MIDI**: 50 files: 30 drum grooves (the same patterns plus variations, GM notes), 20 chord progressions (I–V–vi–IV, ii–V–I and others, in C, with the key in the name). Written by a small SMF writer in `core/`.
+- **Sampler presets**: 30 multisamples from Prisma renders (the same `tools/prisma_render` over notes C1–C6 every major third): "Prisma Keys", "Prisma Pad" and so on, to show multisample mode.
 
-### CC0-пакеты (необязательно)
+### CC0 packs (optional)
 
-- Сторонние сэмплы допускаются **только** с лицензией CC0 1.0. Каждый пакет записан в `content/thirdparty/manifest.json`: имя, URL источника, дата получения, SHA-256 архива, полный текст лицензии (или ссылка на файл `LICENSE-<pack>.txt` рядом), список файлов. Скрипт `scripts/fetch-cc0.sh` скачивает и проверяет хэши; без записи в манифесте файл в сборку не попадает (проверка в CI: каждый файл из `ThirdParty/` есть в манифесте).
-- В этом этапе пакеты не обязательны; если исполнитель не может проверить лицензию — не добавлять.
+- Third-party samples are allowed **only** under the CC0 1.0 license. Each pack is recorded in `content/thirdparty/manifest.json`: name, source URL, retrieval date, SHA-256 of the archive, full license text (or a reference to a `LICENSE-<pack>.txt` file next to it), file list. The `scripts/fetch-cc0.sh` script downloads them and checks hashes; without a manifest entry a file does not get into the build (CI check: every file in `ThirdParty/` is in the manifest).
+- Packs are not required in this stage; if the implementer cannot verify the license, do not add it.
 
-## Задача 8.9. Раскладка библиотеки, поставка, индекс
+## Task 8.9. Library layout, delivery, index
 
 ```
-Factory Library/                      (только чтение)
-├── Drums/<кит>.dawkit                кит ссылается на ../Samples/Drums/<кит>/
-├── Samples/Drums/<кит>/*.wav
-├── Samples/One-shots/<тип>/*.wav     Kick, Snare, Clap, Hat, Tom, Cymbal, Perc, FX
-├── Loops/<жанр>/*.wav
+Factory Library/                      (read-only)
+├── Drums/<kit>.dawkit                the kit references ../Samples/Drums/<kit>/
+├── Samples/Drums/<kit>/*.wav
+├── Samples/One-shots/<type>/*.wav     Kick, Snare, Clap, Hat, Tom, Cymbal, Perc, FX
+├── Loops/<genre>/*.wav
 ├── MIDI/Grooves/*.mid  MIDI/Chords/*.mid
-├── Presets/<устройство>/<папка>/*.dawpreset    Prisma, Sampler, EQ, Compressor, …
+├── Presets/<device>/<folder>/*.dawpreset    Prisma, Sampler, EQ, Compressor, …
 ├── Chains/*.dawchain
-├── Previews/                          зеркальная структура, *.ogg (см. 8.12)
-└── library.json                       версия, дата, хэш содержимого
-User Library/  (~/Music/Prisma DAW/User Library, как в 01)
+├── Previews/                          mirrored structure, *.ogg (see 8.12)
+└── library.json                       version, date, content hash
+User Library/  (~/Music/Prisma DAW/User Library, as in 01)
 ├── Presets/  Chains/  Drums/  Samples/  Templates/  Themes/  Collections.json  Backups/
 ```
 
-- **Поставка**: базовая заводская библиотека (все киты, one-shot, MIDI, пресеты, превью) лежит в `DAW.app/Contents/Resources/Factory Library/`. Бюджет DMG: прирост от библиотеки не больше **150 МБ** сжатого. Ориентир: one-shot 400 × ~150 КБ ≈ 60 МБ, превью ≈ 15 МБ, пресеты < 5 МБ. Петли (100 × ~1,5 МБ ≈ 150 МБ) и CC0-пакеты идут **отдельным пакетом** «Loops & Extras» (`.dawpack`, задача 8.13), скачиваемым по кнопке в настройках «Библиотека» или вручную с релиза GitHub. Если бюджет превышен — сократить петли в бандле, а не качество one-shot.
-- **Когда генерируется**: CMake-цель `factory_library` запускает `drumgen` и рендер превью при сборке Release и в CI релиза; результат кэшируется по хэшу рецептов (не пересобирается без изменений). В git сгенерированные WAV не коммитятся, только рецепты.
-- **Индекс**: `LibraryIndex` в `app/Source/library/` — SQLite не тянем; файл `~/Library/Application Support/Prisma DAW/library-index.json` (или бинарный кэш) с записями `{ path, kind, deviceKind, name, tags[], rating, colour, mtime, size, previewPath, durationSec, rootNote, tempo }`. Строится в фоне при первом запуске, затем обновляется инкрементально по `mtime`. Заводская часть индекса заранее собрана в `library.json` бандла и не сканируется. Поиск идёт по индексу в памяти, на 20 000 записей ответ < 30 мс (тест).
+- **Delivery**: the base factory library (all kits, one-shots, MIDI, presets, previews) lives in `DAW.app/Contents/Resources/Factory Library/`. DMG budget: the library adds no more than **150 MB** compressed. Rough figures: one-shots 400 × ~150 KB ≈ 60 MB, previews ≈ 15 MB, presets < 5 MB. Loops (100 × ~1.5 MB ≈ 150 MB) and CC0 packs ship as a **separate pack** "Loops & Extras" (`.dawpack`, task 8.13), downloadable with a button in the "Library" settings or manually from the GitHub release. If the budget is exceeded, cut loops in the bundle, not one-shot quality.
+- **When it is generated**: the CMake target `factory_library` runs `drumgen` and the preview render during Release builds and in release CI; the result is cached by the hash of the recipes (not rebuilt without changes). Generated WAVs are not committed to git, only the recipes.
+- **Index**: `LibraryIndex` in `app/Source/library/`. We do not pull in SQLite; a file `~/Library/Application Support/Prisma DAW/library-index.json` (or a binary cache) with records `{ path, kind, deviceKind, name, tags[], rating, colour, mtime, size, previewPath, durationSec, rootNote, tempo }`. Built in the background on first launch, then updated incrementally by `mtime`. The factory part of the index is prebuilt in the bundle's `library.json` and is not scanned. Search runs over the in-memory index; on 20,000 records the response is < 30 ms (test).
 
-## Задача 8.10. Единый формат пресета
+## Task 8.10. Unified preset format
 
-Расширить `.dawpreset` из 01 до версии 2 (загрузчик открывает версию 1, миграция с тестом):
+Extend `.dawpreset` from 01 to version 2 (the loader opens version 1, migration with a test):
 
 ```
-DAWPRESET version=2 deviceKind="prisma|sampler|drumrack|alloy|effect:<id>|plugin|chain"
+DAWPRESET version=2 deviceKind="prisma|sampler|drummachine|alloy|effect:<id>|plugin|chain"
           name  author  created  modified  uuid
-          pluginDesc (для plugin)  state(base64)  (или дочерний DEVICE/DEVICES для sampler, drumrack, chain)
+          pluginDesc (for plugin)  state(base64)  (or a child DEVICE/DEVICES for sampler, drummachine, chain)
 ├── TAGS  └── TAG  group="type|genre|character|source"  value="Bass"
 ├── ATTR  rating=0..5  colour=-1..6  comment=""
 └── SAMPLES └── SAMPLE  ref="factory:…|relative:…"  hash
 ```
 
-- Один класс `PresetFile` читает и пишет все виды. `.dawchain` и `.dawkit` — тот же формат с другим расширением (для фильтра в браузере и Finder). Встроенные эффекты 06 сохраняют `deviceKind="effect:reverb"` и т. д.
-- **Пресеты сторонних плагинов**: `state` от `getStateInformation`, `pluginDesc` для поиска плагина. В браузере такие пресеты лежат в папке плагина; если плагина нет — пресет серый с подсказкой.
-- **Теги**: фиксированный словарь в `app/Resources/tags.json` (тип: Bass, Lead, Pad, Keys, Pluck, Drums, FX, Vocal, Mix, Master…; жанр; характер: Warm, Bright, Dark, Wide, Dirty, Clean…) плюс свои теги пользователя. Пресеты из `Factory Library` получают теги из рецептов и словаря при генерации.
-- **Атрибуты** заводских пресетов не меняются в файле: оценка, цвет и пользовательские теги заводских пресетов хранятся в `User Library/Overrides.json` по `uuid`.
+- One `PresetFile` class reads and writes all kinds. `.dawchain` and `.dawkit` are the same format with a different extension (for filtering in the browser and Finder). Built-in effects from 06 save `deviceKind="effect:reverb"` and so on.
+- **Third-party plugin presets**: `state` from `getStateInformation`, `pluginDesc` to find the plugin. In the browser such presets live in the plugin's folder; if the plugin is missing, the preset is grayed out with a hint.
+- **Tags**: a fixed vocabulary in `app/Resources/tags.json` (type: Bass, Lead, Pad, Keys, Pluck, Drums, FX, Vocal, Mix, Master…; genre; character: Warm, Bright, Dark, Wide, Dirty, Clean…) plus the user's own tags. Presets in `Factory Library` get tags from the recipes and the vocabulary during generation.
+- **Attributes** of factory presets are not changed in the file: the rating, color and user tags of factory presets are stored in `User Library/Overrides.json` by `uuid`.
 
-## Задача 8.11. Браузер: теги, рейтинг, коллекции, hot-swap
+## Task 8.11. Browser: tags, rating, collections, hot-swap
 
-- Новые категории браузера: **Барабаны** (киты, затем one-shot по типам), **Петли**, **Sampler**. Категория «Эффекты» показывает встроенные эффекты 06 и их заводские пресеты папками.
-- **Фильтр по тегам**: над списком полоса чипов тегов текущей категории; щелчок включает, несколько чипов — пересечение. Поле поиска ищет по имени и тегам (`bass warm` → оба). Фильтр «оценка ≥ N».
-- **Редактор тегов**: правая кнопка → «Теги и свойства…» (или `Cmd+Shift+T`): чипы групп, поле нового тега с автодополнением, оценка звёздами, цвет, комментарий. Работает на нескольких выделенных элементах сразу.
-- **Избранное и коллекции**: 7 цветов из 01 становятся коллекциями с именами (переименование двойным щелчком: «Для лайва», «Басы недели»). Хранятся в `User Library/Collections.json` как списки путей и `uuid`. Элемент может быть в нескольких коллекциях.
-- **Hot-swap**: в заголовке каждого устройства (Prisma, Sampler, Drum Rack, встроенные эффекты, плагины) и каждого пэда Drum Rack кнопка ⇄. Нажатие переводит браузер в режим выбора для этого устройства: показываются только подходящие пресеты (для пэда — сэмплы и инструменты), сверху плашка «Замена: Reverb на дорожке Вокал · Esc — выход». Выделение элемента сразу загружает его в устройство (как в Ableton), стрелки вверх/вниз перебирают, `Enter` или повторное ⇄ выходит. Все загрузки за один сеанс hot-swap — одна транзакция отмены; `Esc` возвращает состояние до входа. Загрузка состояния плагина — на message thread, без пересборки графа, если тип устройства не изменился.
-- **Недавние** и **предпрослушивание** из 01 работают для всех новых видов.
+- New browser categories: **Drums** (kits, then one-shots by type), **Loops**, **Sampler**. The "Effects" category shows the built-in effects from 06 and their factory presets in folders.
+- **Tag filter**: above the list, a strip of tag chips for the current category; a click toggles one, several chips mean intersection. The search field searches by name and tags (`bass warm` → both). A "rating ≥ N" filter.
+- **Tag editor**: right-click → "Tags and Properties…" (or `Cmd+Shift+T`): group chips, a new tag field with autocomplete, star rating, color, comment. Works on several selected items at once.
+- **Favorites and collections**: the 7 colors from 01 become named collections (renamed by double-click: "For live", "Basses of the week"). Stored in `User Library/Collections.json` as lists of paths and `uuid`s. An item can be in several collections.
+- **Hot-swap**: in the header of every device (Prisma, Sampler, Drum Machine, built-in effects, plugins) and of every Drum Machine pad, a ⇄ button. Pressing it puts the browser into selection mode for that device: only matching presets are shown (for a pad: samples and instruments), with a banner at the top "Replacing: Reverb on track Vocals · Esc to exit". Selecting an item loads it into the device immediately, the up/down arrows step through, `Enter` or pressing ⇄ again exits. All loads in one hot-swap session are one undo transaction; `Esc` restores the state from before entering. Loading plugin state happens on the message thread, without rebuilding the graph if the device type did not change.
+- **Recent** and **preview** from 01 work for all the new kinds.
 
-## Задача 8.12. Превью пресетов
+## Task 8.12. Preset previews
 
-- Для каждого заводского пресета инструмента и эффекта рядом лежит превью: `Previews/<путь пресета>.ogg` (Ogg Vorbis, 44,1 кГц, стерео, ~96 кбит/с, 2–4 с). Декодер Ogg Vorbis есть в JUCE (`OggVorbisAudioFormat`, лицензия BSD, совместима с AGPLv3); FLAC — запасной формат для пользовательских превью.
-- Что играет превью: инструменты — фраза из 01 (арпеджио до минора) для мелодических, один удар для one-shot, грув «Basic 1» для китов; эффекты — заводской «сухой» отрывок (барабанная петля или вокалоподобный синт-фрагмент из `drumgen`/Prisma, 3 с) через эффект с пресетом.
-- Рендер заводских превью — инструмент `tools/preset_preview` (офлайн, тот же DSP), часть цели `factory_library`. Пользовательские превью рендерятся при сохранении пресета в фоне (для встроенных устройств; для сторонних плагинов — офлайн-экземпляр плагина на фоновом потоке с таймаутом 10 с, при ошибке превью нет).
-- В браузере выбор пресета при включённых наушниках играет файл превью сразу (без создания экземпляра устройства). Если превью нет — поведение из 01 (живой экземпляр для Prisma), иначе тишина.
+- For every factory instrument and effect preset there is a preview next to it: `Previews/<preset path>.ogg` (Ogg Vorbis, 44.1 kHz, stereo, ~96 kbit/s, 2–4 s). An Ogg Vorbis decoder is in JUCE (`OggVorbisAudioFormat`, BSD license, compatible with AGPLv3); FLAC is the fallback format for user previews.
+- What a preview plays: instruments play the phrase from 01 (a C minor arpeggio) for melodic ones, a single hit for one-shots, the "Basic 1" groove for kits; effects play a factory "dry" excerpt (a drum loop or a vocal-like synth fragment from `drumgen`/Prisma, 3 s) through the effect with the preset.
+- Factory previews are rendered by the `tools/preset_preview` tool (offline, the same DSP), part of the `factory_library` target. User previews are rendered in the background when a preset is saved (for built-in devices; for third-party plugins an offline plugin instance on a background thread with a 10 s timeout, on error there is no preview).
+- In the browser, selecting a preset with the headphones button on plays the preview file immediately (without creating a device instance). If there is no preview, the behavior from 01 applies (a live instance for Prisma), otherwise silence.
 
-## Задача 8.13. Пакеты `.dawpack` и резервная копия
+## Task 8.13. `.dawpack` packs and backup
 
-- `.dawpack` — ZIP (`juce::ZipFile` для чтения, `ZipFile::Builder` для записи) с `pack.json` (`name, author, version, created, licence, description, files[] { path, sha256 }`) и папками как в `User Library`.
-- **Экспорт**: выделить элементы или коллекцию → «Экспорт пакета…». Сэмплы, на которые ссылаются пресеты, включаются; заводские (`factory:`) не включаются, потому что есть у всех.
-- **Импорт**: двойной щелчок по файлу в Finder (тип документа в `Info.plist`) или бросание в браузер. Пакет распаковывается в `User Library/Packs/<name>/`, хэши проверяются, пути с `..` и абсолютные отвергаются, при совпадении имени — диалог «Заменить / Оставить оба». Прогресс — в строке подсказок.
-- **Резервная копия**: настройки «Библиотека» → «Резервная копия…» пишет всю `User Library` (без `Backups/`) в `.dawpack`; «Восстановить из копии…». Автоматическая копия раз в неделю в `User Library/Backups/`, хранятся последние 4 (включается в настройках, по умолчанию вкл.).
+- `.dawpack` is a ZIP (`juce::ZipFile` for reading, `ZipFile::Builder` for writing) with `pack.json` (`name, author, version, created, licence, description, files[] { path, sha256 }`) and folders as in `User Library`.
+- **Export**: select items or a collection → "Export Pack…". Samples referenced by presets are included; factory ones (`factory:`) are not, because everyone has them.
+- **Import**: double-click the file in Finder (document type in `Info.plist`) or drop it into the browser. The pack is unpacked into `User Library/Packs/<name>/`, hashes are checked, paths with `..` and absolute paths are rejected, on a name clash a "Replace / Keep Both" dialog appears. Progress is shown in the info bar.
+- **Backup**: the "Library" settings → "Back Up…" writes the whole `User Library` (without `Backups/`) into a `.dawpack`; "Restore from Backup…". An automatic backup once a week into `User Library/Backups/`, the last 4 are kept (enabled in the settings, on by default).
 
-## Задача 8.14. Заводские пресеты эффектов и цепочки
+## Task 8.14. Factory effect presets and chains
 
-- Для каждого эффекта этапа 06 — не меньше 10 заводских пресетов с тегами, в `Factory Library/Presets/<эффект>/`: **EQ**, **Compressor**, **Reverb**, **Delay**, **Distortion/Saturator**, **Chorus**, **Flanger**, **Phaser**, **Filter**, **Gate**, **Limiter**, **Bitcrusher**, **Auto-pan**. Если какого-то эффекта в 06 нет — пресеты для него не делать и сказать в отчёте.
-- Примеры имён (по 10+ на каждый): EQ — «Vocal Presence», «Kick Tight», «Low Cut 80», «Air Shelf», «Telephone»; Compressor — «Vocal Gentle», «Drum Bus Glue», «Bass Even», «Parallel Smash»; Reverb — «Small Room», «Plate Vocal», «Hall Large», «Shimmer Pad», «Gated 80s»; Delay — «1/8 Dotted», «Ping-Pong 1/4», «Slapback», «Tape Echo», «Dub Throw»; Distortion/Saturator — «Warm Tape», «Tube Push», «Fuzz», «Bass Grit»; Chorus — «Juno Wide», «Subtle Double»; Flanger — «Jet», «Slow Sweep»; Phaser — «Classic 4-stage», «Stereo Swirl»; Filter — «LP Sweep 1 bar», «HP Riser»; Gate — «Drum Room Cut», «Trance Gate 1/16»; Limiter — «Master −1 dBTP», «Loud Club»; Bitcrusher — «8-bit», «Sample Rate 8k»; Auto-pan — «1/8 Hard», «Slow Drift».
-- Пресеты описываются в `content/presets/effects/*.json` (id параметров из дескрипторов эффектов 06) и собираются в `.dawpreset` целью `factory_library`, чтобы ручная правка была читаемой.
-- **50 заводских цепочек** (`Factory Library/Chains/`), группы: Вокал («Vocal Clean», «Vocal Radio», «Vocal Wide Pop», «Vocal Lo-fi»…), Барабаны («Drum Bus Punch», «Lo-fi Tape», «Room Crush»…), Бас, Синты и пэды, Мастер («Master Gentle», «Master Loud»), Креатив («Tape Stop FX», «Underwater»). Каждая цепочка — 2–6 встроенных эффектов, без сторонних плагинов.
+- For every stage 06 effect, at least 10 factory presets with tags, in `Factory Library/Presets/<effect>/`: **EQ**, **Compressor**, **Reverb**, **Delay**, **Distortion/Saturator**, **Chorus**, **Flanger**, **Phaser**, **Filter**, **Gate**, **Limiter**, **Bitcrusher**, **Auto-pan**. If some effect does not exist in 06, do not make presets for it and say so in the report.
+- Example names (10+ for each): EQ: "Vocal Presence", "Kick Tight", "Low Cut 80", "Air Shelf", "Telephone"; Compressor: "Vocal Gentle", "Drum Bus Glue", "Bass Even", "Parallel Smash"; Reverb: "Small Room", "Plate Vocal", "Hall Large", "Shimmer Pad", "Gated 80s"; Delay: "1/8 Dotted", "Ping-Pong 1/4", "Slapback", "Tape Echo", "Dub Throw"; Distortion/Saturator: "Warm Tape", "Tube Push", "Fuzz", "Bass Grit"; Chorus: "Juno Wide", "Subtle Double"; Flanger: "Jet", "Slow Sweep"; Phaser: "Classic 4-stage", "Stereo Swirl"; Filter: "LP Sweep 1 bar", "HP Riser"; Gate: "Drum Room Cut", "Trance Gate 1/16"; Limiter: "Master −1 dBTP", "Loud Club"; Bitcrusher: "8-bit", "Sample Rate 8k"; Auto-pan: "1/8 Hard", "Slow Drift".
+- Presets are described in `content/presets/effects/*.json` (parameter ids from the stage 06 effect descriptors) and assembled into `.dawpreset` by the `factory_library` target, so that manual edits stay readable.
+- **50 factory chains** (`Factory Library/Chains/`), groups: Vocals ("Vocal Clean", "Vocal Radio", "Vocal Wide Pop", "Vocal Lo-fi"…), Drums ("Drum Bus Punch", "Lo-fi Tape", "Room Crush"…), Bass, Synths and pads, Master ("Master Gentle", "Master Loud"), Creative ("Tape Stop FX", "Underwater"). Each chain is 2–6 built-in effects, no third-party plugins.
 
-## Задача 8.16. Игра на трекпаде
+## Task 8.16. Playing on the trackpad
 
-Идея из прототипа Codex (Prisma Touch): на Mac по пэдам Drum Rack можно бить пальцами прямо по трекпаду, несколькими пальцами сразу. Ни в одной известной DAW этого нет. Образец рабочего кода: [`docs/reference/codex/touchdrums/TouchSurface_mac.mm`](../reference/codex/touchdrums/TouchSurface_mac.mm).
+An idea from the Codex prototype (Prisma Touch): on a Mac you can hit the Drum Machine pads with your fingers right on the trackpad, with several fingers at once. No DAW we know of does this. Reference working code: [`docs/reference/codex/touchdrums/TouchSurface_mac.mm`](../reference/codex/touchdrums/TouchSurface_mac.mm).
 
-- `app/Source/control/TouchSurface.h` + `TouchSurface_mac.mm` (на других платформах пустая заглушка, `supported = false`). Прозрачный `NSView` через `juce::NSViewComponent` поверх видимого окна 4 × 4 Drum Rack. Только публичный API: `allowedTouchTypes = NSTouchTypeMaskIndirect`, `wantsRestingTouches = YES`, каждое касание получает свой токен по `touch.identity`. Никаких приватных фреймворков и глобальных перехватов.
-- Включение: кнопка «Трекпад» в заголовке Drum Rack (иконка с пальцами, подсказка «Играть по пэдам пальцами на трекпаде. Esc — выход»). В режиме курсор над рэком, весь физический трекпад отображается на окно 4 × 4 (координаты AppKit идут снизу вверх, верхний ряд экрана — верхний ряд трекпада). Выход: `Esc`, повторное нажатие кнопки, потеря фокуса окна (`NSWindowDidResignKeyNotification`), все звучащие касания при этом получают «отпущено».
-- Поведение: новое касание = один note-on пэда под пальцем; скольжение двигает только маркер касания и не перезапускает звук; отпускание = note-off (важно для пэдов с длинным Sampler в режиме Gate). В режиме mouseDown/mouseUp и прокрутка, которые macOS шлёт от tap-to-click, поглощаются, чтобы не было двойного удара.
-- Сила удара: `NSTouch` не сообщает давление пальца, поэтому сила фиксированная, ползунок «Сила» 1–127 рядом с кнопкой (по умолчанию 100), сохраняется в настройках приложения.
-- События касаний идут в движок той же SPSC-очередью команд, что и щелчки по пэдам (00-rules, раздел 2), с меткой времени message thread; запись в клип работает как с MIDI-клавиатуры (02).
-- Маркеры касаний рисуются кружками цвета `theme().accent` с прозрачностью, пэд вспыхивает как от ноты.
-- Тест: подменный источник касаний (интерфейс `ITouchSource`) подаёт последовательность began/moved/ended для 3 пальцев; проверяется, что сыграно ровно 3 note-on и 3 note-off нужных пэдов, скольжение не даёт лишних ударов, потеря фокуса отпускает все ноты. Физический трекпад проверяет пользователь на Mac.
+- `app/Source/control/TouchSurface.h` + `TouchSurface_mac.mm` (on other platforms an empty stub, `supported = false`). A transparent `NSView` via `juce::NSViewComponent` over the visible 4 × 4 window of the Drum Machine. Public API only: `allowedTouchTypes = NSTouchTypeMaskIndirect`, `wantsRestingTouches = YES`, each touch gets its own token from `touch.identity`. No private frameworks and no global event taps.
+- Enabling: a "Trackpad" button in the Drum Machine header (an icon with fingers, tooltip "Play the pads with your fingers on the trackpad. Esc to exit"). In this mode, with the cursor over the device, the whole physical trackpad maps onto the 4 × 4 window (AppKit coordinates go bottom to top; the top row on screen is the top row of the trackpad). Exit: `Esc`, pressing the button again, losing window focus (`NSWindowDidResignKeyNotification`); all sounding touches then get "released".
+- Behavior: a new touch = one note-on for the pad under the finger; sliding moves only the touch marker and does not retrigger the sound; lifting = note-off (important for pads with a long Sampler in Gate mode). In this mode the mouseDown/mouseUp and scroll events that macOS sends from tap-to-click are swallowed, to avoid a double hit.
+- Hit velocity: `NSTouch` does not report finger pressure, so velocity is fixed, with a "Velocity" slider 1–127 next to the button (default 100), saved in the application settings.
+- Touch events go to the engine through the same SPSC command queue as pad clicks (00-rules, section 2), with a message thread timestamp; recording into a clip works as with a MIDI keyboard (02).
+- Touch markers are drawn as circles in `theme().accent` with transparency; the pad flashes as it does from a note.
+- Test: a fake touch source (an `ITouchSource` interface) feeds a began/moved/ended sequence for 3 fingers; the test checks that exactly 3 note-ons and 3 note-offs of the right pads were played, sliding produces no extra hits, and losing focus releases all notes. The user checks the physical trackpad on a Mac.
 
-## Задача 8.15. Порядок выполнения
+## Task 8.15. Order of work
 
-Задачи можно выдавать порциями; зависимости такие:
+Tasks can be handed out in batches; the dependencies are:
 
-1. 8.1 → 8.2 → 8.3 (Sampler целиком; без него нет Drum Rack).
-2. 8.8 (`drumgen`) можно делать параллельно с 8.1: ему нужны только DSP-блоки Prisma и писатель WAV.
-3. 8.4 → 8.5 → 8.6 → 8.7 (Drum Rack и нарезка).
-4. 8.10 → 8.11 → 8.12 → 8.13 (формат пресетов, браузер, превью, пакеты).
-5. 8.9 и 8.14 последними: им нужны готовые форматы и все генераторы.
-6. 8.16 (трекпад) после 8.5, в любой момент.
+1. 8.1 → 8.2 → 8.3 (the whole Sampler; without it there is no Drum Machine).
+2. 8.8 (`drumgen`) can be done in parallel with 8.1: it only needs Prisma's DSP blocks and the WAV writer.
+3. 8.4 → 8.5 → 8.6 → 8.7 (Drum Machine and slicing).
+4. 8.10 → 8.11 → 8.12 → 8.13 (preset format, browser, previews, packs).
+5. 8.9 and 8.14 last: they need finished formats and all generators.
+6. 8.16 (trackpad) after 8.5, at any time.
 
-Если работа не помещается в одну сессию, разумное деление: «Sampler» (8.1–8.3), «Drum Rack» (8.4–8.7), «Генераторы» (8.8), «Пресеты и библиотека» (8.9–8.14).
+If the work does not fit in one session, a sensible split: "Sampler" (8.1–8.3), "Drum Machine" (8.4–8.7), "Generators" (8.8), "Presets and library" (8.9–8.14).
 
-## Тесты
+## Tests
 
-В `core/tests/` и `tests/`:
+In `core/tests/` and `tests/`:
 
-1. **Ресемплинг.** Синус 1 кГц, транспонирование −12, +7, +19 полутонов: частота по FFT в пределах ±0,1 %; при +19 в «Высоком» качестве с мип-копиями суммарная энергия алиасов ниже −80 дБ от основной, в «Обычном» ниже −50 дБ.
-2. **Зоны и сила нажатия.** Карта из 3 зон по нотам и 2 слоёв по силе: для 20 пар (нота, сила) выбираются ожидаемые зоны и веса кроссфейда.
-3. **Round-robin.** 6 ударов по ноте с группой из 3 зон дают последовательность 0,1,2,0,1,2; случайный режим с зерном 42 даёт зафиксированную последовательность.
-4. **Петля.** Сэмпл с петлёй и кроссфейдом 256 кадров: на 10 секундах нет разрыва больше заданного порога в месте стыка (максимум разности соседних сэмплов в окне стыка ≤ 1,5 × максимума в остальной петле); `clampLoop` на крайних значениях.
-5. **`parseNoteName`.** 30 имён файлов (`Piano_C#3_v2.wav`, `bass-a1.aif`, `Str 060 rr2.wav`, `Kick.wav`) дают ожидаемые ноту, силу и round-robin или «не найдено»; соглашения C3 = 60 и C4 = 60.
-6. **Потоковое чтение.** Подменный `ISampleSource` с задержкой: при успевающем диске выход совпадает с RAM-вариантом посэмплово; при остановленном диске — тишина, флаг `underrun`, без блокировок (`DAW_RT_CHECKS=ON`, 0 выделений).
-7. **Choke.** Открытый хэт, затем закрытый в той же группе: через 3 мс + 1 блок уровень открытого ниже −90 dBFS.
-8. **Drum Rack без выделений.** 2000 блоков, 16 пэдов играют, параллельный поток меняет сэмплы и цепочки пэдов: 0 выделений в аудиопотоке, нет NaN/Inf, живых `DrumRackGraph` не больше 3.
-9. **Ноты пэдов.** Нота 36 играет пэд 36 (нижний левый при `viewOffset=36`), нота 52 — пэд 52, ноты 0–127 все достижимы; профиль Launchkey переводит ноты входа в нужные пэды.
-10. **Онсеты.** Синтетическая петля `drumgen` с известными 16 ударами: найдено 16 ± 0, позиции в пределах ±5 мс; на белом шуме при чувствительности 50 % ложных срабатываний не больше 2 в секунду.
-11. **Нарезка.** Нарезка по 1/8 петли 2 такта даёт 16 пэдов и MIDI-клип, рендер которого совпадает с исходной петлёй (разница RMS < −60 дБ).
-12. **Детерминизм `drumgen`.** Два запуска на одном рецепте дают побайтно одинаковые WAV; SHA-256 нескольких звуков совпадают с зафиксированными в тесте (изменение рецепта требует осознанного обновления хэша).
-13. **Рецепты.** Kick 808: основная частота через 200 мс в 45–52 Гц, пик −1 dBFS ± 0,1; hats: 90 % энергии выше 5 кГц; нет NaN, нет DC больше −60 дБ.
-14. **Формат пресета.** Пресет каждого вида (Prisma, Sampler, Drum Rack, эффект, плагин-заглушка, цепочка) пишется и читается с теми же тегами и атрибутами; файл версии 1 из 01 мигрирует; `Overrides.json` не меняет заводской файл.
-15. **Индекс и поиск.** 20 000 синтетических записей: поиск по имени и двум тегам < 30 мс, результаты ожидаемые; инкрементальное обновление после изменения `mtime` одного файла меняет одну запись.
-16. **Hot-swap.** Пять загрузок пресетов подряд, затем `Esc`: состояние устройства равно исходному; без `Esc` — одна транзакция, `undo` возвращает исходное.
-17. **`.dawpack`.** Экспорт и импорт кита с пользовательским сэмплом: файлы и хэши совпадают; архив с `../evil.wav` и абсолютным путём отвергается.
-18. **Сохранение проекта.** Проект с Drum Rack (4 пэда, choke, посыл в возврат рэка) и Sampler сохраняется и загружается: звук 4 тактов совпадает посэмплово.
-19. **Состав библиотеки.** Проверка собранной `Factory Library`: 20 китов по 16 пэдов, ≥ 400 one-shot, 50 MIDI, ≥ 10 пресетов на каждый эффект 06, 50 цепочек, у каждого пресета есть превью, все файлы `ThirdParty/` есть в манифесте с CC0; размер бандловой части в бюджете.
+1. **Resampling.** A 1 kHz sine, transposed −12, +7, +19 semitones: the frequency by FFT is within ±0.1 %; at +19 in "High" quality with mip copies the total alias energy is below −80 dB relative to the fundamental, in "Normal" below −50 dB.
+2. **Zones and velocity.** A map of 3 zones by note and 2 velocity layers: for 20 (note, velocity) pairs the expected zones and crossfade weights are chosen.
+3. **Round-robin.** 6 hits on a note with a group of 3 zones give the sequence 0,1,2,0,1,2; random mode with seed 42 gives a fixed sequence.
+4. **Loop.** A sample with a loop and a 256-frame crossfade: over 10 seconds there is no discontinuity above the given threshold at the seam (the maximum difference of adjacent samples in the seam window ≤ 1.5 × the maximum in the rest of the loop); `clampLoop` at edge values.
+5. **`parseNoteName`.** 30 file names (`Piano_C#3_v2.wav`, `bass-a1.aif`, `Str 060 rr2.wav`, `Kick.wav`) give the expected note, velocity and round-robin or "not found"; conventions C3 = 60 and C4 = 60.
+6. **Streaming.** A fake `ISampleSource` with a delay: when the disk keeps up, the output matches the RAM version sample for sample; with a stalled disk: silence, the `underrun` flag, no locks (`DAW_RT_CHECKS=ON`, 0 allocations).
+7. **Choke.** An open hat, then a closed hat in the same group: after 3 ms + 1 block the open hat's level is below −90 dBFS.
+8. **Drum Machine without allocations.** 2000 blocks, 16 pads playing, a parallel thread changes samples and pad chains: 0 allocations on the audio thread, no NaN/Inf, no more than 3 live `DrumMachineGraph` instances.
+9. **Pad notes.** Note 36 plays pad 36 (bottom-left at `viewOffset=36`), note 52 plays pad 52, notes 0–127 are all reachable; the Launchkey profile maps input notes to the right pads.
+10. **Onsets.** A synthetic `drumgen` loop with 16 known hits: 16 ± 0 found, positions within ±5 ms; on white noise at 50 % sensitivity no more than 2 false detections per second.
+11. **Slicing.** Slicing a 2-bar loop by 1/8 gives 16 pads and a MIDI clip whose render matches the original loop (RMS difference < −60 dB).
+12. **`drumgen` determinism.** Two runs on the same recipe give byte-identical WAVs; the SHA-256 of several sounds matches values fixed in the test (changing a recipe requires a deliberate hash update).
+13. **Recipes.** Kick 808: fundamental frequency after 200 ms within 45–52 Hz, peak −1 dBFS ± 0.1; hats: 90 % of the energy above 5 kHz; no NaN, no DC above −60 dB.
+14. **Preset format.** A preset of each kind (Prisma, Sampler, Drum Machine, effect, plugin stub, chain) is written and read back with the same tags and attributes; a version 1 file from 01 migrates; `Overrides.json` does not change the factory file.
+15. **Index and search.** 20,000 synthetic records: search by name and two tags < 30 ms with the expected results; an incremental update after the `mtime` of one file changes one record.
+16. **Hot-swap.** Five preset loads in a row, then `Esc`: the device state equals the original; without `Esc`: one transaction, `undo` returns the original.
+17. **`.dawpack`.** Export and import of a kit with a user sample: files and hashes match; an archive with `../evil.wav` and an absolute path is rejected.
+18. **Project save.** A project with a Drum Machine (4 pads, choke, a send to a device return) and a Sampler is saved and loaded: 4 bars of audio match sample for sample.
+19. **Library contents.** A check of the built `Factory Library`: 20 kits of 16 pads, ≥ 400 one-shots, 50 MIDI files, ≥ 10 presets for each 06 effect, 50 chains, every preset has a preview, every file in `ThirdParty/` is in the manifest with CC0; the size of the bundled part is within budget.
 
-## Готово, когда
+## Done when
 
-- [ ] Sampler играет мультисэмпл, импортированный бросанием папки, с правильными нотами из имён; петля с кроссфейдом не щёлкает (тесты 1–5, скриншот полного вида).
-- [ ] Большой сэмпл (> 32 МБ) играет потоково без выпадений при буфере 256 на Mac; в контейнере — тест 6.
-- [ ] Drum Rack: 128 пэдов с прокруткой окна, choke, mute/solo, посылы в возвраты рэка, бросание сэмплов из браузера и Finder, кит сохраняется как `.dawkit` и открывается (тесты 7–9, 18, скриншоты во всех четырёх темах).
-- [ ] Петля нарезается на пэды по транзиентам и по долям, MIDI-клип воспроизводит исходник (тесты 10–11).
-- [ ] `tools/drumgen` собирает заводскую библиотеку детерминированно; состав соответствует целям, бюджет DMG соблюдён, цифры размеров в отчёте (тесты 12, 13, 19).
-- [ ] Пресет сохраняется и находится по тегам для каждого вида устройства, включая сторонний плагин и цепочку; рейтинг, цвет и коллекции работают и для заводских (тесты 14, 15).
-- [ ] На Mac по пэдам Drum Rack можно играть несколькими пальцами на трекпаде, `Esc` выходит из режима (тест 8.16, проверка пользователем).
-- [ ] Hot-swap перебирает пресеты стрелками на устройстве и на пэде, `Esc` возвращает как было (тест 16, скриншот).
-- [ ] Превью заводских пресетов играют мгновенно при включённых наушниках.
-- [ ] Экспорт и импорт `.dawpack`, резервная копия и восстановление `User Library` работают (тест 17).
-- [ ] У каждого эффекта 06 не меньше 10 заводских пресетов, есть 50 цепочек.
-- [ ] Цифры `tools/sampler_render` (CPU на 16 голосов) в отчёте; все тесты зелёные, старые тоже; CI зелёный, DMG собирается.
-- [ ] README обновлён: Sampler, Drum Rack, библиотека, hot-swap, горячие клавиши, скриншоты.
+- [ ] The Sampler plays a multisample imported by dropping a folder, with correct notes from the names; a loop with crossfade does not click (tests 1–5, screenshot of the full view).
+- [ ] A large sample (> 32 MB) streams without dropouts at buffer 256 on a Mac; in the container, test 6.
+- [ ] Drum Machine: 128 pads with window scrolling, choke, mute/solo, sends to the device's returns, dropping samples from the browser and Finder, a kit is saved as `.dawkit` and opens (tests 7–9, 18, screenshots in all four themes).
+- [ ] A loop is sliced onto pads by transients and by beats, and the MIDI clip reproduces the source (tests 10–11).
+- [ ] `tools/drumgen` builds the factory library deterministically; the contents match the targets, the DMG budget is met, size figures are in the report (tests 12, 13, 19).
+- [ ] A preset is saved and found by tags for every device kind, including a third-party plugin and a chain; rating, color and collections work for factory items too (tests 14, 15).
+- [ ] On a Mac the Drum Machine pads can be played with several fingers on the trackpad, `Esc` exits the mode (test 8.16, checked by the user).
+- [ ] Hot-swap steps through presets with the arrow keys on a device and on a pad, `Esc` restores the previous state (test 16, screenshot).
+- [ ] Factory preset previews play instantly with the headphones button on.
+- [ ] `.dawpack` export and import, backup and restore of `User Library` work (test 17).
+- [ ] Every 06 effect has at least 10 factory presets, and there are 50 chains.
+- [ ] `tools/sampler_render` figures (CPU for 16 voices) are in the report; all tests are green, old ones too; CI is green, the DMG builds.
+- [ ] README updated: Sampler, Drum Machine, library, hot-swap, keyboard shortcuts, screenshots.

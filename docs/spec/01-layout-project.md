@@ -1,60 +1,60 @@
-# 01. Модель проекта, новое окно, браузер, темы, сохранение
+# 01. Project model, new window, browser, themes, saving
 
-## Цель
+## Goal
 
-Превратить каркас фазы 0 в настоящее приложение: проект с любым числом дорожек и сцен, который сохраняется, открывается, отменяет любое действие и не теряет работу. Окно перестраивается под раскладку Ableton: транспорт сверху, браузер слева, Session View в центре, детальная панель с цепочкой устройств снизу. Появляются четыре темы оформления и полноценные настройки звуковой карты.
+Turn the phase 0 skeleton into a real application: a project with any number of tracks and scenes that saves, opens, undoes any action, and never loses work. The window gets a four-zone layout: transport at the top, browser on the left, Session View in the center, detail panel with the device chain at the bottom. Four visual themes and full audio interface settings appear.
 
-В конце пользователь может: открыть DAW, перетащить пресет Prisma из браузера на пустое место (создастся дорожка), добавить на дорожку сторонний эффект, сохранить свой пресет, сохранить проект, закрыть, открыть и получить всё как было, включая звук всех плагинов.
+At the end the user can: open the DAW, drag a Prisma preset from the browser onto an empty area (a track is created), add a third-party effect to the track, save their own preset, save the project, close it, reopen it, and get everything back as it was, including the sound of every plugin.
 
-## Границы
+## Scope
 
-Входит: модель на `ValueTree`, отмена и повтор, движок без блокировок с динамическими дорожками, файл проекта, автосохранение и восстановление после сбоя, история версий (список, метки, возврат), раскладка окна, браузер, перетаскивание, цепочка устройств (Prisma и сторонние AU/VST3 инструменты и эффекты), пользовательские пресеты устройств и цепочек, темы и шрифты, окно настроек (звук, MIDI, внешний вид), меню и горячие клавиши, строка подсказок.
+In scope: a `ValueTree` model, undo and redo, a lock-free engine with dynamic tracks, the project file, autosave and crash recovery, version history (list, labels, restore), the window layout, the browser, drag and drop, the device chain (Prisma and third-party AU/VST3 instruments and effects), user presets for devices and chains, themes and fonts, the settings window (audio, MIDI, appearance), menus and keyboard shortcuts, the hint bar.
 
-Не входит (будет позже): запись и пиано-ролл (02), Arrangement (03), экспорт и прослушивание версий (04), аудиодорожки и сэмплы на дорожках (05), встроенные эффекты, посылы, группы, автоматизация (06), Drum Rack и библиотека звуков (08). Поля модели под эти функции создаются там, где сказано ниже, но логика не пишется.
+Out of scope (later): recording and the piano roll (02), Arrangement (03), export and version preview (04), audio tracks and samples on tracks (05), built-in effects, sends, groups, automation (06), the 16-pad drum machine and the sound library (08). Model fields for these features are created where stated below, but no logic is written.
 
 ---
 
-## Задача 1.1. Модель проекта
+## Task 1.1. Project model
 
-Создать `app/Source/model/` с классами `ProjectModel`, `Ids.h` (все `juce::Identifier`), обёртками `TrackRef`, `ClipRef`, `SceneRef`, `DeviceRef` (лёгкие классы поверх `ValueTree` с типизированными геттерами и сеттерами, которые принимают `UndoManager*`).
+Create `app/Source/model/` with the classes `ProjectModel`, `Ids.h` (all `juce::Identifier`s), and the wrappers `TrackRef`, `ClipRef`, `SceneRef`, `DeviceRef` (lightweight classes over `ValueTree` with typed getters and setters that take an `UndoManager*`).
 
-### Схема
+### Schema
 
 ```
 PROJECT  schemaVersion=1  name  tempo=120.0  sigNum=4  sigDen=4
-         launchQuantise=4.0 (в долях; 0 = без квантизации)  nextId=1  selectedTrack=<id>
+         launchQuantise=4.0 (in beats; 0 = no quantize)  nextId=1  selectedTrack=<id>
 ├── TRACKS
-│   └── TRACK  id  type="midi"   (допустимы "midi" | "audio" | "return" | "group"; в этом этапе создаём только "midi")
-│             name  colour=<индекс палитры 0..15>  volumeDb=0  pan=0  mute=0  solo=0  arm=0
-│             input="all-midi"  ("all-midi" | "keyboard" | "midi:<identifier устройства>" | "none")
+│   └── TRACK  id  type="midi"   (allowed: "midi" | "audio" | "return" | "group"; this stage creates only "midi")
+│             name  colour=<palette index 0..15>  volumeDb=0  pan=0  mute=0  solo=0  arm=0
+│             input="all-midi"  ("all-midi" | "keyboard" | "midi:<device identifier>" | "none")
 │             monitor="auto"  ("auto" | "in" | "off")
-│             recordSource="midi"  ("midi" | "audio", переключатель из решения №1; логика в 02 и 05)
-│             width=120  (ширина столбца в Session View, px при масштабе 100 %)
+│             recordSource="midi"  ("midi" | "audio", the switch from decision no. 1; logic in 02 and 05)
+│             width=120  (column width in Session View, px at 100% scale)
 │      ├── DEVICES
 │      │   └── DEVICE  id  kind="prisma" | "plugin" | "missing"
 │      │              name  enabled=1  folded=0
-│      │              pluginDesc=<XML PluginDescription, только для "plugin" и "missing">
-│      │              state=<base64 getStateInformation>  (заполняется при сохранении)
-│      │              macroParams="i0,i1,...,i7"  (индексы параметров для 8 ручек в панели)
-│      ├── SLOTS            (детей ровно столько, сколько сцен, порядок совпадает со SCENES)
+│      │              pluginDesc=<PluginDescription XML, only for "plugin" and "missing">
+│      │              state=<base64 getStateInformation>  (filled in on save)
+│      │              macroParams="i0,i1,...,i7"  (parameter indices for the 8 knobs in the panel)
+│      ├── SLOTS            (exactly as many children as there are scenes, in the same order as SCENES)
 │      │   └── SLOT
 │      │       └── CLIP  id  name  colour  lengthBeats=4  loopStart=0  loopEnd=4  startOffset=0
-│      │           └── NOTE  start  length  pitch  velocity       (доли от начала клипа)
-│      └── ARRANGEMENT      (пусто; наполняется в 03)
-├── MASTER  volumeDb=0  └── DEVICES (как у дорожки)
+│      │           └── NOTE  start  length  pitch  velocity       (beats from the clip start)
+│      └── ARRANGEMENT      (empty; filled in 03)
+├── MASTER  volumeDb=0  └── DEVICES (same as a track)
 ├── SCENES
-│   └── SCENE  id  name  colour=-1 (нет)  tempo=-1 (нет)
-├── MARKERS                 (пусто; 03)
-└── SNAPSHOTS               (пусто; 06)
+│   └── SCENE  id  name  colour=-1 (none)  tempo=-1 (none)
+├── MARKERS                 (empty; 03)
+└── SNAPSHOTS               (empty; 06)
 ```
 
-Правила:
-- `id` — целое 64 бит, выдаётся `ProjectModel::newId()` из `nextId` и никогда не переиспользуется. Ссылки между узлами только по `id`.
-- Цвет хранится **индексом палитры**, а не ARGB, чтобы тема могла перекрасить всё сразу. Новая дорожка получает следующий цвет по кругу спектра (0, 2, 4, … затем 1, 3, 5, …), чтобы соседние дорожки отличались.
-- Число SLOT в каждой дорожке всегда равно числу SCENE. Вставка и удаление сцены меняют все дорожки в одной транзакции.
-- Ноты внутри CLIP отсортированы по `start`, затем по `pitch`. Сортировку поддерживает `ClipRef`, а не вызывающий код.
+Rules:
+- `id` is a 64-bit integer issued by `ProjectModel::newId()` from `nextId` and never reused. Nodes refer to each other only by `id`.
+- Color is stored as a **palette index**, not ARGB, so a theme can recolor everything at once. A new track gets the next color around the spectrum (0, 2, 4, … then 1, 3, 5, …) so that neighboring tracks differ.
+- The number of SLOTs in each track always equals the number of SCENEs. Inserting and deleting a scene changes all tracks in a single transaction.
+- Notes inside a CLIP are sorted by `start`, then by `pitch`. `ClipRef` maintains the sort order, not the calling code.
 
-### API (минимум)
+### API (minimum)
 
 ```cpp
 class ProjectModel
@@ -63,10 +63,10 @@ public:
     juce::ValueTree root;
     juce::UndoManager undo;
 
-    static ProjectModel createDefault();          // 2 MIDI-дорожки с Prisma «Init», 8 сцен
+    static ProjectModel createDefault();          // 2 MIDI tracks with Prisma "Init", 8 scenes
     int64_t newId();
 
-    TrackRef addTrack (juce::String type, int insertIndex = -1);   // транзакцию открывает вызывающий код
+    TrackRef addTrack (juce::String type, int insertIndex = -1);   // the caller opens the transaction
     void deleteTrack (int64_t id);
     TrackRef duplicateTrack (int64_t id);
     SceneRef insertScene (int index);
@@ -79,57 +79,57 @@ public:
 };
 ```
 
-Транзакции открывает слой интерфейса (`beginNewTransaction ("Новая дорожка")`), модель только пишет с `&undo`. Имена транзакций берутся из `Strings.h` и показываются в меню «Отменить …».
+The UI layer opens transactions (`beginNewTransaction ("New track")`); the model only writes with `&undo`. Transaction names come from `Strings.h` and are shown in the "Undo …" menu item.
 
-### Отмена
+### Undo
 
-- `Cmd+Z` / `Cmd+Shift+Z`. Лимит истории: 500 транзакций (`UndoManager (… , 500)`).
-- Изменение ручек плагинов в этом этапе в историю не попадает (сделаем в 06 вместе с автоматизацией).
-- После загрузки проекта история очищается.
+- `Cmd+Z` / `Cmd+Shift+Z`. History limit: 500 transactions (`UndoManager (… , 500)`).
+- Plugin knob changes do not go into the history in this stage (done in 06 together with automation).
+- The history is cleared after a project is loaded.
 
-## Задача 1.2. Строки и настройки
+## Task 1.2. Strings and settings
 
-- `app/Source/Strings.h`: все тексты интерфейса на русском как `inline const juce::String`. Названия типов дорожек, пунктов меню, подсказок строки состояния, тексты ошибок.
-- `app/Source/Settings.h/.cpp`: обёртка над `juce::PropertiesFile` с типизированными ключами: тема, масштаб интерфейса, недавние проекты (10), папки «Мест», громкость предпрослушивания, анимации вкл/выкл, состояние звуковой карты (`AudioDeviceManager::createStateXml`), имена каналов карты.
+- `app/Source/Strings.h`: all UI text as `tr ("English", "Русский")` pairs (English is the default UI language, Russian is the second one). Track type names, menu items, status bar hints, error messages.
+- `app/Source/Settings.h/.cpp`: a wrapper over `juce::PropertiesFile` with typed keys: theme, UI scale, recent projects (10), Places folders, preview volume, animations on/off, audio interface state (`AudioDeviceManager::createStateXml`), interface channel names.
 
-## Задача 1.3. Движок: граф воспроизведения без блокировок
+## Task 1.3. Engine: lock-free playback graph
 
-Переписать `AudioEngine` так, чтобы:
-1. Не было фиксированных `kNumTracks` / `kNumScenes` и `CriticalSection`.
-2. Аудиопоток читал только неизменяемый `PlaybackGraph`.
+Rewrite `AudioEngine` so that:
+1. There are no fixed `kNumTracks` / `kNumScenes` and no `CriticalSection`.
+2. The audio thread reads only an immutable `PlaybackGraph`.
 
-### Структуры (в `app/Source/engine/`)
+### Structures (in `app/Source/engine/`)
 
 ```cpp
-// Живёт, пока существует дорожка. Создаётся и удаляется на message thread,
-// удаление откладывается, пока аудиопоток может её видеть (см. «Удаление»).
+// Lives as long as the track exists. Created and destroyed on the message thread;
+// destruction is deferred while the audio thread may still see it (see "Deletion").
 struct TrackRuntime
 {
     int64_t trackId;
-    std::atomic<float> volumeGain, pan;       // пишет message thread из модели
+    std::atomic<float> volumeGain, pan;       // written by the message thread from the model
     std::atomic<bool> mute, solo, arm;
-    std::atomic<float> meterL, meterR;        // пишет аудиопоток
-    daw::engine::ClipPlayer player;           // только аудиопоток
-    juce::AudioBuffer<float> buffer;          // выделен в prepare, размер = max block
-    juce::MidiBuffer midi;                    // ensureSize в prepare
-    std::vector<daw::MidiEvent> events;       // reserve(4096) в prepare
+    std::atomic<float> meterL, meterR;        // written by the audio thread
+    daw::engine::ClipPlayer player;           // audio thread only
+    juce::AudioBuffer<float> buffer;          // allocated in prepare, size = max block
+    juce::MidiBuffer midi;                    // ensureSize in prepare
+    std::vector<daw::MidiEvent> events;       // reserve(4096) in prepare
 };
 
-struct DeviceInstance                          // плагин или Prisma, переживает пересборку графа
+struct DeviceInstance                          // plugin or Prisma, survives graph rebuilds
 {
     int64_t deviceId;
     std::unique_ptr<juce::AudioProcessor> processor;
     std::atomic<bool> enabled;
 };
 
-struct PlaybackGraph                           // неизменяем после публикации
+struct PlaybackGraph                           // immutable after publication
 {
     uint64_t generation;
     struct Track
     {
         TrackRuntime* runtime;
-        std::vector<DeviceInstance*> chain;    // первый — инструмент, остальные — эффекты
-        std::vector<std::shared_ptr<const daw::engine::MidiClip>> slots;   // по сценам, nullptr = пусто
+        std::vector<DeviceInstance*> chain;    // first is the instrument, the rest are effects
+        std::vector<std::shared_ptr<const daw::engine::MidiClip>> slots;   // per scene, nullptr = empty
     };
     std::vector<Track> tracks;
     std::vector<DeviceInstance*> masterChain;
@@ -137,248 +137,248 @@ struct PlaybackGraph                           // неизменяем посл�
 };
 ```
 
-### Как публикуется граф
+### How the graph is published
 
-- Message thread слушает `ProjectModel::root` (`ValueTree::Listener`) и при любом изменении структуры (дорожки, сцены, клипы, ноты, устройства) ставит флаг «граф устарел». Таймер 60 Гц (или `AsyncUpdater`) собирает новый `PlaybackGraph` из модели и публикует: `current.store (newGraph, std::memory_order_release)`.
-- Клипы конвертируются из `ValueTree` в `daw::engine::MidiClip` при сборке. Неизменённые клипы переиспользуются: кэш `clipId → (хэш содержимого, shared_ptr<const MidiClip>)`.
-- Громкость, панорама, mute, solo и arm не пересобирают граф: они пишутся в атомики `TrackRuntime` сразу из `valueTreePropertyChanged`.
-- Когда граф меняет указатель клипа в слоте, который сейчас играет, `ClipPlayer::clipChanged` вызывается в аудиопотоке при первом блоке нового графа (сравнение указателей старого и нового слота).
+- The message thread listens to `ProjectModel::root` (`ValueTree::Listener`) and on any structural change (tracks, scenes, clips, notes, devices) sets a "graph is stale" flag. A 60 Hz timer (or an `AsyncUpdater`) builds a new `PlaybackGraph` from the model and publishes it: `current.store (newGraph, std::memory_order_release)`.
+- Clips are converted from `ValueTree` to `daw::engine::MidiClip` during the build. Unchanged clips are reused: a cache of `clipId → (content hash, shared_ptr<const MidiClip>)`.
+- Volume, pan, mute, solo, and arm do not rebuild the graph: they are written into the `TrackRuntime` atomics directly from `valueTreePropertyChanged`.
+- When the graph changes the clip pointer in a slot that is currently playing, `ClipPlayer::clipChanged` is called on the audio thread in the first block of the new graph (by comparing the old and new slot pointers).
 
-### Удаление
+### Deletion
 
-- Аудиопоток в начале каждого блока делает `graph = current.load (acquire)` и `seenGeneration.store (graph->generation, release)`.
-- Message thread хранит список снятых графов, `TrackRuntime` и `DeviceInstance` с номером поколения, после которого они не нужны. По таймеру удаляет всё, у чего это поколение ≤ `seenGeneration`. Если аудиоустройство остановлено, удаляет сразу.
-- Новые `DeviceInstance` получают `prepareToPlay` на message thread **до** публикации графа.
+- At the start of every block the audio thread does `graph = current.load (acquire)` and `seenGeneration.store (graph->generation, release)`.
+- The message thread keeps a list of retired graphs, `TrackRuntime`s, and `DeviceInstance`s, each with the generation after which it is no longer needed. On a timer it deletes everything whose generation is ≤ `seenGeneration`. If the audio device is stopped, it deletes immediately.
+- New `DeviceInstance`s get `prepareToPlay` on the message thread **before** the graph is published.
 
-### Остальное в движке
+### Rest of the engine
 
-- Транспорт, квантизованный запуск, сцены и `ClipPlayer` сохраняют поведение фазы 0. Команды «запустить клип / сцену / стоп» идут через SPSC-очередь `EngineCommand { type, trackIndexOrId, sceneIndex }` ёмкостью 256.
-- Позиция, уровни, играющий и ожидающий слот каждой дорожки — атомики, интерфейс читает их по таймеру.
-- MIDI со всех включённых входов и с клавиатуры Mac уходит на дорожки с `arm`, у которых `input` совпадает. По умолчанию выбранная MIDI-дорожка получает arm автоматически, если ни одна дорожка не взведена вручную (как в Ableton).
-- Цепочка дорожки: инструмент получает MIDI и пишет в буфер, затем эффекты по порядку, затем громкость и панорама (закон равной мощности из фазы 0), затем сумма в мастер, затем цепочка мастера. Выключенное устройство пропускается (для эффекта звук идёт насквозь).
-- Сторонний **эффект** (не инструмент) можно ставить в цепочку; у таких плагинов `numInputChannels ≥ 2`. Шина 2 вход / 2 выход. Плагины с сайдчейном пока получают только основную шину.
-- Флаг сборки `DAW_RT_CHECKS` (CMake option, по умолчанию OFF, в тестах ON): глобальный `operator new` проверяет `thread_local bool inAudioThread` и вызывает `jassertfalse` плюс счётчик нарушений, который тест читает.
+- Transport, quantized launch, scenes, and `ClipPlayer` keep their phase 0 behavior. The "launch clip / scene / stop" commands go through an SPSC queue `EngineCommand { type, trackIndexOrId, sceneIndex }` with capacity 256.
+- Position, levels, and the playing and pending slot of each track are atomics that the UI reads on a timer.
+- MIDI from all enabled inputs and from the Mac keyboard goes to tracks with `arm` whose `input` matches. By default the selected MIDI track is armed automatically if no track has been armed manually.
+- Track chain: the instrument receives MIDI and writes into the buffer, then the effects in order, then volume and pan (the equal-power law from phase 0), then the sum into the master, then the master chain. A disabled device is skipped (for an effect, audio passes through).
+- A third-party **effect** (not an instrument) can be placed in the chain; such plugins have `numInputChannels ≥ 2`. Bus: 2 in / 2 out. Plugins with a sidechain receive only the main bus for now.
+- Build flag `DAW_RT_CHECKS` (CMake option, OFF by default, ON in tests): the global `operator new` checks `thread_local bool inAudioThread` and calls `jassertfalse` plus increments a violation counter that the test reads.
 
-## Задача 1.4. Окно и раскладка
+## Task 1.4. Window and layout
 
-`MainComponent` разбивается на компоненты в `app/Source/ui/`:
+`MainComponent` is split into components in `app/Source/ui/`:
 
 ```
 ┌ TopBar ─────────────────────────────────────────────────────────────────────┐
-│ лого · темп · размер · метроном · ▶ ■ ● · позиция · петля · лента «10 мин» │
-│ · морф A↔B · [Session|Arrangement] · v14 · CPU                              │
-├ Browser ┬ MainView (SessionView; в 03 добавится ArrangementView) ───────────┤
+│ logo · tempo · time sig · metronome · ▶ ■ ● · position · loop · "10 min" tape│
+│ · morph A↔B · [Session|Arrangement] · v14 · CPU                             │
+├ Browser ┬ MainView (SessionView; ArrangementView added in 03) ──────────────┤
 │         │                                                                    │
-├─────────┴ DetailPanel (DeviceChainView; в 02 добавится ClipEditor) ─────────┤
-├ InfoBar: подсказка к элементу под мышью ─────────────────────────────────────┤
+├─────────┴ DetailPanel (DeviceChainView; ClipEditor added in 02) ───────────┤
+├ InfoBar: hint for the element under the mouse ──────────────────────────────┤
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Размеры по концепту: верхняя панель 52 px, браузер 236 px (тянется 180–420), детальная панель 232 px (тянется 160–480), строка подсказок 22 px. Разделители перетаскиваются, размеры запоминаются в настройках.
-- `Cmd+Alt+B` прячет браузер, `Cmd+Alt+L` прячет детальную панель, `Cmd+Alt+M` прячет микшер в Session View. Кнопки-треугольники по краям делают то же.
-- Элементы «лента 10 мин» и «морф A↔B» в этом этапе рисуются неактивными (серыми) с подсказкой «Появится на этапе 2 / 6». Кнопка Arrangement неактивна до 03. Это задел, чтобы раскладка не менялась потом.
-- **InfoBar**: каждый интерактивный элемент получает текст подсказки (`setHelpText` или собственное свойство). Строка показывает название и что делает элемент, как Info View в Ableton. Тексты из `Strings.h`.
-- Масштаб интерфейса 80–150 % (настройки → Внешний вид) через `juce::Desktop::setGlobalScaleFactor`.
-- Окно запоминает положение и размер. Минимальный размер 1100×700.
+- Sizes per the concept: top bar 52 px, browser 236 px (resizable 180–420), detail panel 232 px (resizable 160–480), hint bar 22 px. Dividers are draggable, sizes are remembered in settings.
+- `Cmd+Alt+B` hides the browser, `Cmd+Alt+L` hides the detail panel, `Cmd+Alt+M` hides the mixer in Session View. Triangle buttons at the edges do the same.
+- The "10 min tape" and "morph A↔B" elements are drawn inactive (gray) in this stage with the hint "Coming in stage 2 / 6". The Arrangement button is inactive until 03. This is groundwork so the layout does not change later.
+- **InfoBar**: every interactive element gets hint text (`setHelpText` or its own property). The bar shows the element's name and what it does. Texts come from `Strings.h`.
+- UI scale 80–150% (Settings → Appearance) via `juce::Desktop::setGlobalScaleFactor`.
+- The window remembers its position and size. Minimum size 1100×700.
 
 ### Session View
 
-- Столбцы дорожек слева направо, справа столбец мастера с кнопками запуска сцен (как в Ableton). Горизонтальная и вертикальная прокрутка, заголовки дорожек и кнопки сцен остаются на месте при прокрутке.
-- Заголовок дорожки цвета дорожки: имя, выделение рамкой. Щелчок выделяет (детальная панель показывает её цепочку). Двойной щелчок или `Cmd+R` переименовывает. Правая кнопка: Переименовать, Цвет (сетка 16 цветов палитры темы), Дублировать (`Cmd+D`), Удалить (`Delete`), Вставить MIDI-дорожку.
-- Слот: пустой (квадратик; у взведённой дорожки кружок записи), клип (имя, цвет, ▶), играет (полная яркость, мигающий ▶, полоса прогресса снизу, свечение если `glow > 0`), ждёт запуска (быстрое мигание ▶). Цвета берутся из `Theme`, см. 1.8.
-- Клипы перетаскиваются между слотами мышью (перенос; с Alt копия). `Cmd+C/Cmd+V/Cmd+D/Delete` на выделенном клипе. Правая кнопка: Переименовать, Цвет, Дублировать, Удалить.
-- Двойной щелчок по пустому слоту создаёт пустой MIDI-клип на 1 такт (в 02 он откроется в пиано-ролле).
-- Сцены: щелчок по ▶ запускает сцену, двойной щелчок по имени переименовывает. `Cmd+I` вставляет сцену после выделенной, `Cmd+Shift+I` вставляет сцену с тем, что сейчас играет (Capture Scene в Ableton), `Cmd+D` на сцене дублирует.
-- Микшер внизу столбцов: посылы A/B (неактивны до 06), панорама, индикатор уровня, фейдер, громкость в дБ, кнопки «вкл. дорожки» (номер), Solo, Arm. Двойной щелчок по фейдеру или панораме сбрасывает в 0 дБ / центр. Cmd-щелчок по Solo или Arm добавляет к уже включённым, обычный щелчок оставляет одну.
+- Track columns from left to right, and on the right the master column with scene launch buttons. Horizontal and vertical scrolling; track headers and scene buttons stay in place while scrolling.
+- The track header is in the track's color: name, selection shown with a border. A click selects it (the detail panel shows its chain). A double click or `Cmd+R` renames it. Right click: "Rename", "Color" (a grid of the theme palette's 16 colors), "Duplicate" (`Cmd+D`), "Delete" (`Delete`), "Insert MIDI Track".
+- Slot states: empty (a small square; a record circle on an armed track), clip (name, color, ▶), playing (full brightness, blinking ▶, progress bar at the bottom, glow if `glow > 0`), waiting to launch (fast-blinking ▶). Colors come from `Theme`, see 1.8.
+- Clips are dragged between slots with the mouse (move; with Alt, copy). `Cmd+C/Cmd+V/Cmd+D/Delete` work on the selected clip. Right click: "Rename", "Color", "Duplicate", "Delete".
+- Double-clicking an empty slot creates an empty 1-bar MIDI clip (in 02 it will open in the piano roll).
+- Scenes: clicking ▶ launches the scene, double-clicking the name renames it. `Cmd+I` inserts a scene after the selected one, `Cmd+Shift+I` inserts a scene with what is currently playing (scene capture), `Cmd+D` on a scene duplicates it.
+- Mixer at the bottom of the columns: sends A/B (inactive until 06), pan, level meter, fader, volume in dB, "track on" buttons (the track number), Solo, Arm. Double-clicking the fader or pan resets to 0 dB / center. Cmd-clicking Solo or Arm adds to those already on; a plain click leaves only one.
 
-### Детальная панель: цепочка устройств
+### Detail panel: device chain
 
-- `DeviceChainView` показывает устройства выбранной дорожки слева направо со стрелками между ними и зоной «Перетащите сюда эффект или плагин» в конце.
-- Заголовок устройства: выключатель (кружок), имя, меню пресетов (▾), свернуть, открыть в окне (↗), закрыть (×). Устройства переставляются перетаскиванием за заголовок, `Delete` удаляет выделенное. Всё через транзакции модели.
-- **Prisma, компактный вид** (ширина 470 px): мини-вид wavetable (как `WavetableView`, но 150×120) и 8 ручек: позиция wavetable осц. A, detune унисона A, срез фильтра, резонанс, драйв, атака огибающей громкости, частота LFO 1, ширина унисона. Ручки привязаны к параметрам Prisma через `AudioProcessorParameter`, а не через APVTS-аттачменты редактора. Точные id параметров взять из `daw::synth::parameterDescriptors()`.
-- **Сторонний плагин** (ширина 190–260 px): 8 ручек для параметров из `macroParams`. По умолчанию первые 8 автоматизируемых параметров. Правая кнопка по ручке: «Показать другой параметр…» со списком всех параметров с поиском.
-- **Отсутствующий плагин** (`kind="missing"`): серый блок «Плагин не найден: Serum 2 (Xfer Records)». Состояние сохраняется как было, звук идёт насквозь.
-- Окна плагинов и полного редактора Prisma: по одному на устройство, повторное нажатие ↗ выводит окно наверх. Окна закрываются при удалении устройства или дорожки.
+- `DeviceChainView` shows the selected track's devices from left to right with arrows between them and a "Drop an effect or plugin here" zone at the end.
+- Device header: power switch (circle), name, preset menu (▾), fold, open in a window (↗), close (×). Devices are reordered by dragging the header; `Delete` removes the selected one. All through model transactions.
+- **Prisma, compact view** (width 470 px): a mini wavetable view (like `WavetableView`, but 150×120) and 8 knobs: osc A wavetable position, osc A unison detune, filter cutoff, resonance, drive, volume envelope attack, LFO 1 rate, unison width. Knobs are bound to Prisma parameters via `AudioProcessorParameter`, not via the editor's APVTS attachments. Take the exact parameter ids from `daw::synth::parameterDescriptors()`.
+- **Third-party plugin** (width 190–260 px): 8 knobs for the parameters in `macroParams`. By default, the first 8 automatable parameters. Right-clicking a knob: "Show another parameter…" with a searchable list of all parameters.
+- **Missing plugin** (`kind="missing"`): a gray block "Plugin not found: SuperSynth 2 (Example Audio)". The state is kept as it was, audio passes through.
+- Plugin windows and the full Prisma editor: one per device; pressing ↗ again brings the window to the front. Windows close when the device or track is deleted.
 
-## Задача 1.5. Браузер
+## Task 1.5. Browser
 
-### Категории и источники
+### Categories and sources
 
-| Категория | Источник | Что делает перетаскивание / двойной щелчок |
+| Category | Source | What drag and drop / double click does |
 |---|---|---|
-| Инструменты | Prisma и папки её пресетов; сторонние инструменты из `KnownPluginList` | на дорожку: заменить инструмент (первое устройство); на пустое место или зону «Перетащите сюда» Session View: новая MIDI-дорожка |
-| Пресеты | Заводские пресеты Prisma (`factoryPresets()`, по папкам из имени: Bass, Lead, Pad, Pluck, FX, Init) и пользовательские (`.dawpreset`) | на дорожку: заменить устройство того же типа или инструмент; на устройство: применить пресет к нему |
-| Эффекты | Пока только сторонние эффекты по производителям. Встроенные появятся в 06 (папка «Встроенные» со строкой «Появятся на этапе 6») | в цепочку: добавить в конец или в место бросания |
-| Плагины | Все AU / VST3 из `KnownPluginList`, группировка по производителю, метка формата | как Инструменты / Эффекты по типу плагина |
-| Цепочки | Пользовательские цепочки дорожек (`.dawchain`) | на дорожку: заменить всю цепочку; на пустое место: новая дорожка |
-| Звуки | Папки «Мест», файлы WAV/AIFF/FLAC/MP3 | в этом этапе только список (кладутся на дорожки в 05) |
-| MIDI-файлы | `.mid` из «Мест» | в слот: клип из первой дорожки файла с нотами; на пустое место: новая дорожка с этим клипом |
-| Места | Добавленные пользователем папки + папка текущего проекта | «Добавить папку…» внизу списка |
+| Instruments | Prisma and its preset folders; third-party instruments from `KnownPluginList` | onto a track: replace the instrument (the first device); onto an empty area or the "Drop here" zone of Session View: a new MIDI track |
+| Presets | Prisma factory presets (`factoryPresets()`, in folders from the name: Bass, Lead, Pad, Pluck, FX, Init) and user presets (`.dawpreset`) | onto a track: replace the device of the same type or the instrument; onto a device: apply the preset to it |
+| Effects | Only third-party effects by manufacturer for now. Built-in ones appear in 06 (a "Built-in" folder with the line "Coming in stage 6") | into the chain: add at the end or at the drop position |
+| Plugins | All AU / VST3 from `KnownPluginList`, grouped by manufacturer, with a format tag | like Instruments / Effects depending on the plugin type |
+| Chains | User track chains (`.dawchain`) | onto a track: replace the whole chain; onto an empty area: a new track |
+| Sounds | Places folders, WAV/AIFF/FLAC/MP3 files | list only in this stage (placed on tracks in 05) |
+| MIDI files | `.mid` from Places | into a slot: a clip from the file's first track with notes; onto an empty area: a new track with that clip |
+| Places | User-added folders + the current project's folder | "Add Folder…" at the bottom of the list |
 
-- Сканирование папок «Мест» в фоне (`juce::ThreadPool`, одна задача на папку), результаты отправляются на message thread. Слежение за изменениями — повторное сканирование при показе браузера, если прошло больше 10 секунд.
-- **Поиск** (`Cmd+F` фокусирует поле): по всем категориям, без учёта регистра, кириллица и латиница. Результаты группируются по категории и папке, обновляются после каждой буквы. `Esc` очищает. Стрелки вверх/вниз ходят по результатам, `Enter` ставит выбранное на выделенную дорожку.
-- **Предпрослушивание пресетов**: кнопка-наушники внизу браузера включает его. При выборе пресета Prisma отдельный экземпляр Prisma (не на дорожке) играет фразу из 2 тактов (арпеджио до минора, темп проекта) в мастер с громкостью из настроек (−12 дБ по умолчанию). Новая фраза прерывает старую без щелчка (быстрый release). Для сторонних плагинов предпрослушивания нет.
-- **Избранное**: правая кнопка по элементу → цвет метки (7 цветов, как в Ableton). В верхней части списка категорий появляются строки меток с количеством.
-- **Недавние**: последние 30 использованных элементов, отдельная строка над категориями.
+- Places folders are scanned in the background (`juce::ThreadPool`, one job per folder); results are sent to the message thread. Change tracking: rescan when the browser is shown if more than 10 seconds have passed.
+- **Search** (`Cmd+F` focuses the field): across all categories, case-insensitive, Cyrillic and Latin. Results are grouped by category and folder and update after every letter. `Esc` clears. Up/down arrows move through the results, `Enter` puts the selected item on the selected track.
+- **Preset preview**: a headphones button at the bottom of the browser turns it on. When a Prisma preset is selected, a separate Prisma instance (not on a track) plays a 2-bar phrase (a C minor arpeggio, project tempo) into the master at the volume from settings (−12 dB by default). A new phrase interrupts the old one without a click (fast release). Third-party plugins have no preview.
+- **Favorites**: right-click an item → label color (7 colors). Label rows with counts appear at the top of the category list.
+- **Recent**: the last 30 used items, a separate row above the categories.
 
-### Перетаскивание
+### Drag and drop
 
-- `MainComponent` — `juce::DragAndDropContainer`. Описание перетаскиваемого — `juce::var` с объектом `{ kind, id, path, name }` (функции `BrowserDrag::make` / `parse`).
-- Цели (`DragAndDropTarget`): заголовок дорожки, слот, пустая область справа от дорожек Session View, `DeviceChainView` (с подсветкой места вставки между устройствами), конкретное устройство. При наведении цель подсвечивается цветом `accent`. Недопустимая цель (MIDI-файл на цепочку) не подсвечивается.
-- Перетаскивание файлов из Finder: `FileDragAndDropTarget` на тех же целях для `.mid` (и `.wav` и т. д. в 05).
-- Каждое бросание — одна транзакция отмены («Добавить Prisma · Reese Bass»).
+- `MainComponent` is a `juce::DragAndDropContainer`. The dragged item is described by a `juce::var` holding an object `{ kind, id, path, name }` (functions `BrowserDrag::make` / `parse`).
+- Targets (`DragAndDropTarget`): track header, slot, the empty area to the right of the tracks in Session View, `DeviceChainView` (highlighting the insertion point between devices), a specific device. On hover the target is highlighted with the `accent` color. An invalid target (a MIDI file onto a chain) is not highlighted.
+- Dragging files from Finder: `FileDragAndDropTarget` on the same targets for `.mid` (and `.wav` etc. in 05).
+- Each drop is one undo transaction ("Add Prisma · Reese Bass").
 
-## Задача 1.6. Пресеты устройств и цепочек
+## Task 1.6. Device and chain presets
 
-- В заголовке устройства меню ▾: «Сохранить пресет…», список пресетов этого устройства (заводские и пользовательские), «Показать в Finder».
-- Файл пресета `~/Music/Prisma DAW/User Library/Presets/<имя устройства>/<имя>.dawpreset`: XML `DAWPRESET version=1 deviceKind name pluginDesc state(base64) created`. Для Prisma имя устройства «Prisma», для плагинов — имя плагина.
-- Правая кнопка по заголовку дорожки → «Сохранить цепочку…» → `User Library/Chains/<имя>.dawchain` (XML со всеми DEVICE дорожки, их состояниями и цветом дорожки).
-- Сохранённое сразу появляется в браузере без перезапуска.
-- Пресеты можно переименовать и удалить из браузера (правая кнопка). Удаление спрашивает подтверждение в окне приложения.
+- The ▾ menu in the device header: "Save Preset…", the list of this device's presets (factory and user), "Show in Finder".
+- Preset file `~/Music/Prisma DAW/User Library/Presets/<device name>/<name>.dawpreset`: XML `DAWPRESET version=1 deviceKind name pluginDesc state(base64) created`. For Prisma the device name is "Prisma", for plugins it is the plugin name.
+- Right-click a track header → "Save Chain…" → `User Library/Chains/<name>.dawchain` (XML with all of the track's DEVICEs, their states, and the track color).
+- Saved items appear in the browser immediately, without a restart.
+- Presets can be renamed and deleted from the browser (right click). Deletion asks for confirmation in an app window.
 
-## Задача 1.7. Файл проекта, автосохранение, восстановление, история версий
+## Task 1.7. Project file, autosave, recovery, version history
 
-### Папка проекта
+### Project folder
 
 ```
-Мой трек Project/
-├── Мой трек.prisma          XML модели (UTF-8, с отступами, чтобы diff был читаемым)
-├── Samples/Imported/        (05) копии брошенных сэмплов
-├── Samples/Recorded/        (05) записи
-├── Backup/autosave.prisma   автосохранение
+My Track Project/
+├── My Track.prisma          model XML (UTF-8, indented so diffs are readable)
+├── Samples/Imported/        (05) copies of dropped samples
+├── Samples/Recorded/        (05) recordings
+├── Backup/autosave.prisma   autosave
 └── History/
-    ├── index.xml            список версий
-    └── v0001.prisma …       сами версии
+    ├── index.xml            version list
+    └── v0001.prisma …       the versions themselves
 ```
 
-- Расширение `.prisma`. В корне `PROJECT` есть `schemaVersion`. Загрузчик: если версия больше поддерживаемой — понятная ошибка «Проект создан в более новой версии DAW»; если меньше — цепочка миграций `migrateFrom1To2` и т. д. (пока пустая, но функция и тест есть).
-- При сохранении у каждого `DEVICE` в `state` пишется `getStateInformation` (на message thread). Запись атомарная: временный файл и `TemporaryFile::overwriteTargetFileWithTemporary`.
-- При открытии: плагины создаются через `AudioPluginFormatManager::createPluginInstanceAsync`, пока плагин грузится, на устройстве крутится индикатор. Не найден — `kind="missing"` (1.4). Prisma создаётся синхронно.
-- `Cmd+N` новый (если есть несохранённые изменения — окно «Сохранить изменения в “…”?» с кнопками Сохранить / Не сохранять / Отмена), `Cmd+O` открыть, «Открыть недавний», `Cmd+S` сохранить, `Cmd+Shift+S` сохранить как (копирует папку проекта целиком). Заголовок окна: имя проекта и `•`, если есть несохранённые изменения.
-- Новый проект берётся из шаблона: `User Library/Templates/Default.prisma`, если есть, иначе `ProjectModel::createDefault()`. Пункт меню «Сохранить как шаблон по умолчанию».
-- При первом запуске открывается демо-проект из `DemoContent` (как в фазе 0).
+- Extension `.prisma`. The root `PROJECT` has `schemaVersion`. Loader: if the version is newer than supported, a clear error "The project was created in a newer version of the DAW"; if older, a chain of migrations `migrateFrom1To2` and so on (empty for now, but the function and a test exist).
+- On save, each `DEVICE` gets `getStateInformation` written into `state` (on the message thread). Writing is atomic: a temporary file and `TemporaryFile::overwriteTargetFileWithTemporary`.
+- On open: plugins are created via `AudioPluginFormatManager::createPluginInstanceAsync`; while a plugin loads, a spinner turns on the device. Not found: `kind="missing"` (1.4). Prisma is created synchronously.
+- `Cmd+N` new (if there are unsaved changes, a "Save changes to “…”?" dialog with Save / Don't Save / Cancel buttons), `Cmd+O` open, "Open Recent", `Cmd+S` save, `Cmd+Shift+S` save as (copies the whole project folder). Window title: the project name and `•` if there are unsaved changes.
+- A new project comes from a template: `User Library/Templates/Default.prisma` if it exists, otherwise `ProjectModel::createDefault()`. Menu item "Save as Default Template".
+- On first launch the demo project from `DemoContent` opens (as in phase 0).
 
-### Автосохранение и восстановление
+### Autosave and recovery
 
-- Раз в 60 секунд, если есть изменения после последнего сохранения или автосохранения, модель пишется в `Backup/autosave.prisma`. Несохранённый ни разу проект автосохраняется в `~/Music/Prisma DAW/Unsaved/<дата время> Project/`.
-- При запуске приложение пишет файл-метку `~/Library/Application Support/Prisma DAW/session.lock` с путём проекта, при нормальном выходе удаляет его. Если при запуске метка есть и автосохранение новее файла проекта, показывается окно «DAW была закрыта неожиданно. Восстановить несохранённые изменения в “…”?» (Восстановить / Открыть последнее сохранение / Не открывать).
-- Сохранение и автосохранение пишут файлы в фоне: модель сериализуется в строку на message thread (это быстро), запись на диск — на фоновом потоке.
+- Every 60 seconds, if there are changes since the last save or autosave, the model is written to `Backup/autosave.prisma`. A project that was never saved is autosaved to `~/Music/Prisma DAW/Unsaved/<date time> Project/`.
+- On launch the app writes a marker file `~/Library/Application Support/Prisma DAW/session.lock` with the project path and deletes it on a normal exit. If the marker exists at launch and the autosave is newer than the project file, a dialog appears: "The DAW quit unexpectedly. Recover unsaved changes in “…”?" (Recover / Open Last Save / Don't Open).
+- Save and autosave write files in the background: the model is serialized to a string on the message thread (this is fast), and the disk write happens on a background thread.
 
-### История версий
+### Version history
 
-- Каждое `Cmd+S` и каждое автосохранение, после которого проект изменился, создаёт версию: `History/vNNNN.prisma` и запись в `index.xml`: `VERSION n time kind="save|autosave|restore" label=""`.
-- Хранение: все версии от `Cmd+S` и все с меткой хранятся всегда; из автосохранений хранятся последние 50 и по одной на каждый час старше. Прореживание после каждой новой версии. Функция прореживания — в `core/` (чистая логика над списком), с тестом.
-- Кнопка в транспорте показывает номер текущей версии и время с последнего сохранения («v14 · сейчас», «v14 · 5 мин»). Щелчок открывает список версий: номер, тип, метка, время. Двойной щелчок по метке — переименовать (метка «до нового баса»). Кнопка «Вернуться к этой версии»: сначала текущее состояние сохраняется как новая версия с типом `restore`, затем загружается выбранная. Ничего не теряется, отмена после возврата недоступна (история отмены очищается), поэтому окно подтверждения говорит об этом прямо.
-- «Прослушать версию» и «Забрать дорожку из версии» появятся в 03 и 04, в списке их нет.
+- Every `Cmd+S` and every autosave after which the project changed creates a version: `History/vNNNN.prisma` and an entry in `index.xml`: `VERSION n time kind="save|autosave|restore" label=""`.
+- Retention: all versions from `Cmd+S` and all labeled versions are always kept; of the autosaves, the last 50 are kept plus one per hour for older ones. Pruning runs after each new version. The pruning function lives in `core/` (pure logic over a list), with a test.
+- A button in the transport shows the current version number and the time since the last save ("v14 · now", "v14 · 5 min"). Clicking it opens the version list: number, type, label, time. Double-clicking a label renames it (label "before the new bass"). The "Restore This Version" button: the current state is first saved as a new version of type `restore`, then the selected one is loaded. Nothing is lost, but undo is not available after a restore (the undo history is cleared), so the confirmation dialog says so plainly.
+- "Preview Version" and "Take Track from Version" appear in 03 and 04; they are not in the list yet.
 
-## Задача 1.8. Темы и шрифты
+## Task 1.8. Themes and fonts
 
-### Темы
+### Themes
 
-- `app/Source/ui/Theme.h/.cpp`: структура токенов и `ThemeManager` (`juce::ChangeBroadcaster`). Компоненты берут цвета только из `Theme`, на смену темы подписан корневой компонент и вызывает `repaint()` у всего дерева. Смена темы на лету, без перезапуска.
-- Темы — JSON-файлы в `app/Resources/themes/` (встраиваются через `juce_add_binary_data`): `prism.json`, `neon.json`, `studio.json`, `paper.json`. Пользователь может положить свою тему в `User Library/Themes/*.json`, она появится в списке.
-- Токены и значения брать из `:root[data-skin=…]` в [`docs/design/concept.html`](../design/concept.html):
+- `app/Source/ui/Theme.h/.cpp`: a token struct and `ThemeManager` (`juce::ChangeBroadcaster`). Components take colors only from `Theme`; the root component subscribes to theme changes and calls `repaint()` on the whole tree. Themes switch on the fly, without a restart.
+- Themes are JSON files in `app/Resources/themes/` (embedded via `juce_add_binary_data`): `prism.json`, `neon.json`, `studio.json`, `paper.json`. Users can put their own theme into `User Library/Themes/*.json` and it appears in the list.
+- Take tokens and values from `:root[data-skin=…]` in [`docs/design/concept.html`](../design/concept.html):
 
-| Токен | Значение | Призма | Неон | Студия | Бумага |
+| Token | Meaning | Prism | Neon | Studio | Paper |
 |---|---|---|---|---|---|
-| `background` | фон за окном, пустые области | #07080d | #040208 | #161718 | #e3e7ee |
-| `chrome` | фон панелей окна | #0c0e15 | #090511 | #232426 | #f6f7f9 |
-| `panel` | ячейки, кнопки, устройства | #121520 | #0f0919 | #2b2c2f | #ffffff |
-| `panel2` | выделенные и вложенные элементы | #181c29 | #160d24 | #333438 | #eef1f5 |
-| `line` | линии, рамки, сетка | #232838 | #2d1946 | #3e4044 | #d5dae3 |
-| `text` | основной текст | #e6e8f2 | #f4eaff | #dcd8cf | #1b2130 |
-| `dimText` | вторичный текст | #7f869c | #8e7aab | #8f8a82 | #667085 |
-| `accent` | выделение, фокус, активные кнопки | #8be9ff | #00f0ff | #ffb547 | #2457e6 |
-| `accent2` | маркеры, морф, второстепенный акцент | #c59bff | #ff2bd6 | #7fc8b2 | #b5179e |
-| `record` | запись, arm | #ff4d6d | #ff2b4f | #e5484d | #e5243f |
-| `play` | воспроизведение, включённые устройства | #6bf0a6 | #c3ff1a | #93d36c | #0f9a4c |
-| `clipInk` | текст на цветных клипах | #0b0d14 | #07030d | #1a1b1c | #141a26 |
-| `clipSaturation` | насыщенность палитры, % | 78 | 100 | 42 | 72 |
-| `clipLightness` | светлота палитры, % | 62 | 58 | 62 | 74 |
-| `hues` | 16 оттенков палитры, градусы | спектр | см. ниже | спектр | спектр |
-| `glow` | сила свечения играющих клипов (0 = нет) | 1.0 | 1.6 | 0 | 0 |
-| `radius` | скругление, px | 6 | 0 | 3 | 6 |
-| `scanlines` | строки развёртки поверх окна | false | true | false | false |
-| `fontUi` / `fontNum` | шрифты | Onest / JetBrains Mono | JetBrains Mono / JetBrains Mono | Onest / JetBrains Mono | Onest / JetBrains Mono |
+| `background` | background behind the window, empty areas | #07080d | #040208 | #161718 | #e3e7ee |
+| `chrome` | window panel background | #0c0e15 | #090511 | #232426 | #f6f7f9 |
+| `panel` | cells, buttons, devices | #121520 | #0f0919 | #2b2c2f | #ffffff |
+| `panel2` | selected and nested elements | #181c29 | #160d24 | #333438 | #eef1f5 |
+| `line` | lines, borders, grid | #232838 | #2d1946 | #3e4044 | #d5dae3 |
+| `text` | main text | #e6e8f2 | #f4eaff | #dcd8cf | #1b2130 |
+| `dimText` | secondary text | #7f869c | #8e7aab | #8f8a82 | #667085 |
+| `accent` | selection, focus, active buttons | #8be9ff | #00f0ff | #ffb547 | #2457e6 |
+| `accent2` | markers, morph, secondary accent | #c59bff | #ff2bd6 | #7fc8b2 | #b5179e |
+| `record` | recording, arm | #ff4d6d | #ff2b4f | #e5484d | #e5243f |
+| `play` | playback, enabled devices | #6bf0a6 | #c3ff1a | #93d36c | #0f9a4c |
+| `clipInk` | text on colored clips | #0b0d14 | #07030d | #1a1b1c | #141a26 |
+| `clipSaturation` | palette saturation, % | 78 | 100 | 42 | 72 |
+| `clipLightness` | palette lightness, % | 62 | 58 | 62 | 74 |
+| `hues` | 16 palette hues, degrees | spectrum | see below | spectrum | spectrum |
+| `glow` | glow strength of playing clips (0 = none) | 1.0 | 1.6 | 0 | 0 |
+| `radius` | corner radius, px | 6 | 0 | 3 | 6 |
+| `scanlines` | scanlines over the window | false | true | false | false |
+| `fontUi` / `fontNum` | fonts | Onest / JetBrains Mono | JetBrains Mono / JetBrains Mono | Onest / JetBrains Mono | Onest / JetBrains Mono |
 
-- Палитра: 16 цветов `HSL(hues[i], clipSaturation, clipLightness)`. Для «спектра» `hues = [350, 12, 24, 36, 48, 70, 110, 150, 170, 196, 214, 236, 262, 284, 306, 328]`. Для «Неона» сдвинуть в пурпурно-голубую гамму: `[318, 330, 345, 290, 275, 260, 200, 186, 172, 160, 64, 52, 40, 300, 310, 335]`. Неактивный клип рисуется тем же цветом с непрозрачностью 55 %.
-- Свечение играющего клипа: мягкая тень цвета клипа радиусом `16 * glow` px (`juce::DropShadow` в кэшированном изображении, а не каждый кадр). Радужный блик по играющему клипу (`sheen` в концепте) — только если в настройках включены анимации, 30 кадров/с, и только для видимых играющих клипов.
-- Строки развёртки: полупрозрачный узор горизонтальных линий поверх окна, рисуется один раз в изображение и кладётся сверху (`setInterceptsMouseClicks (false, false)`).
-- Логотип: треугольник цвета `text` и шесть лучей из палитры справа от него, рисуется кодом (`ui/Logo.h`).
+- Palette: 16 colors `HSL(hues[i], clipSaturation, clipLightness)`. For "spectrum", `hues = [350, 12, 24, 36, 48, 70, 110, 150, 170, 196, 214, 236, 262, 284, 306, 328]`. For Neon, shift into a magenta-cyan range: `[318, 330, 345, 290, 275, 260, 200, 186, 172, 160, 64, 52, 40, 300, 310, 335]`. An inactive clip is drawn in the same color at 55% opacity.
+- Glow of a playing clip: a soft shadow in the clip color with radius `16 * glow` px (`juce::DropShadow` in a cached image, not every frame). The rainbow sheen over a playing clip (`sheen` in the concept) only if animations are enabled in settings, at 30 fps, and only for visible playing clips.
+- Scanlines: a semi-transparent pattern of horizontal lines over the window, drawn once into an image and placed on top (`setInterceptsMouseClicks (false, false)`).
+- Logo: a triangle in the `text` color and six rays from the palette to its right, drawn in code (`ui/Logo.h`).
 
-### Шрифты
+### Fonts
 
-- Встроить **Onest** и **JetBrains Mono** (обе под SIL Open Font License 1.1, совместима с AGPLv3). Источник: репозиторий `google/fonts` на GitHub (`ofl/onest/`, `ofl/jetbrainsmono/`). Файлы лицензий положить рядом: `app/Resources/fonts/OFL-Onest.txt`, `OFL-JetBrainsMono.txt`.
-- Если JUCE не рисует разные начертания из вариативного файла, сделать статические 400, 500, 600 инструментом `fonttools varLib.instancer` и встроить их.
-- `Theme::uiFont (size, weight)` и `Theme::numFont (size)`; все цифры (темп, позиция, дБ) — `numFont` с табличными цифрами.
+- Embed **Onest** and **JetBrains Mono** (both under the SIL Open Font License 1.1, compatible with AGPLv3). Source: the `google/fonts` repository on GitHub (`ofl/onest/`, `ofl/jetbrainsmono/`). Put the license files alongside: `app/Resources/fonts/OFL-Onest.txt`, `OFL-JetBrainsMono.txt`.
+- If JUCE cannot render different weights from a variable font file, create static 400, 500, 600 instances with `fonttools varLib.instancer` and embed those.
+- `Theme::uiFont (size, weight)` and `Theme::numFont (size)`; all numbers (tempo, position, dB) use `numFont` with tabular figures.
 
-## Задача 1.9. Окно настроек
+## Task 1.9. Settings window
 
-`Cmd+,` открывает окно с вкладками слева: **Звук**, **MIDI**, **Внешний вид**, **Библиотека**.
+`Cmd+,` opens a window with tabs on the left: **Audio**, **MIDI**, **Appearance**, **Library**.
 
-### Звук
+### Audio
 
-- Драйвер (на macOS только Core Audio; на Linux ALSA для разработки), устройство входа, устройство выхода, частота (44,1 / 48 / 88,2 / 96 кГц, что даёт устройство), размер буфера (что даёт устройство, обычно 32–2048).
-- Задержка, обновляется при каждом изменении: «Вход 3,1 мс · Выход 4,2 мс · Всего 7,3 мс». Вход = `getInputLatencyInSamples` + буфер, выход = `getOutputLatencyInSamples` + буфер, пересчёт в мс по текущей частоте.
-- Каналы: список входов и выходов карты с переключателями и полем имени («Микрофон», «Гитара»). Имена хранятся в настройках по имени устройства и используются в меню входа дорожки (05).
-- Кнопка «Тестовый сигнал»: 440 Гц, −20 dBFS, 1 секунда в выбранный выход.
-- Нагрузка процессора (`AudioDeviceManager::getCpuUsage`), обновление раз в 0,5 с.
-- Кнопка «Открыть настройку Audio MIDI»: запускает `/System/Applications/Utilities/Audio MIDI Setup.app` (там создаётся агрегатное устройство из двух карт). Только на macOS.
-- Пояснение под списком драйверов (одна строка): «На Mac все звуковые карты работают через Core Audio. Отдельный драйвер ASIO не нужен».
-- Состояние сохраняется (`createStateXml`) и восстанавливается при запуске. Если сохранённой карты нет, берётся системная по умолчанию, и в строке подсказок появляется сообщение.
+- Driver (on macOS only Core Audio; on Linux ALSA for development), input device, output device, sample rate (44.1 / 48 / 88.2 / 96 kHz, whatever the device offers), buffer size (whatever the device offers, usually 32–2048).
+- Latency, updated on every change: "Input 3.1 ms · Output 4.2 ms · Total 7.3 ms". Input = `getInputLatencyInSamples` + buffer, output = `getOutputLatencyInSamples` + buffer, converted to ms at the current sample rate.
+- Channels: a list of the interface's inputs and outputs with toggles and a name field ("Microphone", "Guitar"). Names are stored in settings per device name and used in the track input menu (05).
+- "Test Tone" button: 440 Hz, −20 dBFS, 1 second to the selected output.
+- CPU load (`AudioDeviceManager::getCpuUsage`), updated every 0.5 s.
+- "Open Audio MIDI Setup" button: launches `/System/Applications/Utilities/Audio MIDI Setup.app` (where an aggregate device is created from two interfaces). macOS only.
+- An explanation under the driver list (one line): "On a Mac all audio interfaces work through Core Audio. A separate ASIO driver is not needed."
+- The state is saved (`createStateXml`) and restored at launch. If the saved interface is missing, the system default is used and a message appears in the hint bar.
 
 ### MIDI
 
-- Список входов: имя, переключатель «Игра на дорожках», переключатель «Управление» (неактивен до поддержки контроллеров; задел). Подключение и отключение устройств на лету (`MidiDeviceListConnectionBroadcaster` из JUCE 8).
-- Список выходов (пока только для отображения).
+- Input list: name, a "Play on tracks" toggle, a "Control" toggle (inactive until controller support; groundwork). Devices connect and disconnect on the fly (`MidiDeviceListConnectionBroadcaster` from JUCE 8).
+- Output list (display only for now).
 
-### Внешний вид
+### Appearance
 
-- Выбор темы карточками с маленьким превью (палитра и фон), масштаб интерфейса, анимации вкл/выкл.
+- Theme selection as cards with a small preview (palette and background), UI scale, animations on/off.
 
-### Библиотека
+### Library
 
-- Путь `User Library` (по умолчанию `~/Music/Prisma DAW/User Library`), папки «Мест» со списком и кнопками добавить/убрать, «Повторно сканировать плагины» (открывает существующее окно сканирования).
+- The `User Library` path (default `~/Music/Prisma DAW/User Library`), Places folders as a list with add/remove buttons, "Rescan Plugins" (opens the existing scan window).
 
-## Задача 1.10. Меню и горячие клавиши
+## Task 1.10. Menus and keyboard shortcuts
 
-- `juce::ApplicationCommandManager` со всеми командами, `MenuBarModel` как главное меню macOS:
-  - **Файл:** Новый проект `Cmd+N`, Открыть `Cmd+O`, Открыть недавний ▸, Сохранить `Cmd+S`, Сохранить как `Cmd+Shift+S`, Сохранить как шаблон по умолчанию, История версий…, Экспорт… `Cmd+Shift+R` (неактивен до 04), Показать проект в Finder.
-  - **Правка:** Отменить `Cmd+Z`, Повторить `Cmd+Shift+Z`, Вырезать `Cmd+X`, Копировать `Cmd+C`, Вставить `Cmd+V`, Дублировать `Cmd+D`, Удалить `Delete`, Переименовать `Cmd+R`.
-  - **Создать:** MIDI-дорожка `Cmd+T`, Сцена `Cmd+I`, Сцена с играющими клипами `Cmd+Shift+I`, Пустой MIDI-клип `Cmd+Shift+M`.
-  - **Вид:** Браузер `Cmd+Alt+B`, Детальная панель `Cmd+Alt+L`, Микшер `Cmd+Alt+M`, Session / Arrangement `Tab` (неактивен до 03), Масштаб +/− `Cmd+=` / `Cmd+-`.
-  - **Настройки…** `Cmd+,` (в меню приложения macOS).
-- Пробел — играть/стоп всегда, кроме фокуса в текстовом поле. `M` — игра на клавиатуре Mac вкл/выкл (индикатор в транспорте); когда включено, буквы играют ноты, как в фазе 0.
-- Горячие клавиши не перехватываются, когда фокус в текстовом поле (переименование, поиск).
+- `juce::ApplicationCommandManager` with all commands, `MenuBarModel` as the main macOS menu:
+  - **File:** New Project `Cmd+N`, Open `Cmd+O`, Open Recent ▸, Save `Cmd+S`, Save As `Cmd+Shift+S`, Save as Default Template, Version History…, Export… `Cmd+Shift+R` (inactive until 04), Show Project in Finder.
+  - **Edit:** Undo `Cmd+Z`, Redo `Cmd+Shift+Z`, Cut `Cmd+X`, Copy `Cmd+C`, Paste `Cmd+V`, Duplicate `Cmd+D`, Delete `Delete`, Rename `Cmd+R`.
+  - **Create:** MIDI Track `Cmd+T`, Scene `Cmd+I`, Scene with Playing Clips `Cmd+Shift+I`, Empty MIDI Clip `Cmd+Shift+M`.
+  - **View:** Browser `Cmd+Alt+B`, Detail Panel `Cmd+Alt+L`, Mixer `Cmd+Alt+M`, Session / Arrangement `Tab` (inactive until 03), Zoom +/− `Cmd+=` / `Cmd+-`.
+  - **Settings…** `Cmd+,` (in the macOS application menu).
+- Space always plays/stops, except when focus is in a text field. `M` toggles playing on the Mac keyboard (indicator in the transport); when on, letters play notes, as in phase 0.
+- Keyboard shortcuts are not intercepted while focus is in a text field (renaming, search).
 
-## Тесты
+## Tests
 
-В `tests/` (JUCE) и `core/tests/`:
+In `tests/` (JUCE) and `core/tests/`:
 
-1. **Модель.** Создать проект, добавить 3 дорожки, 2 сцены, клип с 10 нотами, переименовать, удалить дорожку. Каждая операция в своей транзакции. `undo` до конца даёт XML, равный исходному; `redo` до конца — равный конечному.
-2. **Инвариант сцен.** После вставки и удаления сцен у каждой дорожки число SLOT равно числу SCENE; клипы остались в своих сценах.
-3. **Сохранение и загрузка.** Проект с Prisma, у которой изменён срез фильтра, сохраняется во временную папку и загружается: XML совпадает (без `state`), параметр Prisma равен сохранённому, звук первой секунды демо-клипа совпадает с исходным посэмплово (рендер через `FakeDevice`).
-4. **Отсутствующий плагин.** `DEVICE kind="plugin"` с несуществующим `pluginDesc` загружается как `missing`, состояние не теряется при пересохранении.
-5. **Версия схемы.** Файл с `schemaVersion=999` даёт ошибку, а не падение.
-6. **Граф без блокировок.** С `DAW_RT_CHECKS=ON` движок крутит 2000 блоков по 256 сэмплов, пока параллельный поток (имитация message thread) добавляет и удаляет дорожки, клипы и устройства. Счётчик выделений памяти в аудиопотоке равен 0, NaN и Inf в выходе нет.
-7. **Непрерывность клипа.** Играющий клип не перезапускается и не теряет ноты при добавлении другой дорожки: число note-on за 4 такта такое же, как без пересборки.
-8. **Удаление.** После 100 пересборок графа живых `PlaybackGraph` не больше 3.
-9. **Прореживание версий** (core): набор из 300 автосохранений за 5 дней + 5 сохранений + 2 метки даёт ожидаемый список.
-10. **Восстановление.** Метка сеанса есть, автосохранение новее проекта → функция `RecoveryCheck::needsRecovery` возвращает true; в остальных случаях false.
-11. **Поиск в браузере.** «reese», «REESE», «Рее» (если имя кириллическое) находят нужные элементы; пустая строка возвращает всё.
-12. **Темы.** Все 4 JSON разбираются, все токены на месте, палитра из 16 цветов.
+1. **Model.** Create a project, add 3 tracks, 2 scenes, a clip with 10 notes, rename, delete a track. Each operation in its own transaction. Undoing all the way gives XML equal to the original; redoing all the way gives XML equal to the final state.
+2. **Scene invariant.** After inserting and deleting scenes, every track has as many SLOTs as there are SCENEs; clips stay in their scenes.
+3. **Save and load.** A project with a Prisma whose filter cutoff was changed is saved to a temporary folder and loaded: the XML matches (excluding `state`), the Prisma parameter equals the saved value, and the audio of the first second of the demo clip matches the original sample for sample (rendered via `FakeDevice`).
+4. **Missing plugin.** A `DEVICE kind="plugin"` with a nonexistent `pluginDesc` loads as `missing`, and its state is not lost when the project is saved again.
+5. **Schema version.** A file with `schemaVersion=999` produces an error, not a crash.
+6. **Lock-free graph.** With `DAW_RT_CHECKS=ON` the engine runs 2000 blocks of 256 samples while a parallel thread (simulating the message thread) adds and removes tracks, clips, and devices. The audio thread allocation counter is 0, and there are no NaN or Inf values in the output.
+7. **Clip continuity.** A playing clip does not restart and does not lose notes when another track is added: the number of note-ons over 4 bars is the same as without a rebuild.
+8. **Deletion.** After 100 graph rebuilds, no more than 3 `PlaybackGraph`s are alive.
+9. **Version pruning** (core): a set of 300 autosaves over 5 days + 5 saves + 2 labels yields the expected list.
+10. **Recovery.** Session marker present and autosave newer than the project → `RecoveryCheck::needsRecovery` returns true; false in all other cases.
+11. **Browser search.** "reese", "REESE", "Рее" (if the name is in Cyrillic) find the right items; an empty string returns everything.
+12. **Themes.** All 4 JSON files parse, all tokens are present, the palette has 16 colors.
 
-## Готово, когда
+## Done when
 
-- [ ] Окно выглядит как концепт в Session View во всех четырёх темах (4 скриншота в отчёте и в `media/`).
-- [ ] Можно создать 20 дорожек и 16 сцен, прокрутка работает, заголовки и кнопки сцен остаются на месте.
-- [ ] Пресет Prisma из браузера перетаскивается на пустое место (новая дорожка), на дорожку (замена инструмента) и на устройство Prisma (применение пресета).
-- [ ] Сторонний эффект из браузера встаёт в цепочку и звучит; выключатель устройства пропускает звук насквозь.
-- [ ] Свой пресет Prisma и своя цепочка сохраняются и сразу видны в браузере.
-- [ ] Проект сохраняется, закрывается и открывается с тем же звуком всех плагинов (тест 3 и ручная проверка на Mac).
-- [ ] `Cmd+Z` отменяет каждое действие из списка задач 1.4–1.6 по одному.
-- [ ] Принудительное завершение (`kill -9`) после изменений и повторный запуск предлагают восстановление, и оно возвращает изменения.
-- [ ] Список версий показывает сохранения и автосохранения, метка ставится, возврат к версии работает и сохраняет текущее как новую версию.
-- [ ] Настройки звука показывают задержку и меняют буфер без перезапуска; тестовый сигнал звучит.
-- [ ] Все тесты из списка написаны и зелёные, старые тоже. CI зелёный, DMG собирается.
-- [ ] README обновлён: новые возможности, горячие клавиши, скриншоты.
+- [ ] The window looks like the concept in Session View in all four themes (4 screenshots in the report and in `media/`).
+- [ ] You can create 20 tracks and 16 scenes, scrolling works, headers and scene buttons stay in place.
+- [ ] A Prisma preset from the browser can be dragged onto an empty area (new track), onto a track (instrument replaced), and onto a Prisma device (preset applied).
+- [ ] A third-party effect from the browser goes into the chain and is audible; the device power switch passes audio through.
+- [ ] A custom Prisma preset and a custom chain are saved and immediately visible in the browser.
+- [ ] The project saves, closes, and reopens with the same sound from all plugins (test 3 and a manual check on a Mac).
+- [ ] `Cmd+Z` undoes each action from tasks 1.4–1.6 one at a time.
+- [ ] A forced quit (`kill -9`) after changes and a relaunch offer recovery, and recovery brings the changes back.
+- [ ] The version list shows saves and autosaves, a label can be set, restoring a version works and saves the current state as a new version.
+- [ ] The audio settings show latency and change the buffer without a restart; the test tone plays.
+- [ ] All tests from the list are written and green, and so are the old ones. CI is green, the DMG builds.
+- [ ] README updated: new features, keyboard shortcuts, screenshots.

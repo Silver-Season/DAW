@@ -5,9 +5,9 @@ namespace daw::music
 namespace
 {
 // A scale from the semitone offsets of its notes.
-Scale make (const char* key, const char* name, std::initializer_list<int> offsets)
+Scale make (const char* key, const char* name, const char* nameRu, std::initializer_list<int> offsets)
 {
-    Scale s { key, name, {} };
+    Scale s { key, name, nameRu, {} };
     for (int o : offsets)
         s.pitches[(size_t) o] = true;
     return s;
@@ -17,19 +17,19 @@ Scale make (const char* key, const char* name, std::initializer_list<int> offset
 const std::vector<Scale>& allScales()
 {
     static const std::vector<Scale> list {
-        make ("major", "мажор", { 0, 2, 4, 5, 7, 9, 11 }),
-        make ("minor", "минор", { 0, 2, 3, 5, 7, 8, 10 }),
-        make ("dorian", "дорийский", { 0, 2, 3, 5, 7, 9, 10 }),
-        make ("phrygian", "фригийский", { 0, 1, 3, 5, 7, 8, 10 }),
-        make ("lydian", "лидийский", { 0, 2, 4, 6, 7, 9, 11 }),
-        make ("mixolydian", "миксолидийский", { 0, 2, 4, 5, 7, 9, 10 }),
-        make ("locrian", "локрийский", { 0, 1, 3, 5, 6, 8, 10 }),
-        make ("harmonicMinor", "гармонический минор", { 0, 2, 3, 5, 7, 8, 11 }),
-        make ("melodicMinor", "мелодический минор", { 0, 2, 3, 5, 7, 9, 11 }),
-        make ("majorPentatonic", "мажорная пентатоника", { 0, 2, 4, 7, 9 }),
-        make ("minorPentatonic", "минорная пентатоника", { 0, 3, 5, 7, 10 }),
-        make ("blues", "блюзовый", { 0, 3, 5, 6, 7, 10 }),
-        make ("chromatic", "хроматический", { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }),
+        make ("major", "major", "мажор", { 0, 2, 4, 5, 7, 9, 11 }),
+        make ("minor", "minor", "минор", { 0, 2, 3, 5, 7, 8, 10 }),
+        make ("dorian", "Dorian", "дорийский", { 0, 2, 3, 5, 7, 9, 10 }),
+        make ("phrygian", "Phrygian", "фригийский", { 0, 1, 3, 5, 7, 8, 10 }),
+        make ("lydian", "Lydian", "лидийский", { 0, 2, 4, 6, 7, 9, 11 }),
+        make ("mixolydian", "Mixolydian", "миксолидийский", { 0, 2, 4, 5, 7, 9, 10 }),
+        make ("locrian", "Locrian", "локрийский", { 0, 1, 3, 5, 6, 8, 10 }),
+        make ("harmonicMinor", "harmonic minor", "гармонический минор", { 0, 2, 3, 5, 7, 8, 11 }),
+        make ("melodicMinor", "melodic minor", "мелодический минор", { 0, 2, 3, 5, 7, 9, 11 }),
+        make ("majorPentatonic", "major pentatonic", "мажорная пентатоника", { 0, 2, 4, 7, 9 }),
+        make ("minorPentatonic", "minor pentatonic", "минорная пентатоника", { 0, 3, 5, 7, 10 }),
+        make ("blues", "blues", "блюзовый", { 0, 3, 5, 6, 7, 10 }),
+        make ("chromatic", "chromatic", "хроматический", { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }),
     };
     return list;
 }

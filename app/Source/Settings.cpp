@@ -20,6 +20,22 @@ Settings::Settings (const juce::File& file)
 {
 }
 
+juce::File Settings::defaultFile() { return defaultOptions().getDefaultFile(); }
+
+juce::File Settings::languageFileFor (const juce::File& settingsFile) { return settingsFile.getSiblingFile ("language"); }
+
+juce::String Settings::language() const
+{
+    return languageFileFor (props->getFile()).loadFileAsString().trim().equalsIgnoreCase ("ru") ? "ru" : "en";
+}
+
+void Settings::setLanguage (const juce::String& code)
+{
+    const auto file = languageFileFor (props->getFile());
+    file.getParentDirectory().createDirectory();
+    file.replaceWithText (code);
+}
+
 Settings::~Settings()
 {
     props->saveIfNeeded();

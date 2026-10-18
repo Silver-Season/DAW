@@ -1,4 +1,4 @@
-// EQ Eight: spec test 2 (docs/spec/06-effects-mixing.md), channel modes, glides without zipper noise, CPU.
+// The eight-band EQ: spec test 2 (docs/spec/06-effects-mixing.md), channel modes, glides without zipper noise, CPU.
 #include "FxTest.h"
 
 #include <chrono>

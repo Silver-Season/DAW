@@ -628,7 +628,7 @@ void testCapture()
         auto clip = r.track.clipAt (1);
         check (clip.isValid() && std::abs (clip.lengthBeats() - 32.0) < 1e-9 && clip.numNotes() == count, "it is in the chosen scene");
         check (clip.isValid() && std::abs (clip.note (0).start - 1.5) < 0.003, "and starts on the bar line of the first note (first note at 1.5)");
-        check (result.info.contains (juce::String::fromUTF8 ("8 тактов")) && result.info.contains (juce::String::fromUTF8 ("23 ноты")),
+        check (result.info.contains (Strings::tr ("8 bars", "8 тактов")) && result.info.contains (Strings::tr ("23 notes", "23 ноты")),
                "the hint text names bars and notes in Russian plurals");
         r.runTo (36.5);
         check (r.f.engine.findRuntime (id)->playingSlot.load() == 1, "the captured clip is launched while the transport runs");

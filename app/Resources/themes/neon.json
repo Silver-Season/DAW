@@ -1,6 +1,7 @@
 {
   "id": "neon",
-  "name": "Неон",
+  "name": "Neon",
+  "nameRu": "Неон",
   "background": "#040208",
   "chrome": "#090511",
   "panel": "#0f0919",

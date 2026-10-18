@@ -12,7 +12,7 @@ namespace daw::dsp
 class Wavetable
 {
 public:
-    static constexpr int kFrameSize = 2048; // same frame size as Serum, so its tables can be imported later
+    static constexpr int kFrameSize = 2048; // the common 2048-sample frame, so tables made elsewhere can be imported later
     static constexpr int kNumMips = 11;     // mip m keeps harmonics 1 .. (1024 >> m)
 
     // Each frame must have kFrameSize samples. Frames are normalised as a whole (relative levels kept).

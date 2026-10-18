@@ -33,7 +33,7 @@ jobs:
           # Ad-hoc signature: required on Apple Silicon; not notarised, so Gatekeeper still asks once.
           codesign --force --deep --sign - dist/DAW/DAW.app dist/DAW/Plugins/*
           ln -s /Applications dist/DAW/Applications
-          cp packaging/INSTALL-ru.txt dist/DAW/
+          cp packaging/INSTALL.txt packaging/INSTALL-ru.txt dist/DAW/
           # hdiutil on hosted runners sometimes fails with "Resource busy"; a short wait and another try gets through.
           for i in 1 2 3 4; do
             hdiutil create -volname DAW -srcfolder dist/DAW -ov -format UDZO dist/DAW-macOS.dmg && break
@@ -51,7 +51,7 @@ jobs:
         run: |
           gh release delete nightly --yes --cleanup-tag || true
           gh release create nightly dist/DAW-macOS.dmg --prerelease --target "${{ github.sha }}" \
-            --title "Nightly build" --notes "Automatic build of the latest main (${{ github.sha }}). See INSTALL-ru.txt inside the image."
+            --title "Nightly build" --notes "Automatic build of the latest main (${{ github.sha }}). See INSTALL.txt inside the image."
 
   linux:
     runs-on: ubuntu-24.04

@@ -4,7 +4,7 @@
 
 namespace ui
 {
-// The playhead as a light beam over the lanes (docs/spec/03-arrangement.md, "Курсор воспроизведения"): a line in the
+// The playhead as a light beam over the lanes (docs/spec/03-arrangement.md, "Playhead"): a line in the
 // text colour, a glow in the accent colour when the theme glows, and six thin spectrum stripes to the right of it on
 // every clip it crosses. It is its own component so that 60 repaints a second touch a strip a few pixels wide, never
 // the cached lanes below it. It lets the mouse through.

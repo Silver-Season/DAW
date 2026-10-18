@@ -30,15 +30,15 @@ class AudioRecorder;
 //
 // poll() is called from SessionRecorder's 30 Hz poll (SessionRecorder owns this class and passes the live events);
 // the tests drive it with beginRun / feedEngineEvent / feedInput / finishRun and no engine at all.
-// What the record button of the transport does (docs/spec/03-arrangement.md, task 3.4). Ableton has a record button for the
-// timeline and a separate one for the session; this program has one button, so it follows the view:
+// What the record button of the transport does (docs/spec/03-arrangement.md, task 3.4). There is one record
+// button for the timeline and the session, so it follows the view:
 //   a recording onto the timeline runs                  -> ends it
 //   a recording into slots runs                         -> ends it (stage 2)
 //   Arrangement View is shown                           -> record onto the timeline
 //   Session View, the transport plays                   -> record the session into the timeline (launches and live notes)
 //   Session View, the transport stands still            -> stage 2: record into the first empty slot of the scene
-// F9 and the item "Записать на шкалу" always record onto the timeline; the record buttons of the slots and the item
-// "Записать в слот сессии" always record into slots.
+// F9 and the item "Record to Timeline" always record onto the timeline; the record buttons of the slots and the item
+// "Record into Session Slot" always record into slots.
 enum class RecordButtonAction
 {
     stopTimeline,

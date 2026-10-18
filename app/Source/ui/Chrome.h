@@ -4,7 +4,7 @@
 
 namespace ui
 {
-// Bottom line of the window: title and description of the element under the mouse, like Info View in Ableton.
+// Bottom line of the window: title and description of the element under the mouse.
 // Elements publish their text through Component::setHelpText (title, newline, description) or HelpProvider.
 class InfoBar final : public juce::Component, private juce::Timer
 {
