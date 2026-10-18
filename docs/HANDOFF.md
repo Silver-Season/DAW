@@ -4,9 +4,9 @@ This file is updated at every notable step. A new chat, Codex or a person contin
 
 ## Glass appearance integration (2026-10-19)
 
-Branch `codex/glass-ui-current` starts from the verified GitHub main `5cf1c9d64a77164811909aa7444fae43678051d1`. The earlier local design checkpoint is preserved on `codex/glass-ui` (`de942b1`); it was based on an old project version and must not be merged over the current Arrangement/recording/warp/export implementations.
+Branch `codex/glass-ui-current` includes the verified GitHub main `be186abcfe834fd22ab73c11200dad6d8ca5f070` (including PR #25, merged while the design was being checked). The earlier local design checkpoint is preserved on `codex/glass-ui` (`de942b1`); it was based on an old project version and must not be merged over the current Arrangement/recording/warp/export implementations.
 
-The current branch transfers the common rendering layer and configurable light/dark glass themes onto the real current views. It keeps all current recording, transport, Arrangement, audio/warp, effects, drum, automation and export code. Original themes, custom user themes, UI scale and the English/Russian language switch are preserved. The app's built-in synth follows the host's theme. The native logo uses the approved prism, beam and six parallel spectrum tracks in two contrast variants.
+The current branch transfers the common rendering layer and configurable light/dark glass themes onto the real current views. It keeps all current recording, transport, Arrangement, audio/warp, effects, drum, automation and export code. Original themes, custom user themes, UI scale and the English/Russian language switch are preserved. The app's built-in synth follows the host's theme. The latest main’s native logo renderer, theme variants and app icon are retained.
 
 See [GLASS-UI.md](design/GLASS-UI.md) for settings, rendering boundaries and native capture instructions. The local-track CPU lens is intentionally documented separately from the HTML study's full canvas refraction. Full-window refraction, pointer-following glints and a complete one-for-one recreation of every conceptual screen are **not finished**. The prototype is a design reference, not evidence of a native feature. No DSP or project schema changes were made.
 
@@ -40,6 +40,8 @@ Warp part 2 (branch `claude/project-thread-aqlatg`, thread "warp"; the design di
 - Tests: `daw_warp_tests` (core), `[7.3]` in `tests/WarpTests.cpp` and `tests/AudioUiTests.cpp`.
 - Next (part 3): tempo and time signature track (7.5), the project following a performance played without a click, rendering ahead of the cursor (7.1), tap tempo, audio quantize with strength across tracks.
 - `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion. When merging it after the English UI, turn every new `utf8 ("…")` in `Strings.h` into `tr ("English", "…")`.
+
+Logo and app icon (thread "design and logo"): `ui::drawLogo` redrawn as the glass prism with the incoming beam and six spectrum bars, theme-aware; the app icon is `app/Resources/brand/AppIcon-1024.png` (`ICON_BIG`), sources in `media/brand/`. A design pass is being discussed with the owner: three directions for the main window (glass and light, instrument, living canvas); no restyling before the owner picks one.
 
 README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
 
