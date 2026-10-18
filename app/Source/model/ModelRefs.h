@@ -53,8 +53,23 @@ public:
     double lengthBeats() const { return get<double> (ids::lengthBeats, 4.0); }
     double loopStart() const { return get<double> (ids::loopStart, 0.0); }
     double loopEnd() const { return lengthBeats(); }
-    double startOffset() const { return get<double> (ids::startOffset, 0.0); }
-    bool loopEnabled() const { return get<bool> (ids::loop, true); }
+    // The content of an arrangement clip has no start or loop switch of its own: the ACLIP around it holds them (where
+    // it starts in the content, whether it repeats), so the clip editor and the timeline always show the same thing.
+    double startOffset() const
+    {
+        const auto a = arrangementParent();
+        return a.isValid() ? (double) a.getProperty (ids::offset, 0.0) : get<double> (ids::startOffset, 0.0);
+    }
+    bool loopEnabled() const
+    {
+        const auto a = arrangementParent();
+        return a.isValid() ? (bool) a.getProperty (ids::loop, true) : get<bool> (ids::loop, true);
+    }
+    juce::ValueTree arrangementParent() const
+    {
+        const auto p = state.getParent();
+        return p.hasType (ids::ACLIP) ? p : juce::ValueTree();
+    }
     // "Own scale": off = the clip shows the scale of the project and follows it; on = the clip's own scale below.
     bool ownScale() const { return get<bool> (ids::ownScale, false); }
     int scaleRoot() const { return get<int> (ids::scaleRoot, 0); }
@@ -69,8 +84,20 @@ public:
     }
     void setLoopStart (double v, juce::UndoManager* um) const { set (ids::loopStart, v, um); }
     void setLoopEnd (double v, juce::UndoManager* um) const { setLengthBeats (v, um); }
-    void setStartOffset (double v, juce::UndoManager* um) const { set (ids::startOffset, v, um); }
-    void setLoopEnabled (bool v, juce::UndoManager* um) const { set (ids::loop, v, um); }
+    void setStartOffset (double v, juce::UndoManager* um) const
+    {
+        if (auto a = arrangementParent(); a.isValid())
+            a.setProperty (ids::offset, juce::jmax (0.0, v), um);
+        else
+            set (ids::startOffset, v, um);
+    }
+    void setLoopEnabled (bool v, juce::UndoManager* um) const
+    {
+        if (auto a = arrangementParent(); a.isValid())
+            a.setProperty (ids::loop, v, um);
+        else
+            set (ids::loop, v, um);
+    }
     void setOwnScale (bool v, juce::UndoManager* um) const { set (ids::ownScale, v, um); }
     void setScale (int root, const juce::String& mode, juce::UndoManager* um) const
     {

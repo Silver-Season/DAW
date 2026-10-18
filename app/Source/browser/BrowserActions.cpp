@@ -200,7 +200,7 @@ bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t t
             return false;
         // An effect only makes sense on a track that exists: an empty MIDI track would have no sound.
         if (target == DropTarget::newTrack)
-            return item.instrument || item.kind == kinds::prisma || item.kind == kinds::prismaPreset;
+            return true; // an effect makes an audio track that carries it
         if (item.kind == kinds::drumKit && target == DropTarget::device) // a kit replaces the kit of a drum machine
             return model.findDevice (deviceId).kind() == "drums";
         // An audio track has no instrument: only effects go on it (a preset only onto its own device, below).
@@ -310,7 +310,7 @@ DropResult BrowserActions::drop (const DragItem& item, DropTarget target, int64_
     if (target == DropTarget::newTrack)
     {
         model.undo.beginNewTransaction (Strings::undoAddDevice (describe (spec)));
-        auto track = newTrackAt (-1, spec.presetName.isNotEmpty() ? spec.presetName : spec.deviceName);
+        auto track = newTrackAt (-1, spec.presetName.isNotEmpty() ? spec.presetName : spec.deviceName, spec.instrument ? "midi" : "audio");
         r.deviceId = addSpec (track, spec, -1).id();
         r.trackId = track.id();
         r.ok = true;
@@ -414,6 +414,42 @@ DropResult BrowserActions::dropMidiFile (const juce::File& file, DropTarget targ
     auto created = model.createClip (track, slot, clip.lengthBeats, clip.name);
     created.setNotes (clip.notes, &model.undo);
     r.ok = true;
+    r.trackId = track.id();
+    return r;
+}
+
+bool BrowserActions::acceptsOnTimeline (const DragItem& item, int64_t trackId) const
+{
+    const auto track = model.findTrack (trackId);
+    if (item.kind == kinds::audioFile)
+        return ! track.isValid() || track.isAudio();
+    if (item.kind == kinds::midiFile)
+        return ! track.isValid() || track.type() == "midi";
+    return track.isValid() ? accepts (item, DropTarget::track, trackId, -1) : accepts (item, DropTarget::newTrack, -1, -1);
+}
+
+DropResult BrowserActions::dropOnTimeline (const DragItem& item, int64_t trackId, double beat, bool alternate)
+{
+    if (item.kind == kinds::audioFile)
+        return dropAudioOnTimeline ({ juce::File (item.path) }, trackId, beat, alternate);
+    if (item.kind != kinds::midiFile)
+        return drop (item, trackId >= 0 ? DropTarget::track : DropTarget::newTrack, trackId, -1, -1, -1);
+
+    DropResult r;
+    project::ImportedClip clip;
+    if (! project::importMidiFile (juce::File (item.path), beatsPerBar(), clip, r.message))
+        return r;
+    model.undo.beginNewTransaction (Strings::undoAddMidiClip (clip.name));
+    auto track = model.findTrack (trackId);
+    if (! track.isValid() || track.type() != "midi")
+    {
+        track = newTrackAt (-1, clip.name);
+        addSpec (track, { true, "prisma", "Prisma", {}, {}, {}, "prisma", true }, -1);
+    }
+    auto a = arrangement::addEmptyClip (model, track, juce::jmax (0.0, beat), clip.lengthBeats, clip.name);
+    if (a.clip().isValid())
+        a.clip().setNotes (clip.notes, &model.undo);
+    r.ok = a.isValid();
     r.trackId = track.id();
     return r;
 }

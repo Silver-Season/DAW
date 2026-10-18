@@ -303,6 +303,7 @@ private:
     void selectionChanged();
     void setDropHint (const DropHint&);
     DropHint soundDropHintAt (juce::Point<int> viewPoint) const;
+    DropHint browserDropHintAt (const browser::DragItem&, juce::Point<int> viewPoint) const;
     int fittedHeight (const TrackRef&) const;
     void message (const juce::String& text) const
     {

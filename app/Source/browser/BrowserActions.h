@@ -64,6 +64,11 @@ public:
     // Arrangement: onto the lane of an audio track at `beat` (trackId -1: new audio tracks at the end). Several files go
     // under each other, one track each (the first on the lane that was hit); with `alternate` one after another on it.
     DropResult dropAudioOnTimeline (const juce::Array<juce::File>&, int64_t trackId, double beat, bool alternate = false);
+    // Anything from the browser onto the Arrangement: onto a lane (trackId) or the empty space below (-1). Sounds and
+    // MIDI files become clips at `beat`; instruments, effects, presets and chains go into the track's chain, or make a
+    // new track that holds them.
+    bool acceptsOnTimeline (const DragItem&, int64_t trackId) const;
+    DropResult dropOnTimeline (const DragItem&, int64_t trackId, double beat, bool alternate = false);
     // The project folder, made if there is none yet, so dropped files can be copied into it. Set by the window.
     std::function<juce::File()> ensureProjectFolder;
 

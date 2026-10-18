@@ -1054,6 +1054,17 @@ void ArrangementLanes::showEmptyMenu (juce::Point<int> screenPosition, double be
         if (safe != nullptr)
             safe->view.selectAllClips();
     });
+    menu.addSeparator();
+    // New tracks go below the one that was clicked (at the end on the empty space under the tracks).
+    const int insertAt = trackId >= 0 ? view.model.indexOfTrack (trackId) + 1 : -1;
+    menu.addItem (A::menuAddMidiTrack, [safe, insertAt] {
+        if (safe != nullptr)
+            safe->view.selectionState.selectTrack (safe->view.actions.addMidiTrack (insertAt).id());
+    });
+    menu.addItem (A::menuAddAudioTrack, [safe, insertAt] {
+        if (safe != nullptr)
+            safe->view.selectionState.selectTrack (safe->view.actions.addAudioTrack (insertAt).id());
+    });
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (juce::Rectangle<int> (screenPosition.x, screenPosition.y, 1, 1)));
 }
 } // namespace ui

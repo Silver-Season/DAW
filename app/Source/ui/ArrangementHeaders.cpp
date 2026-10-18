@@ -431,6 +431,24 @@ private:
             if (safe != nullptr)
                 safe->view.actions.setTrackColour (id, index);
         }));
+        menu.addItem (Strings::menu::duplicate, [safe, id] {
+            if (safe != nullptr)
+                safe->view.actions.duplicateTrack (id);
+        });
+        menu.addItem (Strings::arrangement::menuDeleteTrack, [safe, id] {
+            if (safe != nullptr)
+                safe->view.actions.deleteTrack (id);
+        });
+        menu.addSeparator();
+        const int insertAt = view.model.indexOfTrack (id) + 1;
+        menu.addItem (Strings::arrangement::menuAddMidiTrack, [safe, insertAt] {
+            if (safe != nullptr)
+                safe->view.actions.addMidiTrack (insertAt);
+        });
+        menu.addItem (Strings::arrangement::menuAddAudioTrack, [safe, insertAt] {
+            if (safe != nullptr)
+                safe->view.actions.addAudioTrack (insertAt);
+        });
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (juce::Rectangle<int> (screenPosition.x, screenPosition.y, 1, 1)));
     }
 
