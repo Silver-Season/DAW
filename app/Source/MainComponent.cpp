@@ -437,7 +437,7 @@ void MainComponent::setUiScale (double scale)
 void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
 {
     using namespace ui::commands;
-    commands.addArray ({ splitClips, joinClips, loopSelection, removeTime, addMarker, toggleFollow, newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
+    commands.addArray ({ splitClips, joinClips, loopSelection, removeTime, addMarker, toggleFollow, toggleAutomation, newProject,  openProject,    saveProject,    saveProjectAs, saveTemplate,        versionHistory, exportAudio, showInFinder,
                          scanPlugins, quitApp,        undo,           redo,          cut,                 copy,           paste,       duplicate,
                          deleteItem,  renameItem,         newTrack,       newAudioTrack,  findMissingFiles, deleteUnusedRecordings, newScene,      captureScene,        newClip,        captureMidi,        recordArrangement, toggleBrowser, toggleDetail,
                          toggleMixer, switchView,     toggleClipEditor, toggleKeyboardStrip, projectProperties, quantiseNotes, quantiseOptions, zoomIn,         zoomOut,       openSettings,        playStop,       toggleComputerKeys, focusSearch });
@@ -520,6 +520,11 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case toggleFollow:
             set (Strings::arrangement::followPlayhead, viewCategory, true, key ('f', cmd | shift));
             info.setTicked (model.followPlayhead());
+            break;
+
+        case toggleAutomation:
+            set (Strings::arrangement::automationMode, viewCategory, arrangementShown);
+            info.setTicked (arrangementShown && arrangement->automationMode());
             break;
 
         case toggleBrowser:
@@ -627,6 +632,12 @@ bool MainComponent::perform (const InvocationInfo& info)
         case loopSelection: return arrangementShown && arrangement->loopSelection();
         case removeTime: return arrangementShown && arrangement->removeTimeAtSelection();
         case addMarker: return arrangementShown && arrangement->addMarkerAtCursor();
+        case toggleAutomation:
+            if (! arrangementShown)
+                return false;
+            arrangement->toggleAutomationMode();
+            commandManager.commandStatusChanged();
+            return true;
         case toggleFollow:
             arrangement->toggleFollow();
             commandManager.commandStatusChanged();

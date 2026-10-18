@@ -8,9 +8,14 @@
 #include "../model/ProjectActions.h"
 
 #include <cmath>
+#include <map>
 #include <optional>
 
 class AudioEngine;
+namespace juce
+{
+class AudioProcessorParameter;
+}
 class SessionRecorder;
 
 namespace ui
@@ -156,6 +161,23 @@ public:
     void toggleFollow();
 
     //==========================================================================
+    // Automation mode (task 6.7, key A): every lane shows one envelope of its track instead of plain clips. The mode and
+    // the chosen target of each track live in the view, not in the project.
+    bool automationMode() const { return automationOn; }
+    void setAutomationMode (bool);
+    void toggleAutomationMode() { setAutomationMode (! automationOn); }
+    // "mixer:volume" (default), "mixer:pan" or "device:<id>:<param>"
+    juce::String automationTarget (int64_t trackId) const;
+    void setAutomationTarget (int64_t trackId, const juce::String& target);
+    juce::String automationTargetName (const TrackRef&, const juce::String& target) const;
+    // The value the target has right now (volume, pan, a parameter), normalised 0..1.
+    float automationCurrentValue (const TrackRef&, const juce::String& target) const;
+    // "-6.0 dB", "30L", the parameter's own text.
+    juce::String automationValueText (const TrackRef&, const juce::String& target, float normalised) const;
+    // The chooser of a track: volume, pan, then the parameters of each device as submenus.
+    juce::PopupMenu automationMenu (int64_t trackId);
+
+    //==========================================================================
     // Commands (menus, keys and context menus call these; each is one undo transaction)
     bool deleteSelection();
     bool duplicateSelection();
@@ -289,6 +311,7 @@ private:
     }
     bool isLetterKey (const juce::KeyPress&, char letter) const;
     juce::PopupMenu markersMenu();
+    juce::AudioProcessorParameter* automationParameter (const juce::String& target) const;
 
     AudioEngine& engine;
     ProjectModel& model;
@@ -308,6 +331,8 @@ private:
     };
     std::optional<Zoom> previousZoom;
     bool structureDirty = true, propertiesDirty = true;
+    bool automationOn = false;
+    std::map<int64_t, juce::String> automationTargets;
     bool autoZoom = true; // until the user zooms, the view keeps fitting the song to the window
     std::vector<uint8_t> lastInSession;
 

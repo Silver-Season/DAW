@@ -5,6 +5,7 @@
 
 #include "../app/Source/Strings.h"
 #include "../app/Source/model/ArrangementEdit.h"
+#include "../app/Source/model/Automation.h"
 #include "../app/Source/model/ProjectActions.h"
 #include "../app/Source/ui/ArrangementLanes.h"
 #include "../app/Source/ui/ArrangementView.h"
@@ -191,6 +192,80 @@ void testGestures()
     check (r.a.arrangementClips()[0].start() > 6.0, "the clip moved");
 }
 
+void testAutomationEditing()
+{
+    std::printf ("[6.7] automation envelope in the Arrangement View\n");
+    ViewRig r;
+    auto& v = *r.view;
+    auto& m = r.fx.model;
+    check (! v.automationMode(), "automation mode is off at the start");
+    check (r.key ('a'), "the key A is used");
+    check (v.automationMode(), "A turns automation mode on");
+    check (v.automationTarget (r.a.id()) == automation::volumeTarget, "the default target is the volume");
+
+    auto* lanes = &v.lanes();
+    auto src = juce::Desktop::getInstance().getMainMouseSource();
+    const auto now = juce::Time::getCurrentTime();
+    juce::Point<int> pressedAt;
+    auto ev = [&] (juce::Point<int> p, int clicks = 1) {
+        return juce::MouseEvent (src, p.toFloat(), juce::ModifierKeys::leftButtonModifier, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, lanes, lanes, now,
+                                 pressedAt.toFloat(), now, clicks, false);
+    };
+    m.undo.clearUndoHistory();
+
+    // a click on the dimmed line of the current volume adds a point (and a start point, so that the line does not jump)
+    const auto area = lanes->envelopeArea (0);
+    const float currentY = area.getBottom() - automation::normalisedVolume (r.a.volumeDb()) * area.getHeight();
+    const juce::Point<int> click ((int) v.beatToX (8.0), juce::roundToInt (currentY));
+    pressedAt = click;
+    lanes->mouseDown (ev (click));
+    lanes->mouseUp (ev (click));
+    auto lane = automation::findLane (r.a, automation::volumeTarget);
+    check (lane.isValid() && lane.getNumChildren() == 2, "a click on the line adds a point and a start point");
+    check (r.undoDepth() == 1, "adding a point is one undo step");
+    if (! lane.isValid() || lane.getNumChildren() != 2)
+        return;
+    check (near ((double) lane.getChild (0).getProperty (ids::beat), 0.0), "the start point is at beat 0");
+    check (near ((double) lane.getChild (1).getProperty (ids::beat), 8.0), "the new point is snapped to the grid");
+
+    // a drag of the point changes its value, in one undo step
+    const float before = (float) (double) lane.getChild (1).getProperty (ids::value);
+    m.undo.clearUndoHistory();
+    const juce::Point<int> dot ((int) v.beatToX (8.0), juce::roundToInt (area.getBottom() - before * area.getHeight()));
+    pressedAt = dot;
+    lanes->mouseDown (ev (dot));
+    for (int i = 1; i <= 10; ++i)
+        lanes->mouseDrag (ev (dot + juce::Point<int> (0, i * 3)));
+    lanes->mouseUp (ev (dot + juce::Point<int> (0, 30)));
+    check ((float) (double) lane.getChild (1).getProperty (ids::value) < before - 0.1f, "dragging down lowers the value");
+    check (near ((double) lane.getChild (1).getProperty (ids::beat), 8.0), "a vertical drag keeps the beat");
+    check (r.undoDepth() == 1, "a point drag is one undo step");
+    m.undo.undo();
+    check (near ((double) lane.getChild (1).getProperty (ids::value), before), "undo restores the value");
+
+    // a click away from the line does not touch the automation
+    lanes->mouseDown (ev ({ (int) v.beatToX (20.0), (int) area.getBottom() - 1 }));
+    lanes->mouseUp (ev ({ (int) v.beatToX (20.0), (int) area.getBottom() - 1 }));
+    check (lane.getNumChildren() == 2, "a click far from the line adds nothing");
+
+    // a double click on a point deletes it
+    m.undo.clearUndoHistory();
+    const juce::Point<int> dot2 ((int) v.beatToX (8.0), juce::roundToInt (area.getBottom() - before * area.getHeight()));
+    lanes->mouseDoubleClick (ev (dot2, 2));
+    check (lane.getNumChildren() == 1, "a double click deletes the point");
+    check (r.undoDepth() == 1, "deleting a point is one undo step");
+
+    // Delete with a time selection removes the points in it
+    automation::addPoint (m, lane, { 4.0, 0.4f, 0.0f });
+    automation::addPoint (m, lane, { 6.0, 0.6f, 0.0f });
+    v.setTimeSelection (3.0, 7.0, { r.a.id() });
+    check (r.key (juce::KeyPress::deleteKey), "Delete is used with a time selection");
+    check (lane.getNumChildren() == 1, "the points in the selection are gone");
+
+    r.key ('a');
+    check (! v.automationMode(), "A again leaves the mode");
+}
+
 void testMarkersAndLoop()
 {
     std::printf ("[3.3] markers, loop brace, cursor\n");
@@ -292,5 +367,6 @@ void runArrangementUiTests()
     testMarkersAndLoop();
     testFollowPlayhead();
     testUndoOfHeights();
+    testAutomationEditing();
 }
 } // namespace tests

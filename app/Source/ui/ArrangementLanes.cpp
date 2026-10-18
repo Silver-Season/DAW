@@ -2,6 +2,7 @@
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "../model/Automation.h"
 #include "PaletteMenu.h"
 #include "Waveform.h"
 
@@ -16,6 +17,7 @@ namespace
 {
 constexpr double kEpsilon = 1.0e-6;
 constexpr float kLanePad = 3.0f;
+constexpr float kEnvelopeMargin = 7.0f, kLineGrab = 6.0f, kDotGrab = 7.0f, kDotRadius = 4.0f;
 
 juce::String shortcutText (juce::juce_wchar key, int modifiers = juce::ModifierKeys::commandModifier)
 {
@@ -334,8 +336,11 @@ void ArrangementLanes::paint (juce::Graphics& g)
             if (r.getRight() < (float) bounds.getX() || r.getX() > (float) bounds.getRight())
                 continue;
             const bool isDragged = previewMove && std::any_of (dragged.begin(), dragged.end(), [&] (const auto& d) { return d.clipId == c.id(); });
-            paintClip (g, c, r, start, length, offset, isDragged && ! copying ? 0.3f : 1.0f, view.isClipSelected (c.id()), inSession, track.mute());
+            const float alpha = (isDragged && ! copying ? 0.3f : 1.0f) * (view.automationMode() ? 0.4f : 1.0f);
+            paintClip (g, c, r, start, length, offset, alpha, view.isClipSelected (c.id()), inSession, track.mute());
         }
+        if (view.automationMode())
+            paintEnvelope (g, (int) i);
         if (inSession) // the grey bar over the lane: these clips do not sound until "Back to arrangement"
         {
             g.setColour (t.dimText.withAlpha (0.55f));
@@ -396,11 +401,243 @@ void ArrangementLanes::paint (juce::Graphics& g)
         g.setFont (t.uiFont (13.0f));
         g.drawText (Strings::arrangement::noTracks, getLocalBounds(), juce::Justification::centred, true);
     }
+
+    // the value under the pointer while a point is dragged
+    if ((gesture == Gesture::autoMove || gesture == Gesture::autoBend) && readoutText.isNotEmpty())
+    {
+        const auto font = t.numFont (11.5f);
+        g.setFont (font);
+        const float w = juce::GlyphArrangement::getStringWidth (font, readoutText) + 14.0f;
+        juce::Rectangle<float> box (readoutAt.x + 10.0f, readoutAt.y - 26.0f, w, 20.0f);
+        if (box.getRight() > (float) getWidth())
+            box.setX (readoutAt.x - 10.0f - w);
+        if (box.getY() < 0.0f)
+            box.setY (readoutAt.y + 10.0f);
+        g.setColour (t.panel2);
+        g.fillRoundedRectangle (box, 4.0f);
+        g.setColour (t.line);
+        g.drawRoundedRectangle (box, 4.0f, 1.0f);
+        g.setColour (t.text);
+        g.drawText (readoutText, box.toNearestInt(), juce::Justification::centred, false);
+    }
+}
+
+//==============================================================================
+// Automation
+juce::Rectangle<float> ArrangementLanes::envelopeArea (int row) const
+{
+    const auto& r = view.layoutRows[(size_t) row];
+    const float h = juce::jmax (8.0f, (float) r.height - 1.0f - 2.0f * kEnvelopeMargin);
+    return { 0.0f, (float) (r.y - view.v.scrollY) + kEnvelopeMargin, (float) getWidth(), h };
+}
+
+float ArrangementLanes::valueForY (int row, float y) const
+{
+    const auto a = envelopeArea (row);
+    return juce::jlimit (0.0f, 1.0f, 1.0f - (y - a.getY()) / a.getHeight());
+}
+
+ArrangementLanes::AutoHit ArrangementLanes::autoHitAt (juce::Point<int> p) const
+{
+    AutoHit hit;
+    hit.row = view.rowAtY (p.y);
+    if (hit.row < 0)
+        return hit;
+    const auto track = view.model.findTrack (view.layoutRows[(size_t) hit.row].trackId);
+    if (! track.isValid())
+        return hit;
+    const auto target = view.automationTarget (track.id());
+    const auto lane = automation::findLane (track, target);
+    const auto pts = lane.isValid() ? automation::points (lane) : std::vector<daw::engine::AutomationPoint>();
+    const auto area = envelopeArea (hit.row);
+    float best = kDotGrab;
+    for (size_t i = 0; i < pts.size(); ++i)
+    {
+        const juce::Point<float> dot ((float) view.beatToX (pts[i].beat), area.getBottom() - pts[i].value * area.getHeight());
+        const float d = dot.getDistanceFrom (p.toFloat());
+        if (d <= best)
+        {
+            best = d;
+            hit.point = (int) i;
+        }
+    }
+    const float v = daw::engine::automationValueAt (pts, view.xToBeat ((double) p.x), view.automationCurrentValue (track, target));
+    hit.onLine = std::abs ((float) p.y - (area.getBottom() - v * area.getHeight())) <= kLineGrab;
+    return hit;
+}
+
+void ArrangementLanes::paintEnvelope (juce::Graphics& g, int row) const
+{
+    const auto& t = theme();
+    const auto track = view.model.findTrack (view.layoutRows[(size_t) row].trackId);
+    if (! track.isValid())
+        return;
+    const auto target = view.automationTarget (track.id());
+    const auto lane = automation::findLane (track, target);
+    const auto pts = lane.isValid() ? automation::points (lane) : std::vector<daw::engine::AutomationPoint>();
+    const float current = view.automationCurrentValue (track, target);
+    const auto area = envelopeArea (row);
+    // light themes have pastel track colours: the line is darkened there so that it reads over the pale clip
+    auto colour = t.palette (track.colour());
+    if (t.background.getPerceivedBrightness() > 0.5f)
+        colour = colour.darker (0.6f);
+    auto yOf = [&] (float v) { return area.getBottom() - v * area.getHeight(); };
+
+    if (pts.empty())
+    {
+        // no envelope yet: the mixer's own value, dimmed
+        g.setColour (t.background.withAlpha (0.6f));
+        g.fillRect (0.0f, yOf (current) - 1.5f, (float) getWidth(), 3.0f);
+        g.setColour (colour.withAlpha (0.5f));
+        g.fillRect (0.0f, yOf (current) - 0.5f, (float) getWidth(), 1.0f);
+        return;
+    }
+
+    const auto clipBox = g.getClipBounds();
+    std::vector<float> xs;
+    const float x0 = (float) clipBox.getX() - 2.0f, x1 = (float) clipBox.getRight() + 2.0f;
+    for (float x = std::floor (x0 / 2.0f) * 2.0f; x <= x1; x += 2.0f)
+        xs.push_back (x);
+    for (const auto& p : pts)
+        if (const float x = (float) view.beatToX (p.beat); x >= x0 && x <= x1)
+            xs.push_back (x);
+    std::sort (xs.begin(), xs.end());
+
+    juce::Path line;
+    for (size_t i = 0; i < xs.size(); ++i)
+    {
+        const float y = yOf (daw::engine::automationValueAt (pts, view.xToBeat ((double) xs[i]), current));
+        if (i == 0)
+            line.startNewSubPath (xs[i], y);
+        else
+            line.lineTo (xs[i], y);
+    }
+    juce::Path fill (line);
+    fill.lineTo (xs.back(), area.getBottom());
+    fill.lineTo (xs.front(), area.getBottom());
+    fill.closeSubPath();
+    g.setColour (colour.withAlpha (0.14f));
+    g.fillPath (fill);
+    // a dark halo under the line keeps it readable over a clip of its own colour
+    g.setColour (t.background.withAlpha (0.75f));
+    g.strokePath (line, juce::PathStrokeType (4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour (colour);
+    g.strokePath (line, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    for (size_t i = 0; i < pts.size(); ++i)
+    {
+        const float x = (float) view.beatToX (pts[i].beat);
+        if (x < x0 || x > x1)
+            continue;
+        const bool held = (gesture == Gesture::autoMove || gesture == Gesture::autoBend) && autoPointNode.isValid()
+                          && autoPointNode.getParent() == lane && lane.indexOf (autoPointNode) == (int) i;
+        const float r = held ? kDotRadius + 1.5f : kDotRadius;
+        const juce::Rectangle<float> dot (2.0f * r, 2.0f * r);
+        g.setColour (t.background);
+        g.fillEllipse (dot.withCentre ({ x, yOf (pts[i].value) }).expanded (1.5f));
+        g.setColour (colour);
+        g.fillEllipse (dot.withCentre ({ x, yOf (pts[i].value) }));
+    }
+}
+
+bool ArrangementLanes::beginAutomationGesture (const juce::MouseEvent& e)
+{
+    const auto hit = autoHitAt (e.getPosition());
+    if (hit.row < 0 || (hit.point < 0 && ! hit.onLine))
+        return false;
+    const auto trackId = view.layoutRows[(size_t) hit.row].trackId;
+    const auto track = view.model.findTrack (trackId);
+    if (! track.isValid())
+        return false;
+    const auto target = view.automationTarget (trackId);
+    auto lane = automation::findLane (track, target);
+    autoTrackId = trackId;
+    autoTargetId = target;
+    movedEnough = false;
+    readoutText = {};
+    readoutAt = e.position;
+
+    // one gesture, one undo transaction: opened here, everything until the button goes up joins it
+    view.model.undo.beginNewTransaction (Strings::undoAutoEdit);
+    if (hit.point >= 0)
+    {
+        autoPointNode = lane.getChild (hit.point);
+        gesture = Gesture::autoMove;
+        return true;
+    }
+    if (e.mods.isAltDown() && lane.isValid())
+    {
+        // bend the segment that starts at the nearest point on the left
+        const double beat = view.xToBeat ((double) e.x);
+        int left = -1;
+        for (int i = 0; i < lane.getNumChildren(); ++i)
+            if ((double) lane.getChild (i).getProperty (ids::beat, 0.0) <= beat)
+                left = i;
+        if (left >= 0 && left + 1 < lane.getNumChildren())
+        {
+            autoPointNode = lane.getChild (left);
+            bendStart = (float) (double) autoPointNode.getProperty (ids::curve, 0.0);
+            const float a = (float) (double) autoPointNode.getProperty (ids::value, 0.0);
+            const float b = (float) (double) lane.getChild (left + 1).getProperty (ids::value, 0.0);
+            bendDirection = b >= a ? 1.0f : -1.0f; // dragging up pushes the line up, whichever way it runs
+            gesture = Gesture::autoBend;
+            return true;
+        }
+    }
+
+    // a click on the line: a new point under the pointer; a lane without points first gets one at the start with the current value
+    lane = automation::getOrAddLane (view.model, track, target);
+    if (lane.getNumChildren() == 0)
+        automation::addPoint (view.model, lane, { 0.0, view.automationCurrentValue (track, target), 0.0f });
+    const double beat = view.snapBeat (view.xToBeat ((double) e.x), e.mods.isCommandDown() || e.mods.isAltDown());
+    autoPointNode = automation::addPoint (view.model, lane, { beat, valueForY (hit.row, (float) e.y), 0.0f });
+    gesture = Gesture::autoMove;
+    repaint();
+    return true;
+}
+
+void ArrangementLanes::dragAutomation (const juce::MouseEvent& e)
+{
+    if (! autoPointNode.isValid() || ! autoPointNode.getParent().isValid())
+        return;
+    const auto track = view.model.findTrack (autoTrackId);
+    if (! track.isValid())
+        return;
+    if (! movedEnough && e.getDistanceFromDragStart() < 2)
+        return;
+    movedEnough = true;
+    readoutAt = e.position;
+    if (gesture == Gesture::autoBend)
+    {
+        const float curve = juce::jlimit (-1.0f, 1.0f, bendStart + bendDirection * (float) -e.getDistanceFromDragStartY() / 80.0f);
+        automation::setCurve (view.model, autoPointNode, curve);
+        readoutText = Strings::arrangement::autoCurve + " " + juce::String (curve, 2);
+    }
+    else
+    {
+        const int row = view.rowIndexOfTrack (autoTrackId);
+        if (row < 0)
+            return;
+        const double beat = view.snapBeat (juce::jmax (0.0, view.xToBeat ((double) e.x)), e.mods.isCommandDown() || e.mods.isAltDown());
+        const float value = valueForY (row, (float) e.y);
+        automation::movePoint (view.model, autoPointNode, beat, value);
+        readoutText = view.automationValueText (track, autoTargetId, value);
+    }
+    repaint();
 }
 
 //==============================================================================
 void ArrangementLanes::mouseMove (const juce::MouseEvent& e)
 {
+    if (view.automationMode())
+    {
+        const auto hit = autoHitAt (e.getPosition());
+        if (hit.point >= 0 || hit.onLine)
+        {
+            setMouseCursor (hit.point >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::CrosshairCursor);
+            return;
+        }
+    }
     const auto hit = clipHit (e.getPosition());
     auto shape = juce::MouseCursor::NormalCursor;
     if (hit.clip.isValid())
@@ -419,6 +656,11 @@ void ArrangementLanes::mouseDown (const juce::MouseEvent& e)
     movedEnough = false;
     pressedOnEmpty = false;
     dragged.clear();
+    autoPointNode = {};
+
+    // the envelope is on top of the clips: a press on it edits it, any other press still selects clips
+    if (view.automationMode() && ! e.mods.isPopupMenu() && ! e.mods.isShiftDown() && beginAutomationGesture (e))
+        return;
 
     const auto hit = clipHit (e.getPosition());
     if (e.mods.isPopupMenu())
@@ -518,6 +760,10 @@ void ArrangementLanes::mouseDrag (const juce::MouseEvent& e)
         return;
     switch (gesture)
     {
+        case Gesture::autoMove:
+        case Gesture::autoBend:
+            dragAutomation (e);
+            break;
         case Gesture::move:
             if (! movedEnough && e.getDistanceFromDragStart() < 4)
                 return;
@@ -571,6 +817,11 @@ void ArrangementLanes::mouseUp (const juce::MouseEvent& e)
         return;
     switch (finished)
     {
+        case Gesture::autoMove:
+        case Gesture::autoBend:
+            autoPointNode = {};
+            readoutText = {};
+            break;
         case Gesture::move:
             if (movedEnough)
                 view.commitMove (dragged, deltaBeats, deltaTracks, copying);
@@ -602,6 +853,26 @@ void ArrangementLanes::mouseDoubleClick (const juce::MouseEvent& e)
 {
     if (e.mods.isPopupMenu())
         return;
+    if (view.automationMode())
+    {
+        const auto ah = autoHitAt (e.getPosition());
+        if (ah.point >= 0)
+        {
+            const auto track = view.model.findTrack (view.layoutRows[(size_t) ah.row].trackId);
+            const auto lane = automation::findLane (track, view.automationTarget (track.id()));
+            if (lane.isValid() && ah.point < lane.getNumChildren())
+            {
+                view.model.undo.beginNewTransaction (Strings::undoAutoDelete);
+                automation::removePoint (view.model, lane.getChild (ah.point));
+            }
+            gesture = Gesture::none;
+            autoPointNode = {};
+            repaint();
+            return;
+        }
+        if (ah.onLine)
+            return;
+    }
     const auto hit = clipHit (e.getPosition());
     if (hit.clip.isValid())
     {
@@ -646,6 +917,8 @@ void ArrangementLanes::mouseMagnify (const juce::MouseEvent& e, float scaleFacto
 juce::String ArrangementLanes::helpAt (juce::Point<int> p) const
 {
     const auto hit = clipHit (p);
+    if (view.automationMode() && (autoHitAt (p).onLine || autoHitAt (p).point >= 0))
+        return Strings::help::arrAutomationLanes;
     if (hit.clip.isValid())
         return hit.zone == Zone::body ? Strings::help::arrClip : (hit.zone == Zone::leftEdge ? Strings::help::arrClipLeftEdge : Strings::help::arrClipRightEdge);
     return Strings::help::arrLanes;

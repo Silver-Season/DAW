@@ -4,6 +4,8 @@
 #include "../engine/AudioEngine.h"
 #include "PaletteMenu.h"
 
+#include "../model/Automation.h"
+
 namespace ui
 {
 namespace
@@ -192,8 +194,14 @@ public:
     Row (ArrangementView& v, int64_t id)
         : view (v), trackId (id),
           activator (juce::String(), Strings::help::activator, MiniButton::Style::activator),
-          solo ("S", Strings::help::solo, MiniButton::Style::solo), arm (juce::String(), Strings::help::arm, MiniButton::Style::arm)
+          solo ("S", Strings::help::solo, MiniButton::Style::solo), arm (juce::String(), Strings::help::arm, MiniButton::Style::arm),
+          chooser (Strings::arrangement::autoVolume, Strings::help::arrAutomationChooser)
     {
+        chooser.onClick = [this] (const juce::MouseEvent&) {
+            view.model.setSelectedTrack (trackId);
+            view.automationMenu (trackId).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&chooser));
+        };
+        addChildComponent (chooser);
         volume.setRange (-60.0, 6.0, 0.1);
         volume.setDecimals (1);
         volume.setSuffix (" dB");
@@ -241,6 +249,14 @@ public:
             volume.setValue ((double) track.volumeDb());
         if (force || ! pan.isDragging())
             pan.setValue ((double) track.pan());
+        // automation mode swaps the volume and pan for the chooser of the envelope's target
+        const auto targetName = view.automationMode() ? view.automationTargetName (track, view.automationTarget (trackId)) : juce::String();
+        if (view.automationMode() != shownAutomation)
+        {
+            shownAutomation = view.automationMode();
+            resized();
+        }
+        chooser.setText (targetName);
         activator.setOn (! track.mute());
         activator.setText (juce::String (view.model.indexOfTrack (trackId) + 1));
         solo.setOn (track.solo());
@@ -303,13 +319,16 @@ public:
         nameBounds = top;
 
         const bool second = h >= 52;
-        volume.setVisible (second);
-        pan.setVisible (second);
+        const bool automating = view.automationMode();
+        volume.setVisible (second && ! automating);
+        pan.setVisible (second && ! automating);
+        chooser.setVisible (second && automating);
         if (second)
         {
             auto line = juce::Rectangle<int> (r.getX(), r.getY() + 5, r.getWidth(), 20);
             if (h >= 76)
                 line.setY (r.getY() + 7);
+            chooser.setBounds (line);
             pan.setBounds (line.removeFromRight (juce::jmin (64, line.getWidth() / 2 - 2)));
             line.removeFromRight (4);
             volume.setBounds (line);
@@ -417,7 +436,8 @@ private:
 
     ArrangementView& view;
     int64_t trackId;
-    MiniButton activator, solo, arm;
+    MiniButton activator, solo, arm, chooser;
+    bool shownAutomation = false;
     NumberField volume;
     PanDrag pan;
     std::unique_ptr<InlineEditor> editor;
