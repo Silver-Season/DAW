@@ -519,7 +519,7 @@ public:
                     const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (4.0f).withTrimmedTop (15.0f).withTrimmedBottom (3.0f); // under the name
                     juce::Graphics::ScopedSaveState save (g);
                     g.reduceClipRegion (cell.toNearestInt());
-                    drawAudioWaveform (g, area, *audioSource, clip, 0.0, false, clip.lengthBeats(), view.model.tempo(), t.clipInk.withAlpha (0.7f));
+                    drawAudioWaveform (g, area, *audioSource, clip, 0.0, false, clip.lengthBeats(), clip.contentTempo (view.model.tempo()), t.clipInk.withAlpha (0.7f));
                     if (audioSource->peaksAvailable.load (std::memory_order_acquire) < audioSource->numPeaks)
                         peaksPending = true; // still decoding: repaint on the next tick to show more
                 }

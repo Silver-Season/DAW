@@ -47,6 +47,7 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
     knownPlugins.addChangeListener (this);
 
     playHead = std::make_unique<PlayHead> (*this);
+    warp.onStretchReady = [this] { graphDirty = true; };
     correctionMs = settings.recordCorrectionMs();
     audioCorrectionMs = settings.audioLatencyCorrectionMs();
     for (int i = 0; i < kMaxInputChannels; ++i)
@@ -1680,4 +1681,54 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
     for (const auto& t : graph->tracks)
         anyInSessionNow = anyInSessionNow || t.runtime->inSession.load (std::memory_order_relaxed);
     anyInSession.store (anyInSessionNow, std::memory_order_relaxed);
+}
+
+//==============================================================================
+void AudioEngine::analyseAudioFile (int64_t fileId)
+{
+    if (model == nullptr)
+        return;
+    const auto fileNode = model->findAudioFile (fileId);
+    const auto file = resolveAudioFile (fileNode);
+    if (! fileNode.isValid() || ! file.existsAsFile() || fileNode.tempo() > 0.0)
+        return;
+    warp.analyse (file, [this, fileId] (const WarpService::Analysis& a) {
+        if (model == nullptr)
+            return;
+        auto node = model->findAudioFile (fileId);
+        if (! node.isValid())
+            return;
+        node.state.setProperty (ids::analysed, true, nullptr);
+        if (a.bpm <= 0.0)
+            return;
+        node.state.setProperty (ids::tempo, a.bpm, nullptr);
+        node.state.setProperty (ids::firstBeat, a.firstBeatSeconds, nullptr);
+        // The clips made before the answer came: they start on the first downbeat and follow the project tempo, and
+        // their length becomes the file's length in its own beats (an arrangement clip that showed all of it too).
+        const auto mode = ProjectModel::warpModeFor (node);
+        const double start = a.firstBeatSeconds * node.sampleRate();
+        const double beats = std::max (0.25, ((double) node.lengthSamples() - start) / node.sampleRate() * a.bpm / 60.0);
+        const auto update = [&] (const ClipRef& clip) {
+            if (! clip.isValid() || ! clip.isAudio() || clip.fileId() != fileId || clip.originalTempo() > 0.0)
+                return;
+            const double oldLength = clip.lengthBeats();
+            clip.state.setProperty (ids::originalTempo, a.bpm, nullptr);
+            clip.state.setProperty (ids::warpMode, mode, nullptr);
+            clip.state.setProperty (ids::warp, true, nullptr);
+            if (clip.sampleStart() <= 0.0)
+                clip.state.setProperty (ids::sampleStart, start, nullptr);
+            clip.setLengthBeats (beats, nullptr);
+            if (clip.loopStart() >= beats)
+                clip.setLoopStart (0.0, nullptr);
+            if (auto parent = clip.state.getParent(); parent.hasType (ids::ACLIP) && std::abs ((double) parent.getProperty (ids::length, 0.0) - oldLength) < 1.0e-6)
+                parent.setProperty (ids::length, beats, nullptr);
+        };
+        for (const auto& t : model->tracks())
+        {
+            for (int s = 0; s < t.numSlots(); ++s)
+                update (t.clipAt (s));
+            for (const auto& c : t.arrangementClips())
+                update (c.clip());
+        }
+    });
 }

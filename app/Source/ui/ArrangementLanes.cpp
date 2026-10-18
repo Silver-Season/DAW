@@ -166,7 +166,7 @@ bool ArrangementLanes::paintAudio (juce::Graphics& g, const ArrangementClipRef& 
     const float top = r.getY() + (nameRow ? 15.0f : 2.0f), bottom = r.getBottom() - 2.0f;
     const juce::Rectangle<float> area (r.getX(), top, (float) (clipLength * px), bottom - top);
     const double entry = daw::engine::normaliseOffset (clip.toMidiClip(), clipOffset, c.loop());
-    drawAudioWaveform (g, area, *source, clip, entry, c.loop(), clipLength, view.model.tempo(), ink.withAlpha (nameRow ? 0.75f : 0.6f));
+    drawAudioWaveform (g, area, *source, clip, entry, c.loop(), clipLength, clip.contentTempo (view.model.tempo()), ink.withAlpha (nameRow ? 0.75f : 0.6f));
 
     // The fades of the clip: the part of the waveform they take away is darkened and the ramp is drawn as a line.
     const auto& t = theme();

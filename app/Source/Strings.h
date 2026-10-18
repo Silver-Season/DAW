@@ -1006,7 +1006,11 @@ inline const juce::String masterHeader = make (utf8 ("Мастер"), utf8 ("О�
 inline const juce::String fader = make (utf8 ("Громкость"), utf8 ("Тяните фейдер, колесо меняет, двойной щелчок сбрасывает в 0 дБ. Shift: точнее."));
 inline const juce::String volumeReadout = make (utf8 ("Громкость в дБ"), utf8 ("Двойной щелчок открывает ввод числа: Enter подтверждает, Esc отменяет."));
 inline const juce::String panKnob = make (utf8 ("Панорама"), utf8 ("Положение в стерео. Двойной щелчок возвращает в центр, Shift при вращении: точнее."));
-inline const juce::String audioFollowTempo = make (utf8 ("Под темп проекта"), utf8 ("Луп с известным темпом играет в темпе проекта: быстрее или медленнее, высота меняется вместе со скоростью (как Re-Pitch)."));
+inline const juce::String audioFollowTempo = make (utf8 ("Варп"), utf8 ("Клип играет в темпе проекта. Темп звука находится сам при импорте; если ошибся вдвое, поправьте кнопками ×2 и ÷2 или числом."));
+inline const juce::String audioWarpMode = make (utf8 ("Режим варпа"), utf8 ("Beats для барабанов, Complex и Complex Pro для музыки, Tones для голоса и соло, Texture для шумов, Re-Pitch меняет высоту вместе со скоростью."));
+inline const juce::String audioOriginalTempo = make (utf8 ("Темп звука"), utf8 ("В каком темпе записан звук. Тяните или введите число, чтобы доли клипа легли на сетку."));
+inline const juce::String audioTempoDouble = make (utf8 ("Темп ×2"), utf8 ("Темп звука вдвое больше найденного."));
+inline const juce::String audioTempoHalve = make (utf8 ("Темп ÷2"), utf8 ("Темп звука вдвое меньше найденного."));
 inline const juce::String spectrum = make (utf8 ("Спектр мастера"), utf8 ("Что звучит на выходе: от баса слева до воздуха справа, наклон +4,5 дБ на октаву, как слышит ухо. Чёрточки показывают недавние пики."));
 inline const juce::String sendKnob = make (utf8 ("Посыл"), utf8 ("Отправляет часть звука после фейдера на возвратную дорожку A (ревер) или B (дилей). Первое касание создаёт возвратную дорожку, если её нет. Двойной щелчок выключает."));
 inline const juce::String cueKnob = make (utf8 ("Прослушивание"), utf8 ("Громкость предпрослушивания. ") + soon6);
@@ -1107,6 +1111,19 @@ inline const juce::String fadeOut = utf8 ("Фейд-аут (шкала)");
 inline const juce::String warpSoon = utf8 ("Растяжение без смены высоты: этап 7");
 inline juce::String followTempo (double bpm) { return utf8 ("Под темп проекта (файл ") + juce::String (bpm, 1).replace (".", ",") + ")"; }
 inline const juce::String tempoUnknown = utf8 ("Темп файла неизвестен");
+inline const juce::String warp = utf8 ("Варп");
+inline const juce::String analysing = utf8 ("Ищу темп…");
+inline const juce::String undoClipTempo = utf8 ("Темп клипа");
+inline const juce::String undoWarpMode = utf8 ("Режим варпа");
+inline juce::String warpModeName (const juce::String& m)
+{
+    if (m == "beats") return "Beats";
+    if (m == "tones") return "Tones";
+    if (m == "texture") return "Texture";
+    if (m == "repitch") return "Re-Pitch";
+    if (m == "complexpro") return "Complex Pro";
+    return "Complex";
+}
 inline const juce::String undoFollowTempo = utf8 ("Подстройка под темп");
 inline const juce::String loopStart = utf8 ("Начало петли");
 inline const juce::String loopEnd = utf8 ("Конец");
