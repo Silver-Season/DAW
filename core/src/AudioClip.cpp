@@ -52,6 +52,8 @@ void AudioSource::publish (int64_t upTo) noexcept
 
 double framesPerBeat (const AudioPart& part, double samplesPerBeat, double engineRate) noexcept
 {
+    if (part.fileFramesPerBeat > 0.0)
+        return part.fileFramesPerBeat * std::max (1.0e-3, part.pitchRatio);
     const double fileRate = part.source != nullptr ? part.source->sampleRate : engineRate;
     return samplesPerBeat / std::max (1.0, engineRate) * fileRate * std::max (1.0e-3, part.pitchRatio);
 }

@@ -20,6 +20,7 @@ enum : juce::CommandID
     showInFinder,
     scanPlugins,
     findMissingFiles,
+    deleteUnusedRecordings,
     quitApp,
 
     undo,
@@ -48,6 +49,7 @@ enum : juce::CommandID
 
     toggleBrowser,
     toggleFollow,
+    toggleAutomation, // A (handled by the Arrangement View by key code)
     toggleDetail,
     toggleMixer,
     switchView,
@@ -77,6 +79,7 @@ public:
     std::function<juce::StringArray()> recentProjects;
     std::function<void (const juce::String& path)> onOpenRecent;
     std::function<void()> onClearRecent;
+    std::function<juce::PopupMenu()> inspirationMenu; // the submenu "Вдохновение" of Create
 
     juce::StringArray getMenuBarNames() override;
     juce::PopupMenu getMenuForIndex (int index, const juce::String& name) override;

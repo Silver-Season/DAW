@@ -1,6 +1,7 @@
 // Tests for the sinc interpolator and the audio analysis helpers (loopback latency, phrase detection, peaks).
 #include "daw/dsp/SincInterpolator.h"
 #include "daw/engine/AudioAnalysis.h"
+#include "daw/engine/AudioClip.h"
 #include "daw/engine/Clip.h"
 
 #include <algorithm>
@@ -64,6 +65,16 @@ using namespace daw;
 
 int main()
 {
+    test ("audio clip: a loop that follows the project tempo reads its own beats at any tempo", [] {
+        engine::AudioPart part;
+        part.fileFramesPerBeat = 44100.0 * 60.0 / 90.0; // a 90 BPM loop at 44.1 kHz
+        for (const double bpm : { 90.0, 120.0, 174.0 })
+            check (std::abs (engine::framesPerBeat (part, 48000.0 * 60.0 / bpm, 48000.0) - 29400.0) < 1.0e-6,
+                   "a content beat is one beat of the file at " + std::to_string (bpm) + " BPM");
+        part.pitchRatio = 2.0;
+        check (std::abs (engine::framesPerBeat (part, 24000.0, 48000.0) - 58800.0) < 1.0e-6, "transposition still applies on top");
+    });
+
     test ("sinc: resampling a 1 kHz sine from 48k to 44.1k", [] {
         const auto& sinc = dsp::sharedSincInterpolator();
         const int n = 4800;

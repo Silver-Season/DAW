@@ -3,6 +3,7 @@
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "../engine/SessionRecorder.h"
+#include "../engine/BuiltInEffectProcessor.h"
 #include "../Settings.h"
 #include "../project/AudioImport.h"
 #include "ArrangementView.h"
@@ -303,10 +304,22 @@ public:
             return Strings::help::recordingSlot;
         if (track.clipAt (scene).isValid())
             return Strings::help::clipSlot;
-        if (track.isAudio())
-            return Strings::help::emptyAudioSlot;
         const bool overCircle = p.x - (view.columnX[(size_t) column] - view.scrollX) < kLaunchWidth;
-        return overCircle && receivesLiveMidi (track, anyArmed()) ? Strings::help::recordSlot : Strings::help::emptySlot;
+        if (track.isAudio())
+            return overCircle && recordsSound (track) ? Strings::help::recordAudioSlot : Strings::help::emptyAudioSlot;
+        return overCircle && canRecord (track, anyArmed()) ? Strings::help::recordSlot : Strings::help::emptySlot;
+    }
+
+    // A track that records sound (an audio track with an input, a MIDI track with the record source "audio"): its record
+    // circle works whether or not it is armed, like a click on a slot in Live.
+    bool recordsSound (const TrackRef& track) const
+    {
+        return view.recorder != nullptr && view.recorder->sound().recordsSound (track);
+    }
+
+    bool canRecord (const TrackRef& track, bool anyTrackArmed) const
+    {
+        return recordsSound (track) || receivesLiveMidi (track, anyTrackArmed);
     }
 
     bool anyArmed() const
@@ -456,7 +469,7 @@ public:
             const int playingScene = rt != nullptr ? rt->playingSlot.load() : -1;
             const int queuedScene = rt != nullptr ? rt->queuedSlot.load() : -1;
             const bool armed = v.track.arm();
-            const bool live = receivesLiveMidi (v.track, anyTrackArmed);
+            const bool live = canRecord (v.track, anyTrackArmed);
             const int recScene = view.recorder != nullptr ? view.recorder->recordingScene (v.track.id()) : -1;
             SessionRecorder::Progress progress;
             const bool hasProgress = recScene >= 0 && view.recorder->getProgress (v.track.id(), progress);
@@ -680,7 +693,7 @@ public:
             view.engine.stopTrack (id);
         else if (atMarker && view.model.findTrack (id).clipAt (scene).isValid())
             view.engine.launchClip (id, scene);
-        else if (atMarker && view.recorder != nullptr && receivesLiveMidi (view.model.findTrack (id), anyArmed()))
+        else if (atMarker && view.recorder != nullptr && canRecord (view.model.findTrack (id), anyArmed()))
             view.recorder->toggleRecording (id, scene); // the record circle of an empty slot
     }
 
@@ -785,6 +798,36 @@ private:
         g.setColour (t.clipInk.withAlpha (0.7f));
         g.fillRect (cell.getX(), cell.getBottom() - 3.0f, cell.getWidth() * (float) juce::jlimit (0.0, 1.0, p.lengthBeats / total), 3.0f);
 
+        // Sound: the waveform as it comes in, from the writer's overview (the file is not read while it grows).
+        if (recordsSound (track) && area.getWidth() > 8.0f)
+        {
+            std::vector<float> peaks;
+            int64_t frames = 0;
+            double rate = 48000.0;
+            if (view.recorder->sound().getLivePeaks (track.id(), peaks, frames, rate) && ! peaks.empty())
+            {
+                const double framesPerBeat = rate * 60.0 / juce::jmax (1.0, view.model.tempo());
+                const double totalFrames = total * framesPerBeat;
+                const float mid = cell.getCentreY() + 2.0f, half = cell.getHeight() * 0.5f - 6.0f;
+                g.setColour (t.clipInk.withAlpha (0.8f));
+                const int numPairs = (int) peaks.size() / 2;
+                for (float x = area.getX(); x < area.getRight(); x += 1.0f)
+                {
+                    const double f0 = (x - area.getX()) / area.getWidth() * totalFrames, f1 = (x + 1.0f - area.getX()) / area.getWidth() * totalFrames;
+                    const int p0 = (int) (f0 / AudioRecorder::kPeakFrames), p1 = juce::jmax (p0 + 1, (int) (f1 / AudioRecorder::kPeakFrames));
+                    if (p0 >= numPairs)
+                        break;
+                    float lo = 0.0f, hi = 0.0f;
+                    for (int i = p0; i < juce::jmin (p1, numPairs); ++i)
+                    {
+                        lo = juce::jmin (lo, peaks[(size_t) (2 * i)]);
+                        hi = juce::jmax (hi, peaks[(size_t) (2 * i + 1)]);
+                    }
+                    g.fillRect (x, mid - hi * half, 1.0f, juce::jmax (1.0f, (hi - lo) * half));
+                }
+            }
+            return;
+        }
         if (! p.notes.empty() && area.getWidth() > 8.0f)
         {
             int lo = 127, hi = 0;
@@ -804,7 +847,6 @@ private:
                 g.fillRect (x, y - 1.0f, juce::jmin (w, area.getRight() - x), 2.0f);
             }
         }
-        juce::ignoreUnused (track);
     }
 
     // The rainbow glint that runs across a playing clip (the "sheen" of the concept).
@@ -969,10 +1011,22 @@ public:
         auto& model = view.model;
         const auto t = model.findTrack (trackId);
 
-        for (auto* k : { &sendA, &sendB })
+        for (int i = 0; i < 2; ++i)
         {
-            k->setEnabled (false);
+            auto* k = i == 0 ? &sendA : &sendB;
             k->setHelpText (Strings::help::sendKnob);
+            k->valueText = [] (double knob) { return sendText (knob); };
+            k->setDefaultValue (0.0);
+            k->onGestureStart = [this, i] {
+                view.model.undo.beginNewTransaction (Strings::undoSend);
+                ensureReturn (view.model, i); // the first touch of A or B makes its return track
+            };
+            k->onValueChange = [this, i, k] (double knob) {
+                if (auto track = view.model.findTrack (trackId); track.isValid())
+                    track.setSendDb (i, sendDbOf (knob), &view.model.undo);
+                juce::ignoreUnused (k);
+            };
+            k->setEnabled (! t.isReturn());
             addAndMakeVisible (*k);
         }
         sendA.setCaption (Strings::labelSendA);
@@ -1059,6 +1113,38 @@ public:
         arm.setState (track.arm());
         sendA.setRingColour (theme().palette (track.colour()));
         sendB.setRingColour (theme().palette (track.colour()));
+        if (force || ! sendA.isDragging())
+            sendA.setValue (sendKnobOf (track.sendDb (0)));
+        if (force || ! sendB.isDragging())
+            sendB.setValue (sendKnobOf (track.sendDb (1)));
+    }
+
+    // Send knob: 0 = off, the rest -60..+6 dB with the middle of the travel at -12 dB.
+    static float sendDbOf (double v) { return v <= 0.001 ? TrackRef::kMinSendDb : (float) (TrackRef::kMinSendDb + std::pow (v, 0.5) * 66.0); }
+    static double sendKnobOf (float db) { return db <= TrackRef::kMinSendDb ? 0.0 : std::pow ((db - TrackRef::kMinSendDb) / 66.0, 2.0); }
+    static juce::String sendText (double v)
+    {
+        const float db = sendDbOf (v);
+        return db <= TrackRef::kMinSendDb ? juce::String::fromUTF8 ("\xe2\x88\x92\xe2\x88\x9e") : juce::String (db, 1) + " dB";
+    }
+
+    // Return A or B, made on demand: A with a reverb, B with a delay, both fully wet.
+    static void ensureReturn (ProjectModel& model, int which)
+    {
+        int count = 0;
+        for (const auto& t : model.tracks())
+            count += t.isReturn() ? 1 : 0;
+        while (count <= which)
+        {
+            const bool reverb = count == 0;
+            auto ret = model.addTrack ("return");
+            ret.setName (reverb ? Strings::returns::reverbName : Strings::returns::delayName, &model.undo);
+            auto fx = model.addDevice (ret, "fx", Strings::fx::effectName (reverb ? "reverb" : "delay"));
+            fx.setPluginDesc (reverb ? "reverb" : "delay", &model.undo);
+            // fully wet: the dry sound is in the track already
+            fx.setStateBase64 (BuiltInEffectProcessor::stateBase64 (reverb ? "reverb" : "delay", { { "mix", 100.0f } }), &model.undo);
+            ++count;
+        }
     }
 
     void updateMeter()

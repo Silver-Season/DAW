@@ -13,7 +13,15 @@ add_library(daw_core STATIC
     src/DemoContent.cpp
     src/VersionHistory.cpp
     src/SincInterpolator.cpp
-    src/AudioAnalysis.cpp)
+    src/AudioAnalysis.cpp
+    src/gen/Patterns.cpp
+    src/gen/Patches.cpp
+    src/drums/DrumKit.cpp
+    src/drums/DrumSynth.cpp)
+
+# Built-in effects: one file per effect, plus the shared base and the registry.
+file(GLOB DAW_FX_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/fx/*.cpp)
+target_sources(daw_core PRIVATE ${DAW_FX_SOURCES})
 
 target_include_directories(daw_core PUBLIC include)
 target_compile_features(daw_core PUBLIC cxx_std_20)
@@ -30,10 +38,33 @@ if(DAW_BUILD_TESTS)
     target_link_libraries(daw_core_tests PRIVATE daw_core)
     add_test(NAME daw_core_tests COMMAND daw_core_tests)
 
+    add_executable(daw_gen_tests tests/gen_tests.cpp)
+    target_link_libraries(daw_gen_tests PRIVATE daw_core)
+    add_test(NAME daw_gen_tests COMMAND daw_gen_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_gen_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    endif()
+
+    add_executable(daw_drum_tests tests/drum_tests.cpp)
+    target_link_libraries(daw_drum_tests PRIVATE daw_core)
+    add_test(NAME daw_drum_tests COMMAND daw_drum_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_drum_tests PRIVATE -Wall -Wextra)
+    endif()
+
     add_executable(daw_core_audio_tests tests/audio_tests.cpp)
     target_link_libraries(daw_core_audio_tests PRIVATE daw_core)
     add_test(NAME daw_core_audio_tests COMMAND daw_core_audio_tests)
     if(NOT MSVC)
         target_compile_options(daw_core_audio_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    endif()
+
+    # Effect tests: one file per effect registers its cases (FX_TEST), the main runs them all.
+    file(GLOB DAW_FX_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/fx/*.cpp)
+    add_executable(daw_fx_tests ${DAW_FX_TEST_SOURCES})
+    target_link_libraries(daw_fx_tests PRIVATE daw_core)
+    add_test(NAME daw_fx_tests COMMAND daw_fx_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_fx_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
     endif()
 endif()

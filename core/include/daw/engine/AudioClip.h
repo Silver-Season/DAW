@@ -55,6 +55,9 @@ struct AudioPart
     double pitchRatio = 1.0;                    // 2^(semitones / 12 + cents / 1200)
     bool reverse = false;
     double fadeIn = 0.0, fadeOut = 0.0;         // beats, at the edges of an arrangement clip
+    // > 0: the clip follows the project tempo. A content beat is this many file frames (one beat at the file's own
+    // tempo), so the loop stays in time at any project tempo and its pitch moves with the speed, like Re-Pitch.
+    double fileFramesPerBeat = 0.0;
 };
 
 // Per-sample fades of one stretch of playback, measured in beats since the stretch began (`elapsed`). The equal-power

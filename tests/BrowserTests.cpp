@@ -57,7 +57,9 @@ void testSearch()
     check (contains (catalog.items (Category::presets), "Reese Bass"), "the factory preset Reese Bass is in Presets");
     check (contains (catalog.items (Category::instruments), "Prisma"), "Prisma is in Instruments");
     check (contains (catalog.items (Category::presets), juce::String::fromUTF8 ("Реестр-бас")), "the user preset is in Presets");
-    check (contains (catalog.items (Category::effects), Strings::browser::builtinEffectsSoon), "Effects has the placeholder for stage 6");
+    check (contains (catalog.items (Category::effects), Strings::fx::effectName ("eq8")) && contains (catalog.items (Category::effects), Strings::fx::effectName ("reverb")),
+           "Effects lists the built-in effects (stage 6)");
+    check (contains (catalog.items (Category::instruments), "909 Club"), "the drum kits are in Instruments");
 
     for (const auto* query : { "reese", "REESE", "Reese", "  reese  ", "eese" })
     {

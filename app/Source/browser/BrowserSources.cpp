@@ -1,5 +1,8 @@
 #include "BrowserSources.h"
 
+#include "daw/drums/DrumSynth.h"
+#include "daw/fx/Effect.h"
+
 #include "../Strings.h"
 
 #include "daw/synth/PrismaParams.h"
@@ -106,6 +109,19 @@ void BrowserSources::refreshBuiltIn()
     prisma.instrument = true;
     prisma.detail = Strings::browser::builtIn;
     instruments.push_back (prisma);
+    for (const auto& k : daw::drums::factoryKits())
+    {
+        Item kit;
+        kit.category = Category::instruments;
+        kit.name = juce::String (k.name);
+        kit.group = Strings::drums::group;
+        kit.key = "drums:" + kit.name;
+        kit.kind = kinds::drumKit;
+        kit.id = kit.name;
+        kit.instrument = true;
+        kit.detail = Strings::browser::builtIn;
+        instruments.push_back (kit);
+    }
     data.set (Category::instruments, instruments); // plugin instruments are appended by refreshPlugins()
 
     const auto& factory = daw::synth::factoryPresets();
@@ -134,7 +150,7 @@ void BrowserSources::refreshPlugins()
 
     // Prisma stays first in the instruments
     for (const auto& item : data.items (Category::instruments))
-        if (item.kind == kinds::prisma)
+        if (item.kind == kinds::prisma || item.kind == kinds::drumKit)
             instruments.push_back (item);
 
     auto types = plugins.getTypes();
@@ -158,13 +174,21 @@ void BrowserSources::refreshPlugins()
         (d.isInstrument ? instruments : effects).push_back (item);
     }
 
-    Item builtin;
-    builtin.category = Category::effects;
-    builtin.name = Strings::browser::builtinEffectsSoon;
-    builtin.group = Strings::browser::builtinGroup;
-    builtin.key = "placeholder:builtin-effects";
-    builtin.placeholder = true;
-    effects.insert (effects.begin(), builtin);
+    // The built-in effects come first, grouped by what they do.
+    std::vector<Item> builtins;
+    for (const auto& t : daw::fx::effectTypes())
+    {
+        Item item;
+        item.category = Category::effects;
+        item.name = Strings::fx::effectName (t.id);
+        item.group = Strings::fx::group + juce::String::fromUTF8 (" \xc2\xb7 ") + Strings::fx::categoryName (t.category);
+        item.key = "fx:" + juce::String (t.id);
+        item.kind = kinds::builtinFx;
+        item.id = t.id;
+        item.instrument = false;
+        builtins.push_back (item);
+    }
+    effects.insert (effects.begin(), builtins.begin(), builtins.end());
 
     data.set (Category::instruments, std::move (instruments));
     data.set (Category::effects, std::move (effects));

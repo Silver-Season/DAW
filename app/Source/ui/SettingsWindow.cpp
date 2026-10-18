@@ -531,6 +531,36 @@ public:
         reset.setButtonText (Strings::recording::correctionReset);
         reset.onClick = [this] { slider.setValue (0.0, juce::sendNotificationSync); };
         addAndMakeVisible (reset);
+
+        // Sound (docs/spec/05-audio-recording.md, task 5.4): the latency recordings are moved by, the loopback test, the format
+        for (auto* l : { &audioHeading, &driverLabel, &driverValue, &testResult, &bitsLabel, &audioNote })
+            addAndMakeVisible (*l);
+        audioHeading.setText (Strings::audioRec::heading, juce::dontSendNotification);
+        driverLabel.setText (Strings::audioRec::driverLatency, juce::dontSendNotification);
+        bitsLabel.setText (Strings::audioRec::bitDepth, juce::dontSendNotification);
+        audioNote.setText (Strings::audioRec::testNote, juce::dontSendNotification);
+        audioNote.setJustificationType (juce::Justification::topLeft);
+        audioSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+        audioSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 90, 24);
+        audioSlider.setRange (-100.0, 100.0, 0.1);
+        audioSlider.setDoubleClickReturnValue (true, 0.0);
+        audioSlider.setValue (engine.getAudioLatencyCorrectionMs(), juce::dontSendNotification);
+        audioSlider.textFromValueFunction = slider.textFromValueFunction;
+        audioSlider.valueFromTextFunction = [] (const juce::String& text) {
+            return juce::jlimit (-100.0, 100.0, text.replace (juce::String::fromUTF8 ("\xe2\x88\x92"), "-").replace (",", ".").getDoubleValue());
+        };
+        audioSlider.onValueChange = [this] { engine.setAudioLatencyCorrectionMs (audioSlider.getValue()); };
+        addAndMakeVisible (audioSlider);
+        measure.setButtonText (Strings::audioRec::measure);
+        measure.onClick = [this] { startTest(); };
+        addAndMakeVisible (measure);
+        addAndMakeVisible (testInput);
+        bits.addItem ("16", 16);
+        bits.addItem ("24", 24);
+        bits.addItem (Strings::audioRec::float32, 32);
+        bits.setSelectedId (engine.getSettings().recordBitDepth(), juce::dontSendNotification);
+        bits.onChange = [this] { engine.getSettings().setRecordBitDepth (bits.getSelectedId()); };
+        addAndMakeVisible (bits);
         restyle();
         refresh();
         startTimer (500); // the device can change while the window is open
@@ -544,6 +574,43 @@ public:
         autoValue.setText (Strings::recording::autoMs ((double) (engine.getRecordCompensationSamples() - manual) * 1000.0 / sr), juce::dontSendNotification);
         if (std::abs (slider.getValue() - engine.getRecordCorrectionMs()) > 0.05 && ! slider.isMouseButtonDown())
             slider.setValue (engine.getRecordCorrectionMs(), juce::dontSendNotification);
+
+        driverValue.setText (Strings::recording::autoMs (engine.getDriverRoundTrip() * 1000.0 / sr), juce::dontSendNotification);
+        if (std::abs (audioSlider.getValue() - engine.getAudioLatencyCorrectionMs()) > 0.05 && ! audioSlider.isMouseButtonDown())
+            audioSlider.setValue (engine.getAudioLatencyCorrectionMs(), juce::dontSendNotification);
+        const auto names = engine.getInputChannelNames();
+        if (names.size() != testInput.getNumItems())
+        {
+            testInput.clear (juce::dontSendNotification);
+            for (int i = 0; i < names.size(); ++i)
+                testInput.addItem (Strings::audioInput::mono (i), i + 1);
+            testInput.setSelectedId (1, juce::dontSendNotification);
+        }
+        measure.setEnabled (names.size() > 0 && ! engine.isLatencyTestRunning());
+        if (testing && engine.isLatencyTestDone())
+        {
+            testing = false;
+            const auto r = engine.takeLatencyTestResult();
+            if (r.ok)
+            {
+                engine.setAudioLatencyCorrectionMs (r.correctionMs);
+                testResult.setText (Strings::audioRec::measured (r.roundTripSamples * 1000.0 / sr, r.correctionMs), juce::dontSendNotification);
+            }
+            else
+                testResult.setText (Strings::audioRec::notFound, juce::dontSendNotification);
+        }
+    }
+
+    void startTest()
+    {
+        if (engine.isPlaying())
+            engine.stop();
+        if (engine.startLatencyTest (juce::jmax (0, testInput.getSelectedId() - 1)))
+        {
+            testing = true;
+            testResult.setText (Strings::audioRec::running, juce::dontSendNotification);
+            startTimer (100);
+        }
     }
 
     void resized() override
@@ -559,7 +626,28 @@ public:
         autoLabel.setBounds (row.removeFromLeft (230));
         autoValue.setBounds (row.removeFromLeft (160));
         r.removeFromTop (14);
-        note.setBounds (r.removeFromTop (70));
+        note.setBounds (r.removeFromTop (54));
+
+        audioHeading.setBounds (r.removeFromTop (24));
+        auto aline = r.removeFromTop (kRowHeight + 6);
+        audioSlider.setBounds (aline);
+        r.removeFromTop (8);
+        auto drow = r.removeFromTop (kRowHeight);
+        driverLabel.setBounds (drow.removeFromLeft (230));
+        driverValue.setBounds (drow.removeFromLeft (160));
+        r.removeFromTop (8);
+        auto trow = r.removeFromTop (kRowHeight + 4);
+        measure.setBounds (trow.removeFromLeft (190).reduced (0, 2));
+        trow.removeFromLeft (10);
+        testInput.setBounds (trow.removeFromLeft (120).reduced (0, 2));
+        trow.removeFromLeft (10);
+        testResult.setBounds (trow);
+        r.removeFromTop (8);
+        auto brow = r.removeFromTop (kRowHeight + 4);
+        bitsLabel.setBounds (brow.removeFromLeft (230));
+        bits.setBounds (brow.removeFromLeft (120).reduced (0, 2));
+        r.removeFromTop (8);
+        audioNote.setBounds (r.removeFromTop (54));
     }
 
 private:
@@ -574,6 +662,26 @@ private:
         autoValue.setColour (juce::Label::textColourId, theme().text);
         note.setFont (theme().uiFont (11.5f));
         note.setColour (juce::Label::textColourId, theme().dimText);
+        audioHeading.setFont (theme().uiFont (12.5f, 600));
+        audioHeading.setColour (juce::Label::textColourId, theme().text);
+        for (auto* l : { &driverLabel, &bitsLabel, &testResult })
+        {
+            l->setFont (theme().uiFont (12.5f));
+            l->setColour (juce::Label::textColourId, theme().text);
+        }
+        driverValue.setFont (theme().numFont (12.5f));
+        driverValue.setColour (juce::Label::textColourId, theme().text);
+        audioNote.setFont (theme().uiFont (11.5f));
+        audioNote.setColour (juce::Label::textColourId, theme().dimText);
+        for (auto* sl : { &audioSlider })
+        {
+            sl->setColour (juce::Slider::trackColourId, theme().accent);
+            sl->setColour (juce::Slider::thumbColourId, theme().accent);
+            sl->setColour (juce::Slider::backgroundColourId, theme().panel2);
+            sl->setColour (juce::Slider::textBoxTextColourId, theme().text);
+            sl->setColour (juce::Slider::textBoxOutlineColourId, theme().line);
+            sl->setColour (juce::Slider::textBoxBackgroundColourId, theme().panel);
+        }
         slider.setColour (juce::Slider::trackColourId, theme().accent);
         slider.setColour (juce::Slider::thumbColourId, theme().accent);
         slider.setColour (juce::Slider::backgroundColourId, theme().panel2);
@@ -585,6 +693,11 @@ private:
     AudioEngine& engine;
     juce::Label heading, autoLabel, autoValue, note;
     juce::Slider slider;
+    juce::Label audioHeading, driverLabel, driverValue, testResult, bitsLabel, audioNote;
+    juce::Slider audioSlider;
+    juce::TextButton measure;
+    juce::ComboBox testInput, bits;
+    bool testing = false;
     juce::TextButton reset;
 };
 

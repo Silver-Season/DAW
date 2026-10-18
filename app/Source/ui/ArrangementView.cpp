@@ -1,5 +1,7 @@
 #include "ArrangementView.h"
 
+#include "../model/Automation.h"
+
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "../project/AudioImport.h"
@@ -657,9 +659,150 @@ void ArrangementView::tick()
 }
 
 //==============================================================================
+// Automation mode
+void ArrangementView::setAutomationMode (bool on)
+{
+    if (on == automationOn)
+        return;
+    automationOn = on;
+    headersPart->refreshRows();
+    repaintAll();
+}
+
+juce::String ArrangementView::automationTarget (int64_t trackId) const
+{
+    const auto it = automationTargets.find (trackId);
+    return it != automationTargets.end() ? it->second : automation::volumeTarget;
+}
+
+void ArrangementView::setAutomationTarget (int64_t trackId, const juce::String& target)
+{
+    automationTargets[trackId] = target;
+    headersPart->repaint();
+    lanesPart->repaint();
+}
+
+juce::AudioProcessorParameter* ArrangementView::automationParameter (const juce::String& target) const
+{
+    int64_t deviceId = -1;
+    int index = -1;
+    if (! automation::parseDeviceTarget (target, deviceId, index))
+        return nullptr;
+    if (auto* processor = engine.findProcessor (deviceId))
+    {
+        const auto& params = processor->getParameters();
+        if (index >= 0 && index < params.size())
+            return params[index];
+    }
+    return nullptr;
+}
+
+juce::String ArrangementView::automationTargetName (const TrackRef& track, const juce::String& target) const
+{
+    if (target == automation::volumeTarget)
+        return Strings::arrangement::autoVolume;
+    if (target == automation::panTarget)
+        return Strings::arrangement::autoPan;
+    int64_t deviceId = -1;
+    int index = -1;
+    if (automation::parseDeviceTarget (target, deviceId, index))
+        if (auto* p = automationParameter (target))
+        {
+            for (const auto& d : track.devices())
+                if (d.id() == deviceId)
+                    return d.name() + ": " + p->getName (32);
+            return p->getName (32);
+        }
+    return Strings::arrangement::autoParameter;
+}
+
+float ArrangementView::automationCurrentValue (const TrackRef& track, const juce::String& target) const
+{
+    if (target == automation::volumeTarget)
+        return automation::normalisedVolume (track.volumeDb());
+    if (target == automation::panTarget)
+        return juce::jlimit (0.0f, 1.0f, (track.pan() + 1.0f) * 0.5f);
+    if (auto* p = automationParameter (target))
+        return p->getValue();
+    return 0.5f;
+}
+
+juce::String ArrangementView::automationValueText (const TrackRef&, const juce::String& target, float normalised) const
+{
+    if (target == automation::volumeTarget)
+        return juce::String (automation::volumeDbFromNormalised (normalised), 1) + " dB";
+    if (target == automation::panTarget)
+    {
+        const int p = juce::roundToInt ((normalised * 2.0f - 1.0f) * 50.0f);
+        return p == 0 ? juce::String ("C") : juce::String (std::abs (p)) + (p < 0 ? "L" : "R");
+    }
+    if (auto* p = automationParameter (target))
+        return p->getText (normalised, 24);
+    return juce::String (normalised, 2);
+}
+
+juce::PopupMenu ArrangementView::automationMenu (int64_t trackId)
+{
+    juce::PopupMenu menu;
+    const auto track = model.findTrack (trackId);
+    if (! track.isValid())
+        return menu;
+    const auto current = automationTarget (trackId);
+    const juce::Component::SafePointer<ArrangementView> safe (this);
+    auto hasPoints = [&] (const juce::String& target) {
+        const auto lane = automation::findLane (track, target);
+        return lane.isValid() && lane.getNumChildren() > 0;
+    };
+    auto item = [&] (juce::PopupMenu& into, const juce::String& label, const juce::String& target) {
+        juce::PopupMenu::Item it ((hasPoints (target) ? juce::String (juce::CharPointer_UTF8 ("\xe2\x80\xa2 ")) : juce::String()) + label);
+        it.setTicked (target == current);
+        it.setAction ([safe, trackId, target] {
+            if (safe != nullptr)
+                safe->setAutomationTarget (trackId, target);
+        });
+        into.addItem (it);
+    };
+    item (menu, Strings::arrangement::autoVolume, automation::volumeTarget);
+    item (menu, Strings::arrangement::autoPan, automation::panTarget);
+    menu.addSeparator();
+    bool any = false;
+    for (const auto& device : track.devices())
+    {
+        auto* processor = engine.findProcessor (device.id());
+        if (processor == nullptr)
+            continue;
+        const auto& params = processor->getParameters();
+        if (params.isEmpty())
+            continue;
+        any = true;
+        juce::PopupMenu sub;
+        for (int i = 0; i < params.size(); ++i)
+            item (sub, params[i]->getName (32), automation::deviceTarget (device.id(), i));
+        menu.addSubMenu (device.name(), sub);
+    }
+    if (! any)
+        menu.addItem (Strings::arrangement::autoNoDevices, false, false, nullptr);
+    return menu;
+}
+
+//==============================================================================
 // Commands
 bool ArrangementView::deleteSelection()
 {
+    if (automationOn && ! timeSel.isEmpty())
+    {
+        bool removed = false;
+        model.undo.beginNewTransaction (Strings::undoAutoClear);
+        for (const auto id : timeSel.tracks)
+            if (const auto track = model.findTrack (id); track.isValid())
+                if (const auto lane = automation::findLane (track, automationTarget (id)); lane.isValid() && lane.getNumChildren() > 0)
+                {
+                    automation::removePointsIn (model, lane, timeSel.start, timeSel.end);
+                    removed = true;
+                }
+        lanesPart->repaint();
+        return removed;
+    }
     if (markerSel >= 0)
     {
         for (const auto& mk : model.markers())
@@ -1229,6 +1372,11 @@ bool ArrangementView::handleKey (const juce::KeyPress& key)
             zoomBy (0.8, lanesWidth() * 0.5);
             return true;
         }
+    }
+    if (isLetterKey (key, 'a'))
+    {
+        toggleAutomationMode();
+        return true;
     }
     if (isLetterKey (key, 'h'))
     {

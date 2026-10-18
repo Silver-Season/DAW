@@ -4,6 +4,9 @@
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
 #include "../Strings.h"
+#include "../model/Automation.h"
+#include "BuiltInEffectProcessor.h"
+#include "DrumKitProcessor.h"
 
 namespace
 {
@@ -62,6 +65,7 @@ uint64_t hashClip (const ClipRef& clip)
         h.add (clip.reverse());
         h.add (clip.fadeIn());
         h.add (clip.fadeOut());
+        h.add (clip.followTempo());
     }
     return h.h;
 }
@@ -184,6 +188,16 @@ void AudioEngine::applyTrackProperties (TrackRuntime& rt, const TrackRef& t)
     rt.arm = t.arm();
     rt.inputMode = (int) inputModeFor (t.input());
     rt.transpose = juce::jlimit (-48, 48, t.transpose());
+    for (int i = 0; i < 2; ++i)
+    {
+        const float sendDb = t.sendDb (i);
+        rt.sendGain[i] = sendDb <= TrackRef::kMinSendDb ? 0.0f : juce::Decibels::decibelsToGain (sendDb);
+    }
+    const auto in = AudioInputSpec::parse (t.input());
+    rt.audioInput = (int) in.kind;
+    rt.inputLeft = in.left;
+    rt.inputRight = in.right;
+    rt.monitorMode = (int) monitorModeOf (t.monitor());
 }
 
 void AudioEngine::applyProjectProperties()
@@ -224,13 +238,16 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     if (type == ids::TRACK)
     {
         if (property == ids::volumeDb || property == ids::pan || property == ids::mute || property == ids::solo
-            || property == ids::arm || property == ids::input || property == ids::transpose)
+            || property == ids::arm || property == ids::input || property == ids::transpose || property == ids::monitor
+            || property == ids::sendA || property == ids::sendB)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             const auto it = runtimes.find ((int64_t) (juce::int64) tree.getProperty (ids::id, -1));
             if (it != runtimes.end())
                 applyTrackProperties (*it->second, TrackRef (tree));
         }
+        else if (property == ids::recordSource || property == ids::type)
+            graphDirty = true; // whether the track records sound decides whether it has a stream
     }
     else if (type == ids::DEVICE)
     {
@@ -241,7 +258,7 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
             if (it != devices.end())
                 it->second->enabled = DeviceRef (tree).enabled();
         }
-        else if (property == ids::kind || property == ids::pluginDesc)
+        else if (property == ids::kind || property == ids::pluginDesc || property == ids::sidechain)
             graphDirty = true;
     }
     else if (type == ids::MASTER || type == ids::PROJECT)
@@ -259,6 +276,8 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     }
     else if (type == ids::FILE)
         graphDirty = true; // a lost file was found again: its clips get the new source
+    else if (type == ids::POINT || type == ids::LANE)
+        graphDirty = true;
     else if (type == ids::ACLIP || type == ids::CLIP || type == ids::NOTE || type == ids::CC || type == ids::BEND || type == ids::PRESSURE)
         graphDirty = true;
 }
@@ -319,6 +338,28 @@ std::unique_ptr<juce::AudioProcessor> AudioEngine::makeProcessor (const DeviceRe
                 prisma->setStateInformation (block.getData(), (int) block.getSize());
         }
         return prisma;
+    }
+    if (d.kind() == "drums")
+    {
+        auto drums = std::make_unique<DrumKitProcessor>();
+        if (const auto state = d.stateBase64(); state.isNotEmpty())
+        {
+            juce::MemoryBlock block;
+            if (block.fromBase64Encoding (state))
+                drums->setStateInformation (block.getData(), (int) block.getSize());
+        }
+        return drums;
+    }
+    if (d.kind() == "fx") // a built-in effect: its type id is in pluginDesc
+    {
+        auto fx = std::make_unique<BuiltInEffectProcessor> (d.pluginDesc());
+        if (const auto state = d.stateBase64(); state.isNotEmpty())
+        {
+            juce::MemoryBlock block;
+            if (block.fromBase64Encoding (state))
+                fx->setStateInformation (block.getData(), (int) block.getSize());
+        }
+        return fx;
     }
     return nullptr; // plugins arrive through registerProcessor or startPluginLoad; "missing" devices pass the sound through
 }
@@ -499,6 +540,8 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
             part->reverse = clip.reverse();
             part->fadeIn = clip.fadeIn();
             part->fadeOut = clip.fadeOut();
+            if (const auto file = model->findAudioFile (clip.fileId()); clip.followTempo() && file.tempo() > 0.0)
+                part->fileFramesPerBeat = file.sampleRate() * 60.0 / file.tempo();
             c->audio = std::move (part);
             c->notes.clear(); // an audio clip has no notes, whatever a hand-edited file says
             c->controllers.clear();
@@ -545,6 +588,16 @@ void AudioEngine::rebuildGraph()
         PlaybackGraph::Track gt;
         gt.runtime = slot.get();
         gt.audio = track.isAudio();
+        gt.recordsOutput = ! gt.audio && track.recordSource() == "audio";
+        if (gt.audio || gt.recordsOutput)
+        {
+            // Two seconds of ring at the current rate. A stream that is busy keeps its size until it is idle again.
+            const int wanted = juce::roundToInt (2.0 * sampleRate.load());
+            auto& stream = slot->recordStream;
+            if (stream == nullptr || (stream->getCapacity() < wanted && stream->state.load() == RecordStream::idle))
+                stream = std::make_shared<RecordStream> (2, wanted);
+            gt.stream = stream;
+        }
         for (const auto& device : track.devices())
             gt.chain.push_back (acquireDevice (device, usedDevices)); // nullptr keeps the position of a device without an instance
         for (int scene = 0; scene < track.numSlots(); ++scene)
@@ -577,8 +630,56 @@ void AudioEngine::rebuildGraph()
             gt.arrangement.push_back (std::move (p));
         }
         gt.arrangementSignature = gt.arrangement.empty() ? 0 : signature.h;
+        gt.isReturn = track.isReturn();
+        for (const auto& lane : automation::lanes (track))
+        {
+            PlaybackGraph::Track::Lane l;
+            const auto target = lane.getProperty (ids::target).toString();
+            int64_t deviceId = -1;
+            int paramIndex = -1;
+            if (target == automation::volumeTarget)
+                l.kind = PlaybackGraph::Track::Lane::volume;
+            else if (target == automation::panTarget)
+                l.kind = PlaybackGraph::Track::Lane::pan;
+            else if (automation::parseDeviceTarget (target, deviceId, paramIndex))
+            {
+                l.kind = PlaybackGraph::Track::Lane::parameter;
+                if (const auto it = devices.find (deviceId); it != devices.end() && it->second->processor != nullptr)
+                    if (const auto& params = it->second->processor->getParameters(); paramIndex >= 0 && paramIndex < params.size())
+                        l.param = params[paramIndex];
+                if (l.param == nullptr)
+                    continue;
+            }
+            else
+                continue;
+            l.points = automation::points (lane);
+            if (! l.points.empty())
+                gt.automation.push_back (std::move (l));
+        }
         graph->tracks.push_back (std::move (gt));
     }
+    // Sidechain sources, once every track has its runtime.
+    {
+        size_t i = 0;
+        for (const auto& track : model->tracks())
+        {
+            auto& gt = graph->tracks[i++];
+            for (const auto& device : track.devices())
+            {
+                TrackRuntime* key = nullptr;
+                if (const auto source = device.sidechainTrack(); source >= 0 && source != track.id())
+                    if (const auto it = runtimes.find (source); it != runtimes.end())
+                        key = it->second.get();
+                gt.sidechains.push_back (key);
+            }
+        }
+    }
+    // Return tracks play after every track that can send to them.
+    std::stable_partition (graph->tracks.begin(), graph->tracks.end(), [] (const PlaybackGraph::Track& t) { return ! t.isReturn; });
+    int returnIndex = 0;
+    for (auto& t : graph->tracks)
+        if (t.isReturn && returnIndex < 2)
+            graph->returns[(size_t) returnIndex++] = t.runtime;
 
     for (const auto& device : DeviceRef::childrenOf (model->masterDevicesNode()))
         graph->masterChain.push_back (acquireDevice (device, usedDevices));

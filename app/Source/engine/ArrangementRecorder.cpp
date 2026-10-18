@@ -1,4 +1,5 @@
 #include "ArrangementRecorder.h"
+#include "AudioRecorder.h"
 
 #include "../Strings.h"
 #include "../model/ArrangementEdit.h"
@@ -209,12 +210,27 @@ bool ArrangementRecorder::start()
     if (active)
         return false;
     bool anyMidi = false;
+    std::vector<int64_t> soundTracks;
     for (const auto& t : model.tracks())
-        anyMidi = anyMidi || t.type() == "midi";
-    if (! anyMidi || ! engine.startArrangementRecord())
+    {
+        if (sound != nullptr && t.arm() && sound->recordsSound (t))
+        {
+            if (sound->begin (t.id(), RecordStream::Mode::arrangement))
+                soundTracks.push_back (t.id());
+        }
+        else
+            anyMidi = anyMidi || t.type() == "midi";
+    }
+    if ((! anyMidi && soundTracks.empty()) || ! engine.startArrangementRecord())
+    {
+        for (const auto id : soundTracks)
+            sound->cancel (id);
         return false;
+    }
     beginRun (0.0);
+    run.soundTracks = std::move (soundTracks);
     active = true;
+    awaitingSound = false;
     running = sawState = stopSent = false;
     createdMs = nowMs();
     return true;
@@ -237,13 +253,42 @@ void ArrangementRecorder::reset()
 
 void ArrangementRecorder::cancel()
 {
-    active = running = sawState = stopSent = collecting = false;
+    if (sound != nullptr)
+        for (const auto id : run.soundTracks)
+            sound->cancel (id); // only takes back what has not begun; a file that began completes and is let go of
+    active = running = sawState = stopSent = collecting = awaitingSound = false;
     run = {};
+}
+
+bool ArrangementRecorder::isSoundTrack (int64_t trackId) const
+{
+    return std::find (run.soundTracks.begin(), run.soundTracks.end(), trackId) != run.soundTracks.end();
+}
+
+bool ArrangementRecorder::soundReady() const
+{
+    if (sound == nullptr)
+        return true;
+    for (const auto id : run.soundTracks)
+        if (sound->isRecording (id) && ! sound->isFinished (id))
+            return false;
+    return true;
+}
+
+void ArrangementRecorder::finishAndReport()
+{
+    const auto summary = finishRun (run.endMono);
+    cancel();
+    lastSummary = summary;
+    if (summary.wrote && onFinished)
+        onFinished (summary);
 }
 
 void ArrangementRecorder::beginRun (double startMono)
 {
+    const auto soundTracks = std::move (run.soundTracks);
     run = {};
+    run.soundTracks = soundTracks;
     run.startMono = startMono;
     collecting = true;
 }
@@ -292,6 +337,15 @@ void ArrangementRecorder::process (const Snapshot& s)
     songNow = s.songPosition;
     monoNow = s.monoPosition;
 
+    // The engine is done; the files of the sound tracks get their last frames (the latency tail) and are closed. Should
+    // the audio stop for good meanwhile, what was written so far is kept after a few seconds.
+    if (awaitingSound)
+    {
+        if (soundReady() || nowMs() - awaitingSinceMs > 5000)
+            finishAndReport();
+        return;
+    }
+
     switch (s.state)
     {
         case AudioEngine::arrangementIdle:
@@ -316,12 +370,15 @@ void ArrangementRecorder::process (const Snapshot& s)
         case AudioEngine::arrangementFinished:
         {
             run.startMono = s.start;
-            const auto summary = finishRun (s.end);
+            run.endMono = s.end;
             engine.acknowledgeArrangementRecord();
-            cancel();
-            lastSummary = summary;
-            if (summary.wrote && onFinished)
-                onFinished (summary);
+            if (soundReady())
+                finishAndReport();
+            else
+            {
+                awaitingSound = true;
+                awaitingSinceMs = nowMs();
+            }
             return;
         }
         default: return;
@@ -482,7 +539,7 @@ ArrangementRecorder::Summary ArrangementRecorder::commit()
     for (const auto& [trackId, events] : run.input)
     {
         const auto track = model.findTrack (trackId);
-        if (! track.isValid() || track.type() != "midi")
+        if (! track.isValid() || track.type() != "midi" || isSoundTrack (trackId))
             continue;
         const auto passes = analyse (events, anchors, run.startMono, run.endMono, low, high);
 
@@ -614,6 +671,85 @@ ArrangementRecorder::Summary ArrangementRecorder::commit()
             ++summary.numClips;
             if (contents.size() > 1)
                 summary.numTakes += (int) contents.size();
+        }
+    }
+
+    //==========================================================================
+    // Sound: one file per track; every pass of the loop is a take that reads the file at its own place. Frame 0 of the
+    // file is monotonic beat startMono; the content is moved earlier by the latency the recorder measured. The tempo is
+    // taken to be the same over the whole recording.
+    for (const auto trackId : run.soundTracks)
+    {
+        AudioRecorder::Finished f;
+        if (sound == nullptr || ! sound->takeFinished (trackId, f) || ! f.ok)
+            continue;
+        const auto track = model.findTrack (trackId);
+        if (! track.isValid())
+            continue;
+        if (f.droppedFrames > 0)
+            summary.warning = Strings::recording::audioDropped ((double) juce::jmax ((int64_t) 0, f.firstDropFrame) / f.sampleRate,
+                                                                (double) f.droppedFrames * 1000.0 / f.sampleRate);
+        const double framesPerBeat = f.sampleRate * 60.0 / std::max (1.0, model.tempo());
+        const auto segments = splitSegments (anchors, run.startMono, run.endMono);
+        int groupCount = 0;
+        for (const auto& seg : segments)
+            groupCount = std::max (groupCount, seg.group + 1);
+
+        int64_t fileId = -1;
+        for (int g = 0; g < groupCount; ++g)
+        {
+            struct Pass
+            {
+                Segment seg;
+                double r0, r1;
+            };
+            std::vector<Pass> passes;
+            for (const auto& seg : segments)
+            {
+                if (seg.group != g)
+                    continue;
+                const double r0 = std::max (seg.s0, low), r1 = std::min (seg.s0 + (seg.m1 - seg.m0), high);
+                if (r1 - r0 >= kSliver)
+                    passes.push_back ({ seg, r0, r1 });
+            }
+            // The tail of the stop after the last full pass is not a take.
+            while (passes.size() > 1 && passes.back().r1 - passes.back().r0 < kTinyPass)
+                passes.pop_back();
+            if (passes.empty())
+                continue;
+            double from = kInf, to = -kInf;
+            for (const auto& p : passes)
+            {
+                from = std::min (from, p.r0);
+                to = std::max (to, p.r1);
+            }
+            if (to - from < arrangement::kMinClipBeats)
+                continue;
+
+            open();
+            if (fileId < 0)
+                fileId = sound->addToPool (f);
+            std::vector<juce::ValueTree> contents;
+            int top = (int) passes.size() - 1;
+            for (int i = 0; i < (int) passes.size(); ++i)
+            {
+                const auto& p = passes[(size_t) i];
+                const double monoAtFrom = p.seg.m0 + (from - p.seg.s0);
+                auto node = model.makeAudioClipNode (track, fileId, to - from, f.name);
+                ClipRef (node).setSampleStart (f.latency + (monoAtFrom - run.startMono) * framesPerBeat, nullptr);
+                contents.push_back (node);
+            }
+            // The newest pass that covers at least half of the clip is on top (a pass cut short by the stop is a take).
+            for (int i = (int) passes.size() - 1; i >= 0; --i)
+                if (passes[(size_t) i].r1 - passes[(size_t) i].r0 >= 0.5 * (to - from))
+                {
+                    top = i;
+                    break;
+                }
+            arrangement::addRecordedContents (model, track, from, to - from, std::move (contents), top);
+            ++summary.numClips;
+            if (passes.size() > 1)
+                summary.numTakes += (int) passes.size();
         }
     }
 

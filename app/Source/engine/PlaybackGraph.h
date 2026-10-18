@@ -3,7 +3,11 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "../model/AudioInput.h"
+#include "RecordStream.h"
+
 #include "daw/engine/Arrangement.h"
+#include "daw/engine/Automation.h"
 #include "daw/engine/Clip.h"
 
 #include <array>
@@ -39,6 +43,9 @@ struct TrackRuntime
         midi.ensureSize (4096);
         fxMidi.ensureSize (64);
         events.reserve (4096);
+        inputBuffer.setSize (2, maxBlock, false, true, false);
+        returnBus.setSize (2, maxBlock, false, true, false);
+        keyBuffer.setSize (2, maxBlock, false, true, false);
     }
 
     const int64_t trackId;
@@ -48,6 +55,20 @@ struct TrackRuntime
     std::atomic<bool> mute { false }, solo { false }, arm { false };
     std::atomic<int> inputMode { (int) TrackInputMode::allMidi };
     std::atomic<int> transpose { 0 }; // semitones added to every note that reaches the instrument
+
+    // Sound input of an audio track (task 5.3). Device channels count from 0; inputRight < 0 is a mono input.
+    std::atomic<int> audioInput { (int) AudioInputKind::none };
+    std::atomic<int> inputLeft { 0 }, inputRight { 1 };
+    std::atomic<int> monitorMode { (int) MonitorMode::automatic };
+    std::atomic<float> sendGain[2] { { 0.0f }, { 0.0f } }; // to return A and B, post-fader
+    // The recording stream of the track, for the message thread (the audio thread uses the graph's pointer). Replaced
+    // only while it is idle.
+    std::shared_ptr<RecordStream> recordStream;
+
+    // written by the audio thread: the peak of the input (shown before anything records) and whether it went over
+    // -0.5 dBFS (red until the user clicks the meter, which stores false); whether the input is heard now
+    std::atomic<float> inputMeter { 0.0f };
+    std::atomic<bool> inputClipped { false }, monitoring { false };
 
     // written by the audio thread, read by the UI timer
     std::atomic<float> meterL { 0.0f }, meterR { 0.0f };
@@ -83,6 +104,10 @@ struct TrackRuntime
     bool backPending = false;           // "Back to arrangement" waits for its quantisation boundary
     double backBeat = 0.0;              // that boundary, on the monotonic clock
     juce::AudioBuffer<float> buffer;
+    juce::AudioBuffer<float> inputBuffer; // the sound input of this block (audio tracks)
+    juce::AudioBuffer<float> returnBus;   // a return track: what the sends gave it in this block
+    juce::AudioBuffer<float> keyBuffer;   // the track's sound after its chain, before the fader: the key of a sidechain
+    float lastSendGain[2] {};
     juce::MidiBuffer midi, fxMidi;
     std::vector<daw::MidiEvent> events;
     float lastGainL = 0.0f, lastGainR = 0.0f;
@@ -126,8 +151,30 @@ struct PlaybackGraph
         std::vector<std::shared_ptr<const daw::engine::MidiClip>> slots; // by scene, nullptr = empty
         daw::engine::ArrangementClips arrangement; // sorted by start, not overlapping
         uint64_t arrangementSignature = 0;          // identifies the clips and their content; 0 = no arrangement clips
+        // Recording of sound (task 5.4): the stream the track records into, null if it cannot record sound. An audio
+        // track records its input; a MIDI track whose record source is "audio" records what its instrument plays.
+        std::shared_ptr<RecordStream> stream;
+        bool recordsOutput = false;
+        bool isReturn = false;
+        // Automation of the arrangement (task 6.7), applied while the track plays its arrangement.
+        struct Lane
+        {
+            enum Kind : int
+            {
+                volume,
+                pan,
+                parameter
+            } kind = volume;
+            juce::AudioProcessorParameter* param = nullptr;
+            std::vector<daw::engine::AutomationPoint> points;
+        };
+        std::vector<Lane> automation;
+        // Per device of `chain`: the track whose keyBuffer feeds its sidechain (null = none). A source later in the
+        // order is heard one block late, which is inaudible for ducking and needs no ordering of the graph.
+        std::vector<TrackRuntime*> sidechains;
     };
-    std::vector<Track> tracks;
+    std::vector<Track> tracks;           // normal tracks first, then the return tracks
+    std::array<TrackRuntime*, 2> returns {}; // return A and B (the first two return tracks), null if missing
     std::vector<DeviceInstance*> masterChain;
 
 private:
@@ -164,6 +211,7 @@ struct EngineCommand
     int64_t trackId = -1;
     int sceneIndex = -1;
     double beat = 0.0;
+    bool noOverdub = false; // startRecord: always a new clip (a recording of sound never overdubs)
 };
 
 // Audio thread -> message thread, through a fixed-size SPSC queue, while an arrangement recording runs (task 3.4).

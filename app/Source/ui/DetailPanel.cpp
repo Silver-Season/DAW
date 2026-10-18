@@ -2,8 +2,12 @@
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "InputMenus.h"
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
+#include "../engine/BuiltInEffectProcessor.h"
+#include "../engine/DrumKitProcessor.h"
+#include "DrumPads.h"
 #include "daw/dsp/Wavetable.h"
 #include "daw/synth/PrismaParams.h"
 
@@ -50,6 +54,9 @@ std::vector<int> macroIndices (const DeviceRef& device, juce::AudioProcessor& pr
     tokens.removeEmptyStrings();
     for (const auto& t : tokens)
         result.push_back (t.getIntValue());
+    if (result.empty())
+        if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (&processor))
+            return fx->defaultMacros();
     if (result.empty())
     {
         const auto& params = processor.getParameters();
@@ -165,7 +172,14 @@ public:
         if (processor != nullptr && kind != "missing")
         {
             std::vector<std::pair<juce::AudioProcessorParameter*, juce::String>> bindings;
-            if (auto* prisma = dynamic_cast<PrismaProcessor*> (processor))
+            if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (processor); fx != nullptr && fx->getEffect() != nullptr)
+                keyed = fx->getEffect()->acceptsSidechain();
+            if (auto* drums = dynamic_cast<DrumKitProcessor*> (processor))
+            {
+                pads = std::make_unique<DrumPads> (owner.engine, *drums, trackColour);
+                addAndMakeVisible (*pads);
+            }
+            else if (auto* prisma = dynamic_cast<PrismaProcessor*> (processor))
             {
                 wavetable = std::make_unique<WavetableMini> (*prisma, trackColour);
                 addAndMakeVisible (*wavetable);
@@ -206,6 +220,8 @@ public:
             return kFoldedWidth;
         if (wavetable != nullptr)
             return 470;
+        if (pads != nullptr)
+            return DrumPads::kPreferredWidth;
         if (kind == "missing")
             return 230;
         return 4 * kKnobCellWidth + 24;
@@ -235,6 +251,8 @@ public:
         }
         if (wavetable != nullptr)
             wavetable->tick();
+        if (pads != nullptr)
+            pads->tick();
         updateTitle();
     }
 
@@ -332,6 +350,19 @@ public:
             g.drawText (Strings::detail::loading, body.withTrimmedTop (body.getHeight() / 2 + 10), juce::Justification::centredTop, true);
         }
 
+        if (keyed && ! folded)
+        {
+            const auto line = sidechainRect();
+            const auto source = owner.model.findTrack (owner.model.findDevice (deviceId).sidechainTrack());
+            g.setFont (t.uiFont (11.0f));
+            g.setColour (t.dimText);
+            g.drawText (Strings::returns::sidechain + ": ", line, juce::Justification::centredLeft, false);
+            g.setColour (source.isValid() ? t.textPalette (source.colour()) : t.text);
+            g.setFont (t.uiFont (11.0f, 600));
+            g.drawText ((source.isValid() ? source.name() : Strings::returns::sidechainNone) + juce::String::fromUTF8 (" \xe2\x96\xbe"),
+                        line.withTrimmedLeft (74), juce::Justification::centredLeft, true);
+        }
+
         if (missing && ! folded)
         {
             g.setColour (t.dimText);
@@ -347,8 +378,15 @@ public:
             k->knob.setVisible (show);
         if (wavetable != nullptr)
             wavetable->setVisible (show);
+        if (pads != nullptr)
+            pads->setVisible (show);
         if (folded)
             return;
+        if (pads != nullptr)
+        {
+            pads->setBounds (getLocalBounds().withTrimmedTop (kDeviceHeaderHeight).reduced (8, 6));
+            return;
+        }
 
         auto body = getLocalBounds().withTrimmedTop (kDeviceHeaderHeight).reduced (12, 10);
         const int rows = 2, cols = 4;
@@ -374,6 +412,12 @@ public:
     void mouseDown (const juce::MouseEvent& e) override
     {
         owner.selection.selectDevice (owner.trackId, deviceId);
+        if (keyed && ! folded && sidechainRect().contains (e.getPosition()))
+        {
+            showSidechainMenu();
+            pressedPart = Part::none;
+            return;
+        }
         pressedPart = partAt (e.getPosition());
         dragging = false;
     }
@@ -439,6 +483,28 @@ private:
     bool isInstrument() const { return owner.model.findDevice (deviceId).state.getParent().indexOf (owner.model.findDevice (deviceId).state) == 0; }
 
     juce::Rectangle<int> powerRect() const { return { 4, 3, 20, 20 }; }
+    juce::Rectangle<int> sidechainRect() const { return { 12, getHeight() - 20, getWidth() - 24, 16 }; }
+
+    void showSidechainMenu()
+    {
+        juce::PopupMenu menu;
+        const auto device = owner.model.findDevice (deviceId);
+        std::vector<int64_t> ids { -1 };
+        menu.addItem (1, Strings::returns::sidechainNone, true, device.sidechainTrack() < 0);
+        for (const auto& t : owner.model.tracks())
+            if (t.id() != owner.trackId)
+            {
+                ids.push_back (t.id());
+                menu.addItem ((int) ids.size(), t.name(), true, device.sidechainTrack() == t.id());
+            }
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [&model = owner.model, id = deviceId, ids] (int r) {
+            const auto d = model.findDevice (id);
+            if (r < 1 || ! d.isValid() || d.sidechainTrack() == ids[(size_t) r - 1])
+                return;
+            model.undo.beginNewTransaction (Strings::returns::undoSidechain);
+            d.setSidechainTrack (ids[(size_t) r - 1], &model.undo);
+        });
+    }
     juce::Rectangle<int> closeRect() const { return { getWidth() - 22, 4, 18, 18 }; }
     juce::Rectangle<int> openRect() const { return { getWidth() - 42, 4, 18, 18 }; }
     juce::Rectangle<int> foldRect() const { return { getWidth() - 62, 4, 18, 18 }; }
@@ -512,6 +578,8 @@ private:
     bool enabled = true, folded = false, isSelected = false, dragging = false;
     juce::AudioProcessor* processor = nullptr;
     std::unique_ptr<WavetableMini> wavetable;
+    std::unique_ptr<DrumPads> pads;
+    bool keyed = false; // a compressor or gate: the line "Сайдчейн: ..." at the bottom chooses its key track
     std::vector<std::unique_ptr<BoundKnob>> knobs;
     Part hoverPart = Part::none, pressedPart = Part::none;
 };
@@ -866,7 +934,7 @@ private:
 };
 
 //==============================================================================
-DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : model (m), actions (a), selection (s)
+DetailPanel::DetailPanel (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s) : engine (e), model (m), actions (a), selection (s)
 {
     recordSwitch = std::make_unique<RecordSourceSwitch>();
     recordSwitch->onChoose = [this] (const juce::String& source) {
@@ -963,14 +1031,70 @@ void DetailPanel::tick()
     recordSwitch->setVisible (cardShown);
     recordSwitch->setSource (track.isValid() ? track.recordSource() : juce::String ("midi"));
     const auto summary = track.isValid() ? track.name() + "|" + juce::String (track.colour()) + "|" + track.input() + "|" + track.monitor()
-                                               + "|" + juce::String (track.numDevices())
+                                               + "|" + juce::String (track.numDevices()) + "|" + juce::String ((int) track.isAudio())
                                          : juce::String();
     if (summary != shownSummary)
     {
         shownSummary = summary;
         repaint (getLocalBounds().removeFromLeft (kInfoWidth));
     }
+
+    // The input meter of an audio track: peak hold that falls 1.5 dB per tick, red after a clip until clicked.
+    if (cardShown && track.isAudio())
+        if (auto* rt = engine.findRuntime (track.id()))
+        {
+            const float peak = rt->inputMeter.exchange (0.0f);
+            const float level = juce::jmax (peak, inputLevel * 0.84f);
+            const bool clip = rt->inputClipped.load();
+            if (std::abs (level - inputLevel) > 1.0e-4f || clip != inputClipShown)
+            {
+                inputLevel = level;
+                inputClipShown = clip;
+                repaint (meterBounds().expanded (2));
+            }
+        }
 }
+
+juce::Rectangle<int> DetailPanel::cardRow (int index) const
+{
+    // the summary card: 13 px margin, the "Дорожка" caption (16), the name (22), a gap (6), then rows of 22
+    return { 14, 13 + 16 + 22 + 6 + index * 22, kInfoWidth - 28, 22 };
+}
+
+juce::Rectangle<int> DetailPanel::meterBounds() const
+{
+    return cardRow (0).removeFromBottom (3).translated (0, 1);
+}
+
+void DetailPanel::mouseMove (const juce::MouseEvent& e)
+{
+    const auto track = model.findTrack (shownTrack);
+    const bool overMenu = ! editorShown && track.isValid() && (cardRow (0).contains (e.getPosition()) || cardRow (1).contains (e.getPosition()));
+    setMouseCursor (overMenu ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
+void DetailPanel::mouseDown (const juce::MouseEvent& e)
+{
+    const auto track = model.findTrack (shownTrack);
+    if (editorShown || ! track.isValid())
+        return;
+    if (track.isAudio() && meterBounds().expanded (0, 3).contains (e.getPosition()))
+    {
+        if (auto* rt = engine.findRuntime (track.id()))
+            rt->inputClipped = false;
+        return;
+    }
+    if (cardRow (0).contains (e.getPosition()))
+        inputmenus::showInputMenu (engine, model, track, *this);
+    else if (cardRow (1).contains (e.getPosition()))
+        inputmenus::showMonitorMenu (model, track, *this);
+}
+
+namespace
+{
+// The small arrow that says "this opens a menu"
+juce::String utf8Arrow() { return juce::String::fromUTF8 (" \xe2\x96\xbe"); }
+} // namespace
 
 void DetailPanel::paint (juce::Graphics& g)
 {
@@ -1011,13 +1135,19 @@ void DetailPanel::paint (juce::Graphics& g)
         g.setFont (t.uiFont (12.5f, 600));
         g.drawText (value, row, juce::Justification::centredLeft, true);
     };
-    const auto input = track.input();
-    line (Strings::detail::input, input == "keyboard" ? Strings::detail::inputKeyboard
-                                  : input == "none"  ? Strings::detail::inputNone
-                                  : input.startsWith ("midi:") ? Strings::detail::inputDevice
-                                                               : Strings::detail::inputAllMidi);
-    const auto monitor = track.monitor();
-    line (Strings::detail::monitor, monitor == "in" ? Strings::detail::monitorIn : (monitor == "off" ? Strings::detail::monitorOff : Strings::detail::monitorAuto));
+    line (Strings::detail::input, inputmenus::inputLabel (engine, track) + utf8Arrow());
+    if (track.isAudio())
+    {
+        // under the input row: the level of the input, there before anything records
+        const auto m = meterBounds().toFloat();
+        g.setColour (t.panel2);
+        g.fillRoundedRectangle (m, 1.5f);
+        const float db = juce::Decibels::gainToDecibels (inputLevel, -60.0f);
+        const float fill = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
+        g.setColour (inputClipShown ? t.record : (db > -6.0f ? t.warning : t.accent));
+        g.fillRoundedRectangle (m.withWidth (m.getWidth() * fill), 1.5f);
+    }
+    line (Strings::detail::monitor, inputmenus::monitorLabel (track) + utf8Arrow());
     line (Strings::detail::chain, Strings::detail::devices (track.numDevices()));
     g.setColour (t.dimText);
     g.setFont (t.uiFont (12.5f));

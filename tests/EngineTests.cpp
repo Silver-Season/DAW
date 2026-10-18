@@ -143,6 +143,14 @@ void testEngine()
 int main()
 {
     juce::ScopedJuceInitialiser_GUI juce;
+    // DAW_TEST_ONLY=recording runs one suite (while working on it); CI always runs everything.
+    if (juce::String (std::getenv ("DAW_TEST_ONLY")) == "recording")
+    {
+        runAudioRecordingTests();
+        runBuiltInEffectTests();
+        std::printf ("\n%d checks, %d failures\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     testPrismaProcessor();
     testEngine();
     runModelTests();
@@ -159,6 +167,8 @@ int main()
     runAudioTests();
     runAudioUiTests();
     runSessionAudioUiTests();
+    runAudioRecordingTests();
+    runBuiltInEffectTests();
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

@@ -3,6 +3,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_core/juce_core.h>
 
+#include <map>
+
 // Every user-visible text lives here, so that an English translation can be added later.
 // Texts are Russian; identifiers and comments in code are English.
 namespace Strings
@@ -46,6 +48,9 @@ inline const juce::String undoTempo = utf8 ("Темп");
 inline const juce::String undoMasterVolume = utf8 ("Громкость мастера");
 
 // Undo transaction names of the Arrangement (stage 3)
+inline const juce::String undoAutoEdit = utf8 ("Изменить автоматизацию");
+inline const juce::String undoAutoDelete = utf8 ("Удалить точку автоматизации");
+inline const juce::String undoAutoClear = utf8 ("Удалить автоматизацию");
 inline const juce::String undoArrNewClip = utf8 ("Новый клип на шкале");
 inline const juce::String undoArrMoveClips = utf8 ("Переместить клипы");
 inline const juce::String undoArrCopyClips = utf8 ("Копировать клипы");
@@ -287,6 +292,14 @@ inline const juce::String rename = utf8 ("Переименовать");
 inline const juce::String newTrack = utf8 ("Новая MIDI-дорожка");
 inline const juce::String newAudioTrack = utf8 ("Новая аудиодорожка");
 inline const juce::String findMissing = utf8 ("Найти потерянные файлы…");
+inline const juce::String deleteUnusedRecordings = utf8 ("Удалить неиспользуемые записи…");
+inline const juce::String noUnusedRecordings = utf8 ("Неиспользуемых записей нет");
+inline const juce::String deleteButton = utf8 ("Удалить");
+inline juce::String deleteUnusedQuestion (int n)
+{
+    return utf8 ("Записей, которые не нужны ни одному клипу: ") + juce::String (n) + utf8 (". Файлы будут удалены с диска, история отмены очистится. Это нельзя отменить.");
+}
+inline juce::String deletedRecordings (int n) { return utf8 ("Удалено записей: ") + juce::String (n); }
 inline const juce::String newScene = utf8 ("Сцена");
 inline const juce::String captureScene = utf8 ("Сцена с играющими клипами");
 inline const juce::String newClip = utf8 ("Пустой MIDI-клип");
@@ -428,6 +441,220 @@ inline const juce::String monitorIn = utf8 ("Вкл");
 inline const juce::String monitorOff = utf8 ("Выкл");
 inline const juce::String showOtherParam = utf8 ("Показать другой параметр…");
 } // namespace detail
+
+// Settings, tab "Запись": recording of sound (docs/spec/05-audio-recording.md, task 5.4)
+namespace audioRec
+{
+inline const juce::String heading = utf8 ("Задержка записи звука");
+inline const juce::String driverLatency = utf8 ("Задержка по данным драйвера");
+inline const juce::String measure = utf8 ("Измерить задержку");
+inline const juce::String running = utf8 ("Слушаю щелчки…");
+inline const juce::String notFound = utf8 ("Щелчки не вернулись. Соедините кабелем выход 1 со входом и поднимите громкость.");
+inline juce::String measured (double roundTripMs, double correctionMs)
+{
+    return utf8 ("Петля ") + juce::String (roundTripMs, 1).replace (".", ",") + utf8 (" мс, поправка ") + juce::String (correctionMs, 1).replace (".", ",")
+           + utf8 (" мс сохранена");
+}
+inline const juce::String bitDepth = utf8 ("Разрядность записи");
+inline const juce::String float32 = utf8 ("32 (float)");
+inline const juce::String testNote = utf8 ("Записанный звук сдвигается раньше на задержку входа и выхода. Чтобы измерить её точно, соедините кабелем выход 1 карты с выбранным входом и нажмите «Измерить»: прозвучат 10 щелчков. Ползунок поправляет вручную.");
+} // namespace audioRec
+
+// The export window (docs/spec/04-export.md)
+namespace exportUi
+{
+inline const juce::String title = utf8 ("Экспорт");
+inline const juce::String range = utf8 ("Диапазон");
+inline const juce::String format = utf8 ("Формат");
+inline const juce::String bits = utf8 ("Разрядность");
+inline const juce::String normalise = utf8 ("Нормализация");
+inline const juce::String wholeSong = utf8 ("Вся песня");
+inline const juce::String loop = utf8 ("Петля");
+inline const juce::String none = utf8 ("Нет");
+inline const juce::String peak01 = utf8 ("По пику −0,1 dBFS");
+inline const juce::String peak1 = utf8 ("По пику −1 dBFS");
+inline const juce::String tail = utf8 ("Добавлять хвост (ревер, дилей)");
+inline const juce::String exportButton = utf8 ("Экспорт…");
+inline const juce::String close = utf8 ("Закрыть");
+inline const juce::String cancel = utf8 ("Отмена");
+inline const juce::String showInFinder = utf8 ("Показать в Finder");
+inline const juce::String rendering = utf8 ("Рендер…");
+inline const juce::String cancelled = utf8 ("Экспорт отменён");
+inline const juce::String failed = utf8 ("Не получилось: ");
+inline const juce::String emptyArrangement = utf8 ("Аранжировка пуста. Запишите выступление из Session View на шкалу (F9) и повторите экспорт.");
+inline juce::String done (const juce::String& file, double seconds, double peakDb)
+{
+    const int s = (int) std::round (seconds);
+    return utf8 ("Готово: ") + file + "\n" + juce::String (s / 60) + ":" + juce::String (s % 60).paddedLeft ('0', 2) + utf8 (", пик ")
+           + juce::String (peakDb, 1).replace (".", ",") + " dBFS";
+}
+inline juce::String clipping (double peakDb)
+{
+    return utf8 ("Пик +") + juce::String (peakDb, 1).replace (".", ",") + utf8 (" dBFS: в файле будет клиппинг. Включите нормализацию или лимитер на мастере.");
+}
+} // namespace exportUi
+
+// Return tracks and sends (docs/spec/06-effects-mixing.md, task 6.3)
+namespace returns
+{
+inline const juce::String reverbName = utf8 ("A Ревер");
+inline const juce::String delayName = utf8 ("B Дилей");
+inline const juce::String newReturn = utf8 ("Новая возвратная дорожка");
+inline const juce::String sidechain = utf8 ("Сайдчейн");
+inline const juce::String sidechainNone = utf8 ("нет (свой вход)");
+inline const juce::String undoSidechain = utf8 ("Сайдчейн");
+} // namespace returns
+inline const juce::String undoSend = utf8 ("Посыл");
+
+// Inspiration: generated parts and sounds
+namespace inspiration
+{
+inline const juce::String menu = utf8 ("Вдохновение");
+inline const juce::String idea = utf8 ("Идея целиком");
+inline const juce::String drums = utf8 ("Барабаны");
+inline const juce::String chords = utf8 ("Аккорды");
+inline const juce::String bass = utf8 ("Бас");
+inline const juce::String melody = utf8 ("Мелодия");
+inline const juce::String arp = utf8 ("Арпеджио");
+inline const juce::String sound = utf8 ("Новый звук");
+inline const juce::String undo = utf8 ("Вдохновение: партия");
+inline const juce::String undoSound = utf8 ("Вдохновение: звук");
+inline const juce::String undoIdea = utf8 ("Вдохновение: идея");
+inline juce::String ideaScene (const juce::String& style) { return utf8 ("Идея · ") + style; }
+inline juce::String made (const juce::String& part, const juce::String& track) { return utf8 ("Готово: ") + part.toLowerCase() + utf8 (" на дорожке ") + track + utf8 (". Не нравится: Cmd+Z и ещё раз."); }
+inline juce::String newSound (const juce::String& name, const juce::String& track) { return utf8 ("Новый звук «") + name + utf8 ("» на дорожке ") + track; }
+inline juce::String styleName (const juce::String& s)
+{
+    static const std::map<juce::String, const char*> names { { "pop", "Поп" }, { "house", "Хаус" }, { "techno", "Техно" }, { "hiphop", "Хип-хоп" },
+                                                             { "trap", "Трэп" }, { "dnb", "Драм-н-бейс" }, { "ambient", "Эмбиент" } };
+    const auto it = names.find (s);
+    return it != names.end() ? utf8 (it->second) : s;
+}
+inline juce::String soundKind (const juce::String& k)
+{
+    static const std::map<juce::String, const char*> names { { "bass", "Бас" }, { "sub", "Саб-бас" }, { "lead", "Лид" }, { "pad", "Пэд" },
+                                                             { "pluck", "Плак" }, { "keys", "Клавиши" }, { "bell", "Колокольчик" }, { "fx", "Эффект" },
+                                                             { "arp", "Арп" } };
+    const auto it = names.find (k);
+    return it != names.end() ? utf8 (it->second) : k;
+}
+} // namespace inspiration
+
+// The built-in drum machine
+namespace drums
+{
+inline const juce::String group = utf8 ("Барабаны");
+inline const juce::String deviceName = utf8 ("Драм-машина");
+inline const juce::String dropOnPad = utf8 ("Бросьте звук на пэд, щелчок играет пэд");
+inline const juce::String tune = utf8 ("Тон");
+inline const juce::String decay = utf8 ("Спад");
+inline const juce::String volume = utf8 ("Громк.");
+inline const juce::String cutoff = utf8 ("Срез");
+inline const juce::String pan = utf8 ("Панор.");
+inline const juce::String drive = utf8 ("Драйв");
+inline const juce::String help = utf8 ("Драм-машина\nЩелчок по пэду играет его и выбирает для ручек справа. Перетащите на пэд звуковой файл из браузера или Finder. Ноты C1–D#2.");
+} // namespace drums
+
+// Built-in effects (docs/spec/06-effects-mixing.md): names of the effects, their parameters and choices. Ids come from core;
+// whatever has no translation here shows the English name from core.
+namespace fx
+{
+inline juce::String effectName (const juce::String& type)
+{
+    static const std::map<juce::String, const char*> names {
+        { "eq8", "Эквалайзер" }, { "comp", "Компрессор" }, { "gate", "Гейт" }, { "limiter", "Лимитер" }, { "reverb", "Ревербератор" },
+        { "delay", "Дилей" }, { "drive", "Сатуратор" }, { "crush", "Биткрашер" }, { "filter", "Фильтр" }, { "chorus", "Хорус" },
+        { "flanger", "Фланжер" }, { "phaser", "Фейзер" }, { "autopan", "Автопан" },
+    };
+    const auto it = names.find (type);
+    return it != names.end() ? utf8 (it->second) : type;
+}
+
+inline juce::String paramName (const juce::String& type, const juce::String& id, const juce::String& fallback)
+{
+    static const std::map<juce::String, const char*> names {
+        { "mix", "Микс" }, { "output", "Выход" }, { "threshold", "Порог" }, { "ratio", "Ratio" }, { "attack", "Атака" }, { "release", "Релиз" },
+        { "autoRelease", "Авторелиз" }, { "knee", "Колено" }, { "makeup", "Makeup" }, { "autoMakeup", "Авто-makeup" }, { "lookahead", "Lookahead" },
+        { "detector", "Детектор" }, { "scHpf", "ФВЧ сайдчейна" }, { "scListen", "Слушать сайдчейн" }, { "hysteresis", "Гистерезис" },
+        { "hold", "Удержание" }, { "floor", "Глубина" }, { "ceiling", "Потолок" }, { "gain", "Усиление" }, { "truePeak", "True peak" },
+        { "size", "Размер" }, { "decay", "Спад" }, { "predelay", "Предзадержка" }, { "predelaySync", "Предзадержка (синхр.)" }, { "width", "Ширина" },
+        { "damping", "Демпф. ВЧ" }, { "lowCut", "Срез НЧ" }, { "diffusion", "Диффузия" }, { "freeze", "Заморозка" }, { "modulation", "Модуляция" },
+        { "sync", "Синхр." }, { "timeL", "Время L" }, { "timeR", "Время R" }, { "divL", "Доля L" }, { "divR", "Доля R" }, { "link", "Связать" },
+        { "feedback", "Обр. связь" }, { "pingPong", "Пинг-понг" }, { "hp", "ФВЧ" }, { "lp", "ФНЧ" }, { "modRate", "Частота мод." },
+        { "modDepth", "Глубина мод." }, { "ducking", "Дакинг" }, { "mode", "Режим" }, { "drive", "Драйв" }, { "tone", "Тон" }, { "bias", "Смещение" },
+        { "input", "Вход" }, { "bits", "Биты" }, { "rate", "Частота" }, { "dither", "Дизер" }, { "type", "Тип" }, { "freq", "Частота" },
+        { "resonance", "Резонанс" }, { "lfoShape", "Форма LFO" }, { "lfoSync", "Синхр. LFO" }, { "lfoRate", "Частота LFO" }, { "lfoDiv", "Доля LFO" },
+        { "lfoDepth", "Глубина LFO" }, { "envDepth", "Огибающая" }, { "envAttack", "Атака огиб." }, { "envRelease", "Релиз огиб." },
+        { "voices", "Голоса" }, { "depth", "Глубина" }, { "delay", "Задержка" }, { "phase", "Фаза" }, { "div", "Доля" }, { "stages", "Ступени" },
+        { "center", "Центр" }, { "shape", "Форма" }, { "offset", "Сдвиг" },
+    };
+    if (type == "eq8" && id.length() >= 3 && id[0] == 'b' && juce::CharacterFunctions::isDigit (id[1]))
+    {
+        const auto band = id.substring (1, 2), what = id.substring (2);
+        static const std::map<juce::String, const char*> parts { { "on", "вкл" }, { "type", "тип" }, { "freq", "частота" }, { "gain", "усиление" },
+                                                                 { "q", "Q" }, { "ch", "канал" } };
+        const auto it = parts.find (what);
+        return utf8 ("Полоса ") + band + " " + (it != parts.end() ? utf8 (it->second) : what);
+    }
+    const auto it = names.find (id);
+    return it != names.end() ? utf8 (it->second) : fallback;
+}
+
+inline juce::String choice (const juce::String& c)
+{
+    static const std::map<juce::String, const char*> names {
+        { "Off", "Выкл" }, { "On", "Вкл" }, { "Stereo", "Стерео" }, { "Left/Right", "Лев./Прав." }, { "Mid/Side", "Mid/Side" }, { "Both", "Оба" },
+        { "Low cut 6", "Срез НЧ 6" }, { "Low cut 12", "Срез НЧ 12" }, { "Low cut 24", "Срез НЧ 24" }, { "Low cut 48", "Срез НЧ 48" },
+        { "Low shelf", "Полка НЧ" }, { "Bell", "Колокол" }, { "Notch", "Режекция" }, { "High shelf", "Полка ВЧ" }, { "High cut 6", "Срез ВЧ 6" },
+        { "High cut 12", "Срез ВЧ 12" }, { "High cut 24", "Срез ВЧ 24" }, { "High cut 48", "Срез ВЧ 48" }, { "Sine", "Синус" },
+        { "Triangle", "Треугольник" }, { "Saw", "Пила" }, { "Square", "Меандр" }, { "Soft", "Мягкий" }, { "Tape", "Лента" }, { "Tube", "Лампа" },
+        { "Hard", "Жёсткий" }, { "Fold", "Fold" }, { "Crush", "Crush" },
+    };
+    const auto it = names.find (c);
+    return it != names.end() ? utf8 (it->second) : c;
+}
+
+inline juce::String unit (const std::string& u)
+{
+    if (u == "Hz")
+        return utf8 ("Гц");
+    if (u == "dB")
+        return utf8 ("дБ");
+    if (u == "ms")
+        return utf8 ("мс");
+    if (u == "s")
+        return utf8 ("с");
+    return juce::String (u);
+}
+inline const juce::String kHz = utf8 (" кГц");
+inline const juce::String group = utf8 ("Встроенные");
+inline juce::String categoryName (const juce::String& category)
+{
+    static const std::map<juce::String, const char*> names { { "eq", "Эквалайзер" }, { "dynamics", "Динамика" }, { "space", "Пространство" },
+                                                             { "colour", "Окраска" }, { "filter", "Фильтр" }, { "modulation", "Модуляция" } };
+    const auto it = names.find (category);
+    return it != names.end() ? utf8 (it->second) : category;
+}
+inline const juce::String gainReduction = utf8 ("Подавление");
+} // namespace fx
+
+// Inputs and monitoring of a track (docs/spec/05-audio-recording.md, task 5.3)
+namespace audioInput
+{
+inline juce::String mono (int channel) { return utf8 ("Вход ") + juce::String (channel + 1); }
+inline juce::String stereo (int left, int right) { return utf8 ("Входы ") + juce::String (left + 1) + "/" + juce::String (right + 1); }
+inline const juce::String separator = utf8 (" · ");
+inline const juce::String resample = utf8 ("Ресемплинг");
+inline const juce::String none = utf8 ("Нет");
+inline const juce::String monoInputs = utf8 ("Моно");
+inline const juce::String noInputs = utf8 ("У звуковой карты нет открытых входов (Настройки → Звук)");
+inline const juce::String monitorAutoLong = utf8 ("Авто: слышно, когда дорожка взведена и клип не играет");
+inline const juce::String monitorInLong = utf8 ("Вкл: слышно всегда");
+inline const juce::String monitorOffLong = utf8 ("Выкл: не слышно");
+inline const juce::String undoInput = utf8 ("Вход дорожки");
+inline const juce::String undoMonitor = utf8 ("Мониторинг дорожки");
+inline const juce::String meterHelp = utf8 ("Уровень входа. Красный: был перегруз выше −0,5 дБ, щелчок сбрасывает.");
+} // namespace audioInput
 
 // Scales (task 2.7). The names of the scales are in core (daw/music/Scales.h).
 inline const juce::String rootNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -606,6 +833,14 @@ inline const juce::String removeTime = utf8 ("Удалить время");
 inline const juce::String newMarker = utf8 ("Маркер в позиции курсора");
 inline const juce::String followPlayhead = utf8 ("Следовать за курсором");
 inline const juce::String backToArrangement = utf8 ("Вернуть аранжировку");
+
+// Automation mode (task 6.7)
+inline const juce::String automationMode = utf8 ("Автоматизация (A)");
+inline const juce::String autoVolume = utf8 ("Громкость");
+inline const juce::String autoPan = utf8 ("Панорама");
+inline const juce::String autoParameter = utf8 ("Параметр");
+inline const juce::String autoNoDevices = utf8 ("Устройств нет");
+inline const juce::String autoCurve = utf8 ("Изгиб");
 } // namespace arrangement
 
 // Mixer
@@ -676,6 +911,13 @@ inline juce::String captured (int bars, int notes, const juce::String& track, co
 {
     return utf8 ("Захвачено ") + plural (bars, "такт", "такта", "тактов") + ", " + plural (notes, "нота", "ноты", "нот") + utf8 (" → ") + track
            + utf8 (", сцена ") + scene;
+}
+// Recording of sound (docs/spec/05-audio-recording.md, task 5.4)
+inline const juce::String undoRecordAudio = utf8 ("Запись звука");
+inline juce::String audioDropped (double atSeconds, double lostMs)
+{
+    return utf8 ("Диск не успевал за записью: ") + juce::String (lostMs, 0) + utf8 (" мс тишины на ") + juce::String (atSeconds, 1).replace (".", ",")
+           + utf8 (" с от начала записи");
 }
 } // namespace recording
 
@@ -751,6 +993,7 @@ inline juce::String browserCategory (const juce::String& name) { return make (na
 
 inline const juce::String trackHeader = make (utf8 ("Заголовок дорожки"), utf8 ("Щелчок выделяет дорожку, двойной щелчок переименовывает, правая кнопка открывает меню. Правый край тянется, меняя ширину столбца."));
 inline const juce::String clipSlot = make (utf8 ("Клип"), utf8 ("Щелчок выбирает клип, треугольник слева запускает. Двойной щелчок по пустому слоту создаёт клип. Клип можно перетащить в другой слот (Alt: копия)."));
+inline const juce::String recordAudioSlot = make (utf8 ("Кружок записи звука"), utf8 ("Щелчок записывает вход дорожки в этот слот с ближайшей границы запуска. Вход и мониторинг выбираются в карточке дорожки внизу."));
 inline const juce::String emptyAudioSlot = make (utf8 ("Пустой слот аудиодорожки"), utf8 ("Перетащите сюда звуковой файл из браузера или из Finder. Cmd при отпускании нескольких файлов кладёт каждый на свою дорожку."));
 inline const juce::String emptySlot =make (utf8 ("Пустой слот"), utf8 ("Щелчок останавливает дорожку, двойной щелчок создаёт пустой MIDI-клип на такт."));
 inline const juce::String sceneLaunch = make (utf8 ("Запуск сцены"), utf8 ("Запускает все клипы этой сцены. Двойной щелчок по названию переименовывает."));
@@ -760,7 +1003,9 @@ inline const juce::String masterHeader = make (utf8 ("Мастер"), utf8 ("О�
 inline const juce::String fader = make (utf8 ("Громкость"), utf8 ("Тяните фейдер, колесо меняет, двойной щелчок сбрасывает в 0 дБ. Shift: точнее."));
 inline const juce::String volumeReadout = make (utf8 ("Громкость в дБ"), utf8 ("Двойной щелчок открывает ввод числа: Enter подтверждает, Esc отменяет."));
 inline const juce::String panKnob = make (utf8 ("Панорама"), utf8 ("Положение в стерео. Двойной щелчок возвращает в центр, Shift при вращении: точнее."));
-inline const juce::String sendKnob = make (utf8 ("Посыл"), utf8 ("Отправляет часть сигнала на возвратную дорожку. ") + soon6);
+inline const juce::String audioFollowTempo = make (utf8 ("Под темп проекта"), utf8 ("Луп с известным темпом играет в темпе проекта: быстрее или медленнее, высота меняется вместе со скоростью (как Re-Pitch)."));
+inline const juce::String spectrum = make (utf8 ("Спектр мастера"), utf8 ("Что звучит на выходе: от баса слева до воздуха справа, наклон +4,5 дБ на октаву, как слышит ухо. Чёрточки показывают недавние пики."));
+inline const juce::String sendKnob = make (utf8 ("Посыл"), utf8 ("Отправляет часть звука после фейдера на возвратную дорожку A (ревер) или B (дилей). Первое касание создаёт возвратную дорожку, если её нет. Двойной щелчок выключает."));
 inline const juce::String cueKnob = make (utf8 ("Прослушивание"), utf8 ("Громкость предпрослушивания. ") + soon6);
 inline const juce::String meter = make (utf8 ("Уровень"), utf8 ("Пиковый уровень сигнала дорожки."));
 inline const juce::String activator = make (utf8 ("Дорожка включена"), utf8 ("Показывает номер дорожки. Выключенная дорожка молчит."));
@@ -811,6 +1056,8 @@ inline const juce::String editorGridArea = make (utf8 ("Сетка нот"), utf
 inline const juce::String editorVelocity = make (utf8 ("Сила нажатия"), utf8 ("Тяните столбик. Alt+тянуть по нескольким столбикам рисует рампу."));
 inline const juce::String editorControllers = make (utf8 ("Контроллеры"), utf8 ("Колесо модуляции, питч-бенд и сустейн. Полоса сворачивается."));
 inline const juce::String arrangementView = make (utf8 ("Arrangement"), utf8 ("Шкала времени проекта. Пробел играет с точки старта, Shift+Пробел продолжает с места остановки. Tab возвращает в Session."));
+inline const juce::String arrAutomationLanes = make (utf8 ("Огибающая"), utf8 ("Щелчок по линии добавляет точку, перетаскивание двигает её (Alt или Cmd: без привязки к сетке). Alt+протяжка по отрезку: изгиб. Двойной щелчок по точке удаляет её, Delete при выделенном времени удаляет точки в нём. A: выйти из режима автоматизации."));
+inline const juce::String arrAutomationChooser = make (utf8 ("Что автоматизировать"), utf8 ("Громкость, панорама или параметр устройства этой дорожки. Дорожки с готовой огибающей отмечены точкой."));
 inline const juce::String arrLanes = make (utf8 ("Дорожки"), utf8 ("Протяжка по пустому месту выделяет время, двойной щелчок рисует клип на такт. Cmd+колесо: масштаб, Alt+колесо: высота дорожки, Shift+колесо: прокрутка по времени."));
 inline const juce::String arrClip = make (utf8 ("Клип на шкале"), utf8 ("Тяните, чтобы переместить (Alt: копия, Cmd: без прилипания). Двойной щелчок открывает редактор нот, правая кнопка открывает меню. Cmd+E разрезает, Cmd+D дублирует."));
 inline const juce::String arrClipLeftEdge = make (utf8 ("Левый край клипа"), utf8 ("Тяните, чтобы обрезать начало: содержимое остаётся на месте."));
@@ -854,7 +1101,10 @@ inline const juce::String reverse = utf8 ("Обратно");
 inline const juce::String loop = utf8 ("Петля");
 inline const juce::String fadeIn = utf8 ("Фейд-ин (шкала)");
 inline const juce::String fadeOut = utf8 ("Фейд-аут (шкала)");
-inline const juce::String warpSoon = utf8 ("Подстройка под темп: этап 7");
+inline const juce::String warpSoon = utf8 ("Растяжение без смены высоты: этап 7");
+inline juce::String followTempo (double bpm) { return utf8 ("Под темп проекта (файл ") + juce::String (bpm, 1).replace (".", ",") + ")"; }
+inline const juce::String tempoUnknown = utf8 ("Темп файла неизвестен");
+inline const juce::String undoFollowTempo = utf8 ("Подстройка под темп");
 inline const juce::String loopStart = utf8 ("Начало петли");
 inline const juce::String loopEnd = utf8 ("Конец");
 inline const juce::String startPoint = utf8 ("Старт");

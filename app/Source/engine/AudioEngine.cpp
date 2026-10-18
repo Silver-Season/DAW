@@ -1,6 +1,9 @@
 #include "AudioEngine.h"
 
+#include "BuiltInEffectProcessor.h"
 #include "RtCheck.h"
+
+#include "daw/engine/AudioAnalysis.h"
 
 //==============================================================================
 // Gives hosted instruments the tempo and position (LFO sync, arpeggiators, delays).
@@ -45,18 +48,36 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
 
     playHead = std::make_unique<PlayHead> (*this);
     correctionMs = settings.recordCorrectionMs();
+    audioCorrectionMs = settings.audioLatencyCorrectionMs();
+    for (int i = 0; i < kMaxInputChannels; ++i)
+        inputIndex[(size_t) i] = i; // until a device says which channels are open
 
     master.setSize (kMaxChannels, blockSize);
+    lastMaster.setSize (2, blockSize);
     hardwareMidi.ensureSize (4096);
     keyboardMidi.ensureSize (4096);
 
     if (openDevices)
     {
         auto savedDevice = settings.audioDeviceState();
-        const auto error = deviceManager.initialise (0, 2, savedDevice.get(), true);
+        const auto error = deviceManager.initialise (2, 2, savedDevice.get(), true);
         if (error.isNotEmpty())
         {
             DBG ("Audio device error: " << error);
+        }
+        // Settings saved before stage 5 opened no input. The first start with recording switches the default input on,
+        // once: later the settings window decides.
+        if (! settings.audioInputsOpened())
+        {
+            settings.setAudioInputsOpened (true);
+            auto setup = deviceManager.getAudioDeviceSetup();
+            if (auto* type = deviceManager.getCurrentDeviceTypeObject(); type != nullptr && setup.inputDeviceName.isEmpty())
+                if (const auto inputs = type->getDeviceNames (true); ! inputs.isEmpty())
+                {
+                    setup.inputDeviceName = inputs[juce::jmax (0, type->getDefaultDeviceIndex (true))];
+                    setup.useDefaultInputChannels = true;
+                    deviceManager.setAudioDeviceSetup (setup, true);
+                }
         }
         deviceManager.addChangeListener (this);
 
@@ -233,9 +254,9 @@ bool AudioEngine::backToArrangement()
     return pushCommand ({ EngineCommand::Type::backToArrangement, -1, -1 });
 }
 
-bool AudioEngine::startRecord (int64_t trackId, int scene)
+bool AudioEngine::startRecord (int64_t trackId, int scene, bool noOverdub)
 {
-    return pushCommand ({ EngineCommand::Type::startRecord, trackId, scene, 0.0 });
+    return pushCommand ({ EngineCommand::Type::startRecord, trackId, scene, 0.0, noOverdub });
 }
 
 bool AudioEngine::stopRecord (int64_t trackId)
@@ -284,6 +305,98 @@ void AudioEngine::setRecordCorrectionMs (double ms)
 void AudioEngine::updateRecordCompensation()
 {
     recordCompensation = autoCompensation.load() + juce::roundToInt (correctionMs.load() * sampleRate.load() / 1000.0);
+}
+
+void AudioEngine::copyAnalysis (float* dest, int n) const
+{
+    n = juce::jlimit (0, kAnalysisSize, n);
+    const uint32_t end = analysisWrite.load (std::memory_order_acquire);
+    for (int i = 0; i < n; ++i)
+        dest[i] = analysis[(size_t) ((end - (uint32_t) n + (uint32_t) i) % (uint32_t) kAnalysisSize)];
+}
+
+void AudioEngine::setAudioLatencyCorrectionMs (double ms)
+{
+    audioCorrectionMs = std::round (juce::jlimit (-100.0, 100.0, ms) * 10.0) / 10.0;
+    settings.setAudioLatencyCorrectionMs (audioCorrectionMs.load());
+    updateAudioRecordLatency();
+}
+
+void AudioEngine::updateAudioRecordLatency()
+{
+    audioRecordLatency = juce::jmax (0, driverRoundTrip.load() + juce::roundToInt (audioCorrectionMs.load() * sampleRate.load() / 1000.0));
+}
+
+juce::StringArray AudioEngine::getInputChannelNames() const
+{
+    juce::StringArray names;
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        const auto all = device->getInputChannelNames();
+        const auto active = device->getActiveInputChannels();
+        for (int i = 0; i < all.size(); ++i)
+            if (active[i])
+                names.add (all[i]);
+            else
+                names.add ({}); // closed: the menu greys it out
+    }
+    return names;
+}
+
+//==============================================================================
+bool AudioEngine::startLatencyTest (int inputChannel)
+{
+    if (latencyTestState.load() == 1)
+        return false;
+    const double rate = sampleRate.load();
+    const int spacing = juce::roundToInt (rate * kLatencySpacingMs / 1000.0);
+    latencyRecording.assign ((size_t) (spacing * (kLatencyClicks + 1)), 0.0f);
+    latencyInput = juce::jmax (0, inputChannel);
+    latencyPos = 0;
+    latencyTestState.store (1, std::memory_order_release);
+    return true;
+}
+
+AudioEngine::LatencyTestResult AudioEngine::takeLatencyTestResult()
+{
+    LatencyTestResult r;
+    if (latencyTestState.load (std::memory_order_acquire) != 2)
+        return r;
+    const double rate = sampleRate.load();
+    const int spacing = juce::roundToInt (rate * kLatencySpacingMs / 1000.0);
+    const auto m = daw::engine::measureRoundTrip (latencyRecording.data(), (int64_t) latencyRecording.size(), kLatencyClicks, spacing,
+                                                  spacing - 1);
+    latencyTestState = 0;
+    r.ok = m.ok;
+    r.roundTripSamples = m.latencySamples;
+    r.driverSamples = driverRoundTrip.load();
+    r.correctionMs = (m.latencySamples - r.driverSamples) * 1000.0 / rate;
+    return r;
+}
+
+// Audio thread: the click train goes out on the first two outputs while the input is copied into the buffer.
+void AudioEngine::runLatencyTest (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs, int numSamples)
+{
+    if (latencyTestState.load (std::memory_order_acquire) != 1)
+        return;
+    const int total = (int) latencyRecording.size();
+    const int spacing = total / (kLatencyClicks + 1);
+    const int channel = latencyInput.load();
+    const int index = channel < kMaxInputChannels ? inputIndex[(size_t) channel] : -1;
+    const float* in = index >= 0 && index < numInputs ? inputs[index] : nullptr;
+    const int n = juce::jmin (numSamples, total - latencyPos);
+    for (int i = 0; i < n; ++i)
+    {
+        const int pos = latencyPos + i;
+        latencyRecording[(size_t) pos] = in != nullptr ? in[i] : 0.0f;
+        if (pos % spacing == 0 && pos / spacing < kLatencyClicks)
+            for (int ch = 0; ch < juce::jmin (2, numOutputs); ++ch)
+                if (outputs[ch] != nullptr)
+                    outputs[ch][i] = 0.5f; // one sample, -6 dBFS; everything else is silent during the test
+    }
+    latencyPos += n;
+    if (latencyPos >= total)
+        latencyTestState.store (2, std::memory_order_release);
 }
 
 void AudioEngine::previewFactoryPreset (int program)
@@ -337,7 +450,19 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     metronome.prepare (sampleRate);
     autoCompensation = device->getOutputLatencyInSamples() + blockSize / 2;
     updateRecordCompensation();
+    // A sound the engine plays at sample E comes back on the input at E + output latency + input latency + one buffer
+    // each way (the output buffer that holds it, the input buffer that brings it back).
+    driverRoundTrip = device->getOutputLatencyInSamples() + device->getInputLatencyInSamples() + 2 * blockSize;
+    updateAudioRecordLatency();
+    {
+        const auto active = device->getActiveInputChannels();
+        int packed = 0;
+        for (int i = 0; i < kMaxInputChannels; ++i)
+            inputIndex[(size_t) i] = active[i] ? packed++ : -1;
+        numOpenInputs = packed;
+    }
     master.setSize (kMaxChannels, blockSize);
+    lastMaster.setSize (2, blockSize);
     preview.prepare (sampleRate, blockSize);
 
     for (auto& [id, rt] : runtimes)
@@ -451,13 +576,13 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
         playing = true; // launching a clip starts the transport, like in Live
     };
 
-    const auto startRecording = [&] (const PlaybackGraph::Track& t, int scene) {
+    const auto startRecording = [&] (const PlaybackGraph::Track& t, int scene, bool noOverdub) {
         auto& rt = *t.runtime;
         if (rt.recordState.load() != TrackRuntime::recordIdle)
             return;
         const bool running = playing.load() || transport.isPlaying();
         const auto* playingNow = rt.player.playingSlot() >= 0 ? slotClip (t, rt.player.playingSlot()) : nullptr;
-        const bool overdub = running && overdubOn.load() && playingNow != nullptr && rt.player.playingSlot() == scene;
+        const bool overdub = ! noOverdub && running && overdubOn.load() && playingNow != nullptr && rt.player.playingSlot() == scene;
 
         double start = now;
         if (! running)
@@ -590,7 +715,7 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 break;
             case EngineCommand::Type::startRecord:
                 if (auto* t = findTrack (c.trackId))
-                    startRecording (*t, c.sceneIndex);
+                    startRecording (*t, c.sceneIndex, c.noOverdub);
                 break;
             case EngineCommand::Type::stopRecord:
                 if (auto* t = findTrack (c.trackId))
@@ -842,7 +967,8 @@ double songBeatAtMono (const daw::engine::Transport::Block& block, double spb, d
 // are effects and get an empty MIDI buffer. A disabled effect lets the sound through; a disabled
 // instrument is silent.
 void processChain (const std::vector<DeviceInstance*>& chain, juce::AudioBuffer<float>& storage, int numSamples,
-                   juce::MidiBuffer& midi, juce::MidiBuffer& emptyMidi, bool firstIsInstrument)
+                   juce::MidiBuffer& midi, juce::MidiBuffer& emptyMidi, bool firstIsInstrument,
+                   const std::vector<TrackRuntime*>* sidechains = nullptr)
 {
     for (size_t i = 0; i < chain.size(); ++i)
     {
@@ -850,6 +976,9 @@ void processChain (const std::vector<DeviceInstance*>& chain, juce::AudioBuffer<
         const bool isInstrument = firstIsInstrument && i == 0;
         if (d == nullptr || d->processor == nullptr)
             continue;
+        if (sidechains != nullptr && i < sidechains->size() && (*sidechains)[i] != nullptr)
+            if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (d->processor.get()))
+                fx->setSidechain ((*sidechains)[i]->keyBuffer.getArrayOfReadPointers());
 
         const int channels = d->numChannels.load (std::memory_order_relaxed);
         juce::AudioBuffer<float> view (storage.getArrayOfWritePointers(), channels, numSamples);
@@ -989,6 +1118,108 @@ void AudioEngine::renderArrangementAudio (const PlaybackGraph::Track& t, double 
     }
 }
 
+// The sound input of an audio track for this block, into rt.inputBuffer (a mono input on both channels), and its meter.
+void AudioEngine::readInput (TrackRuntime& rt, int numSamples)
+{
+    float* l = rt.inputBuffer.getWritePointer (0);
+    float* r = rt.inputBuffer.getWritePointer (1);
+    const auto channel = [this] (int c) -> const float* {
+        if (c < 0 || c >= kMaxInputChannels || blockInputs == nullptr)
+            return nullptr;
+        const int index = inputIndex[(size_t) c];
+        return index >= 0 && index < blockNumInputs ? blockInputs[index] : nullptr;
+    };
+    const float *a = nullptr, *b = nullptr;
+    switch ((AudioInputKind) rt.audioInput.load (std::memory_order_relaxed))
+    {
+        case AudioInputKind::device:
+            a = channel (rt.inputLeft.load (std::memory_order_relaxed));
+            b = rt.inputRight.load (std::memory_order_relaxed) >= 0 ? channel (rt.inputRight.load (std::memory_order_relaxed)) : a;
+            break;
+        case AudioInputKind::resample:
+            a = lastMaster.getReadPointer (0);
+            b = lastMaster.getReadPointer (1);
+            break;
+        case AudioInputKind::none: break;
+    }
+    if (a != nullptr)
+        juce::FloatVectorOperations::copy (l, a, numSamples);
+    else
+        juce::FloatVectorOperations::clear (l, numSamples);
+    if (b != nullptr)
+        juce::FloatVectorOperations::copy (r, b, numSamples);
+    else
+        juce::FloatVectorOperations::clear (r, numSamples);
+
+    const float peak = juce::jmax (rt.inputBuffer.getMagnitude (0, 0, numSamples), rt.inputBuffer.getMagnitude (1, 0, numSamples));
+    rt.inputMeter.store (juce::jmax (rt.inputMeter.load (std::memory_order_relaxed), peak), std::memory_order_relaxed);
+    if (peak > 0.944f) // -0.5 dBFS
+        rt.inputClipped.store (true, std::memory_order_relaxed);
+}
+
+// Moves the recording stream of the track along (see RecordStream): it begins at the start beat of the track's slot
+// recording or of the arrangement recording, and ends `latency` frames after the end beat, so that the clip, which is
+// moved earlier by the latency, still has sound up to its end.
+void AudioEngine::feedRecordStream (const PlaybackGraph::Track& t, const juce::AudioBuffer<float>& source, const daw::engine::Transport::Block& block,
+                                    double spb, int numSamples, int latency)
+{
+    auto* s = t.stream.get();
+    if (s == nullptr)
+        return;
+    int state = s->state.load (std::memory_order_acquire);
+    if (state != RecordStream::requested && state != RecordStream::writing && state != RecordStream::tail)
+        return;
+    auto& rt = *t.runtime;
+    const bool arrangementMode = s->mode.load (std::memory_order_relaxed) == (int) RecordStream::Mode::arrangement;
+    const int recState = arrangementMode ? arrRecState.load() : rt.recordState.load();
+    const bool began = arrangementMode ? (recState == arrangementRunning || recState == arrangementFinished)
+                                       : (recState == TrackRuntime::recordRunning || recState == TrackRuntime::recordFinished)
+                                             && ! rt.recordOverdub.load();
+    const double startBeat = arrangementMode ? arrRecStart.load() : rt.recordStartBeat.load();
+    const double endBeat = arrangementMode ? arrRecEnd.load() : rt.recordEndBeat.load();
+    const auto offsetOf = [&] (double beat) { return (int64_t) std::llround ((beat - block.startBeat) * spb); };
+
+    int from = 0;
+    if (state == RecordStream::requested)
+    {
+        if (! began)
+            return;
+        const int64_t offset = offsetOf (startBeat);
+        s->startSample.store (blockStartSample + offset, std::memory_order_relaxed);
+        s->latency.store (latency, std::memory_order_relaxed);
+        if (offset < 0) // the start was a moment ago (the stream was armed late): the file starts with that much silence
+            s->writeSilence ((int) std::min<int64_t> (-offset, s->getCapacity()));
+        from = (int) std::clamp<int64_t> (offset, 0, numSamples);
+        state = RecordStream::writing;
+        s->state.store (state, std::memory_order_release);
+    }
+    if (state == RecordStream::writing)
+    {
+        const bool idleAgain = arrangementMode ? recState == arrangementIdle : recState == TrackRuntime::recordIdle;
+        const bool stopped = ! transport.isPlaying();
+        if (stopped || idleAgain || endBeat <= block.endBeat + 1.0e-9)
+        {
+            const int64_t endOffset = stopped || idleAgain ? 0 : std::clamp<int64_t> (offsetOf (endBeat), 0, numSamples);
+            s->endSample.store (blockStartSample + endOffset + s->latency.load (std::memory_order_relaxed), std::memory_order_relaxed);
+            state = RecordStream::tail;
+            s->state.store (state, std::memory_order_release);
+        }
+    }
+    int to = numSamples;
+    if (state == RecordStream::tail)
+        to = (int) std::clamp<int64_t> (s->endSample.load (std::memory_order_relaxed) - blockStartSample, from, numSamples);
+    if (to > from)
+    {
+        const float* planes[2] { source.getReadPointer (0) + from, source.getReadPointer (1) + from };
+        s->write (planes, to - from);
+    }
+    if (state == RecordStream::tail && blockStartSample + numSamples >= s->endSample.load (std::memory_order_relaxed))
+    {
+        s->totalFrames.store (s->framesWritten.load (std::memory_order_relaxed), std::memory_order_relaxed);
+        s->state.store (RecordStream::done, std::memory_order_release);
+    }
+}
+
 void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine::Transport::Block& block, double spb, int numSamples,
                                bool killNotes, bool anySolo, bool anyArmed)
 {
@@ -1007,6 +1238,28 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
         rt.buffer.clear (1, 0, numSamples);
         audioStats.missedFrames = 0;
         renderSessionAudio (t, clipBefore, startBefore, block, spb, numSamples);
+
+        // The input: heard through the track's chain (monitoring) and recorded as it comes in, before any effect.
+        readInput (rt, numSamples);
+        const auto kind = (AudioInputKind) rt.audioInput.load (std::memory_order_relaxed);
+        const int streamState = t.stream != nullptr ? t.stream->state.load (std::memory_order_relaxed) : RecordStream::idle;
+        const bool recordingNow = streamState == RecordStream::writing || streamState == RecordStream::tail;
+        bool monitor = false;
+        switch ((MonitorMode) rt.monitorMode.load (std::memory_order_relaxed))
+        {
+            case MonitorMode::in: monitor = true; break;
+            case MonitorMode::automatic: monitor = recordingNow || (rt.arm.load() && rt.player.playingSlot() < 0); break;
+            case MonitorMode::off: break;
+        }
+        monitor = monitor && kind == AudioInputKind::device; // resampling the master into itself would feed back
+        rt.monitoring.store (monitor, std::memory_order_relaxed);
+        if (monitor)
+        {
+            rt.buffer.addFrom (0, 0, rt.inputBuffer, 0, 0, numSamples);
+            rt.buffer.addFrom (1, 0, rt.inputBuffer, 1, 0, numSamples);
+        }
+        // The master of the previous block is one block late; the driver's round trip does not apply to it.
+        feedRecordStream (t, rt.inputBuffer, block, spb, numSamples, kind == AudioInputKind::resample ? numSamples : audioRecordLatency.load());
     }
 
     // Arrangement recording logs when a session clip starts or stops (the song beat comes from the windows of the block).
@@ -1128,27 +1381,83 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     if (acceptsLiveMidi (rt, true, anyArmed))
         addLive (keyboardMidi);
 
-    if (t.audio)
-        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false);
+    // Automation: the value at the start of the block (volume and pan ramp across the block, parameters smooth inside
+    // the devices). Only while the track plays its arrangement.
+    float autoVolume = -1.0f, autoPan = -2.0f;
+    if (! t.automation.empty() && transport.isPlaying() && block.numWindows > 0 && ! rt.inSession.load (std::memory_order_relaxed))
+    {
+        const double songBeat = block.windows[0].startBeat;
+        for (const auto& lane : t.automation)
+        {
+            const float v = daw::engine::automationValueAt (lane.points, songBeat);
+            switch (lane.kind)
+            {
+                case PlaybackGraph::Track::Lane::volume:
+                {
+                    const float db = v * 66.0f - 60.0f;
+                    autoVolume = db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db);
+                    break;
+                }
+                case PlaybackGraph::Track::Lane::pan: autoPan = v * 2.0f - 1.0f; break;
+                case PlaybackGraph::Track::Lane::parameter:
+                    if (std::abs (lane.param->getValue() - v) > 1.0e-5f)
+                        lane.param->setValue (v);
+                    break;
+            }
+        }
+    }
+
+    if (t.isReturn)
+    {
+        // A return track plays what the sends of this block gave it, through its effects.
+        rt.buffer.copyFrom (0, 0, rt.returnBus, 0, 0, numSamples);
+        rt.buffer.copyFrom (1, 0, rt.returnBus, 1, 0, numSamples);
+        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false, &t.sidechains);
+    }
+    else if (t.audio)
+        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false, &t.sidechains);
     else
     {
-        if (t.chain.empty())
-            return;
         // Start from silence so that a missing or disabled instrument cannot feed old audio into the effects.
         rt.buffer.clear (0, 0, numSamples);
         rt.buffer.clear (1, 0, numSamples);
-        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true);
+        if (! t.chain.empty())
+            processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true, &t.sidechains);
+        // Record source "audio": what the instrument and its effects play, before the fader. Nothing is late.
+        if (t.recordsOutput)
+            feedRecordStream (t, rt.buffer, block, spb, numSamples, 0);
+        if (t.chain.empty())
+            return;
     }
 
-    const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load());
-    const float vol = audible ? rt.volumeGain.load() : 0.0f;
-    const float pan = juce::jlimit (-1.0f, 1.0f, rt.pan.load());
+    // Solo leaves the return tracks on, like in Live: a soloed track keeps its reverb.
+    const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load() || t.isReturn);
+    const float vol = audible ? (autoVolume >= 0.0f ? autoVolume : rt.volumeGain.load()) : 0.0f;
+    const float pan = juce::jlimit (-1.0f, 1.0f, autoPan > -1.5f ? autoPan : rt.pan.load());
     const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f; // equal-power pan law
     const float gainL = vol * std::cos (angle) * juce::MathConstants<float>::sqrt2;
     const float gainR = vol * std::sin (angle) * juce::MathConstants<float>::sqrt2;
 
     const float* srcL = rt.buffer.getReadPointer (0);
     const float* srcR = rt.buffer.getReadPointer (1);
+    // The key of any sidechain that listens to this track: its sound before the fader.
+    rt.keyBuffer.copyFrom (0, 0, rt.buffer, 0, 0, numSamples);
+    rt.keyBuffer.copyFrom (1, 0, rt.buffer, 1, 0, numSamples);
+    // Sends: post-fader and post-pan, to return A and B (a return track does not send).
+    if (! t.isReturn && currentGraph != nullptr)
+        for (int k = 0; k < 2; ++k)
+            if (auto* target = currentGraph->returns[(size_t) k]; target != nullptr)
+            {
+                const float send = rt.sendGain[k].load (std::memory_order_relaxed);
+                if (send <= 0.0f && rt.lastSendGain[k] <= 0.0f)
+                    continue;
+                const float g = audible ? vol * send : 0.0f;
+                target->returnBus.addFromWithRamp (0, 0, srcL, numSamples, rt.lastSendGain[k] * std::cos (angle) * juce::MathConstants<float>::sqrt2,
+                                                   g * std::cos (angle) * juce::MathConstants<float>::sqrt2);
+                target->returnBus.addFromWithRamp (1, 0, srcR, numSamples, rt.lastSendGain[k] * std::sin (angle) * juce::MathConstants<float>::sqrt2,
+                                                   g * std::sin (angle) * juce::MathConstants<float>::sqrt2);
+                rt.lastSendGain[k] = g;
+            }
     master.addFromWithRamp (0, 0, srcL, numSamples, rt.lastGainL, gainL);
     master.addFromWithRamp (1, 0, srcR, numSamples, rt.lastGainR, gainR);
     rt.lastGainL = gainL;
@@ -1162,8 +1471,8 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     rt.meterR.store (juce::jmax (rt.meterR.load(), peak (srcR) * gainR), std::memory_order_relaxed);
 }
 
-void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, float* const* outputs, int numOutputs, int numSamples,
-                                                    const juce::AudioIODeviceCallbackContext&)
+void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, int numInputs, float* const* outputs, int numOutputs,
+                                                    int numSamples, const juce::AudioIODeviceCallbackContext&)
 {
     const daw::rt::ScopedAudioThread rtGuard;
     juce::ScopedNoDenormals noDenormals;
@@ -1176,10 +1485,16 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     const int64_t blockEngineStart = engineSamples;
     engineSamples += numSamples;
     engineSampleCount.store (engineSamples, std::memory_order_relaxed);
+    blockInputs = inputs;
+    blockNumInputs = inputs != nullptr ? numInputs : 0;
+    blockStartSample = blockEngineStart;
 
     const PlaybackGraph* graph = current.load (std::memory_order_acquire);
     if (graph == nullptr)
+    {
+        runLatencyTest (inputs, blockNumInputs, outputs, numOutputs, numSamples);
         return;
+    }
 
     if (numSamples > blockSize || numSamples > master.getNumSamples())
     {
@@ -1267,13 +1582,29 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         anyRecording = anyRecording || state == TrackRuntime::recordWaiting || state == TrackRuntime::recordRunning;
     }
 
-    for (const auto& t : graph->tracks)
+    currentGraph = graph;
+    for (auto* r : graph->returns)
+        if (r != nullptr)
+            r->returnBus.clear (0, numSamples);
+    for (const auto& t : graph->tracks) // the return tracks come last
         renderTrack (t, block, spb, numSamples, killNotes, anySolo, anyArmed);
 
     // Master chain works on the first two channels of the (wider) master buffer
     processChain (graph->masterChain, master, numSamples, masterMidi, masterFxMidi, false);
 
     master.applyGain (masterGain.load());
+    // The spectrum of the top bar listens here, after the master gain and before the click.
+    {
+        uint32_t w = analysisWrite.load (std::memory_order_relaxed);
+        const float* l = master.getReadPointer (0);
+        const float* r = master.getReadPointer (1);
+        for (int i = 0; i < numSamples; ++i)
+            analysis[(size_t) (w++ % (uint32_t) kAnalysisSize)] = 0.5f * (l[i] + r[i]);
+        analysisWrite.store (w, std::memory_order_release);
+    }
+    // The "Resample" input of the next block: the master as it leaves, without the click.
+    lastMaster.copyFrom (0, 0, master, 0, 0, numSamples);
+    lastMaster.copyFrom (1, 0, master, 1, 0, numSamples);
     masterMeterL.store (juce::jmax (masterMeterL.load(), master.getMagnitude (0, 0, numSamples)), std::memory_order_relaxed);
     masterMeterR.store (juce::jmax (masterMeterR.load(), master.getMagnitude (1, 0, numSamples)), std::memory_order_relaxed);
 
@@ -1329,6 +1660,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
             if (left - n == 0)
                 toneSamplesTotal = 0;
         }
+    }
+
+    // The loopback test owns the outputs while it runs.
+    if (latencyTestState.load (std::memory_order_relaxed) == 1)
+    {
+        for (int ch = 0; ch < numOutputs; ++ch)
+            if (outputs[ch] != nullptr)
+                juce::FloatVectorOperations::clear (outputs[ch], numSamples);
+        runLatencyTest (inputs, blockNumInputs, outputs, numOutputs, numSamples);
     }
 
     updateArrangementRecord (block.endBeat);

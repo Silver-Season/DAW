@@ -33,6 +33,8 @@ inline const juce::String plugin = "plugin";             // a hosted AU / VST3, 
 inline const juce::String chain = "chain";               // a .dawchain file
 inline const juce::String midiFile = "midi";             // a .mid file
 inline const juce::String audioFile = "audio";           // a sound file
+inline const juce::String drumKit = "drums";             // the built-in drum machine with a factory kit, id = kit name
+inline const juce::String builtinFx = "fx";              // a built-in effect, id = its type ("eq8")
 } // namespace kinds
 
 struct Item

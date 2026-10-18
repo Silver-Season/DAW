@@ -185,6 +185,8 @@ int Settings::recordBitDepth() const
 void Settings::setRecordBitDepth (int bits) { props->setValue ("recordBitDepth", bits == 16 || bits == 32 ? bits : 24); }
 double Settings::audioLatencyCorrectionMs() const { return juce::jlimit (-100.0, 100.0, props->getDoubleValue ("audioLatencyMs", 0.0)); }
 void Settings::setAudioLatencyCorrectionMs (double ms) { props->setValue ("audioLatencyMs", std::round (juce::jlimit (-100.0, 100.0, ms) * 10.0) / 10.0); }
+bool Settings::audioInputsOpened() const { return props->getBoolValue ("audioInputsOpened", false); }
+void Settings::setAudioInputsOpened (bool on) { props->setValue ("audioInputsOpened", on); }
 int Settings::audioCaptureMinutes() const
 {
     const int v = props->getIntValue ("audioCaptureMinutes", 5);

@@ -60,6 +60,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ClipEdit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ArrangementEdit.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/Automation.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/TrackTransfer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectFile.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/RecoveryCheck.cpp
@@ -79,6 +80,10 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementView.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementLanes.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Waveform.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/InputMenus.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/DrumPads.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ExportWindow.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Spectrum.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/AudioClipEditor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRoll.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollGrid.cpp
@@ -101,6 +106,11 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PreviewPlayer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioFilePool.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioPreview.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/RecordStream.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/BuiltInEffectProcessor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/DrumKitProcessor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/OfflineRenderer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/AudioRecorder.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/AudioImport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaProcessor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/plugins/prisma/Source/PrismaEditor.cpp)
@@ -126,6 +136,7 @@ if(DAW_BUILD_JUCE)
             tests/AudioTests.cpp
             tests/AudioUiTests.cpp
             tests/SessionAudioUiTests.cpp
+            tests/AudioRecordingTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE

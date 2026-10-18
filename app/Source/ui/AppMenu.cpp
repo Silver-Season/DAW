@@ -51,6 +51,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::exportAudio);
             add (commands::showInFinder);
             add (commands::findMissingFiles);
+            add (commands::deleteUnusedRecordings);
             menu.addSeparator();
             add (commands::scanPlugins);
 #if ! JUCE_MAC
@@ -89,6 +90,11 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::captureMidi);
             add (commands::recordArrangement);
             add (commands::addMarker);
+            if (inspirationMenu)
+            {
+                menu.addSeparator();
+                menu.addSubMenu (Strings::inspiration::menu, inspirationMenu());
+            }
             break;
         case 3:
         {
@@ -97,6 +103,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::toggleMixer);
             add (commands::switchView);
             add (commands::toggleFollow);
+            add (commands::toggleAutomation);
             add (commands::toggleClipEditor);
             add (commands::toggleKeyboardStrip);
             menu.addSeparator();
