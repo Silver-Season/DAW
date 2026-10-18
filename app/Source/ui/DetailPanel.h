@@ -13,6 +13,7 @@ class AudioEngine;
 namespace ui
 {
 class DeviceChainView;
+class EffectView;
 class RecordSourceSwitch;
 
 // The bottom panel (232 px): a summary of the selected track on the left and its device chain on the right.
@@ -93,6 +94,9 @@ public:
 
     // Number of device views currently shown; tests and the screenshot script read it.
     int numDeviceViews() const;
+    // The card of the device at that place in the chain, and the face of a built-in effect in it (or null).
+    juce::Component* deviceView (int index) const;
+    EffectView* effectView (int index) const;
 
     void resized() override;
 

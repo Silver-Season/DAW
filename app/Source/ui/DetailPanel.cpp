@@ -8,6 +8,7 @@
 #include "../engine/BuiltInEffectProcessor.h"
 #include "../engine/DrumKitProcessor.h"
 #include "DrumPads.h"
+#include "EffectViews.h"
 #include "daw/dsp/Wavetable.h"
 #include "daw/synth/PrismaParams.h"
 
@@ -54,9 +55,6 @@ std::vector<int> macroIndices (const DeviceRef& device, juce::AudioProcessor& pr
     tokens.removeEmptyStrings();
     for (const auto& t : tokens)
         result.push_back (t.getIntValue());
-    if (result.empty())
-        if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (&processor))
-            return fx->defaultMacros();
     if (result.empty())
     {
         const auto& params = processor.getParameters();
@@ -173,8 +171,14 @@ public:
         {
             std::vector<std::pair<juce::AudioProcessorParameter*, juce::String>> bindings;
             if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (processor); fx != nullptr && fx->getEffect() != nullptr)
+            {
+                // A built-in effect has its own face: the main controls and a picture, or every parameter when expanded.
                 keyed = fx->getEffect()->acceptsSidechain();
-            if (auto* drums = dynamic_cast<DrumKitProcessor*> (processor))
+                expanded = d.expanded();
+                effectView = std::make_unique<EffectView> (*fx, trackColour, expanded);
+                addAndMakeVisible (*effectView);
+            }
+            else if (auto* drums = dynamic_cast<DrumKitProcessor*> (processor))
             {
                 pads = std::make_unique<DrumPads> (owner.engine, *drums, trackColour);
                 addAndMakeVisible (*pads);
@@ -205,6 +209,7 @@ public:
 
     int64_t id() const { return deviceId; }
     bool isFolded() const { return folded; }
+    EffectView* getEffectView() const { return effectView.get(); }
     void setHighlight (bool selected)
     {
         if (selected != isSelected)
@@ -214,10 +219,12 @@ public:
         }
     }
 
-    int preferredWidth() const
+    int preferredWidth (int cardHeight) const
     {
         if (folded)
             return kFoldedWidth;
+        if (effectView != nullptr)
+            return effectView->preferredWidth (effectBounds (cardHeight).getHeight()) + 2 * kEffectInsetX;
         if (wavetable != nullptr)
             return 470;
         if (pads != nullptr)
@@ -253,6 +260,15 @@ public:
             wavetable->tick();
         if (pads != nullptr)
             pads->tick();
+        if (effectView != nullptr)
+        {
+            effectView->tick();
+            if (const auto note = effectView->headerNote(); note != headerNote)
+            {
+                headerNote = note;
+                repaint (0, 0, getWidth(), kDeviceHeaderHeight);
+            }
+        }
         updateTitle();
     }
 
@@ -270,6 +286,8 @@ public:
                 return Strings::help::deviceFold;
             if (presetRect().contains (p))
                 return isInstrument() ? Strings::help::devicePresetsInstrument : Strings::help::devicePresets;
+            if (effectView != nullptr && expandRect().contains (p))
+                return Strings::help::deviceExpand;
             return Strings::help::deviceHeader;
         }
         if (kind == "missing")
@@ -312,9 +330,21 @@ public:
         }
         else
         {
-            const auto textArea = juce::Rectangle<int> (powerRect().getRight() + 2, 0, presetRect().getX() - powerRect().getRight() - 6, kDeviceHeaderHeight);
-            g.setColour (missing ? t.dimText : t.text);
+            const int iconsLeft = effectView != nullptr ? expandRect().getX() : presetRect().getX();
+            auto textArea = juce::Rectangle<int> (powerRect().getRight() + 2, 0, iconsLeft - powerRect().getRight() - 6, kDeviceHeaderHeight);
+            // A live note on the right of the title (gain reduction, bands, decay) when there is room for both.
+            g.setFont (t.numFont (10.5f));
+            const int noteWidth = headerNote.isNotEmpty() ? (int) std::ceil (juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), headerNote)) : 0;
             g.setFont (t.uiFont (12.0f, 600));
+            const int titleWidth = (int) std::ceil (juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), title));
+            if (noteWidth > 0 && titleWidth + noteWidth + 12 <= textArea.getWidth())
+            {
+                g.setColour (t.dimText);
+                g.setFont (t.numFont (10.5f));
+                g.drawText (headerNote, textArea.removeFromRight (noteWidth), juce::Justification::centredRight, false);
+                g.setFont (t.uiFont (12.0f, 600));
+            }
+            g.setColour (missing ? t.dimText : t.text);
             g.drawText (title, textArea, juce::Justification::centredLeft, true);
 
             auto drawIcon = [&] (juce::Rectangle<int> box, const juce::Path& icon, bool enabledIcon, bool hot, bool stroked) {
@@ -332,6 +362,8 @@ public:
             drawIcon (foldRect(), icons::triangle (inner (foldRect(), 6.0f), 3), true, hoverPart == Part::fold, false);
             drawIcon (openRect(), icons::openExternal (inner (openRect(), 9.0f)), processor != nullptr, hoverPart == Part::open, true);
             drawIcon (closeRect(), icons::cross (inner (closeRect(), 8.0f)), true, hoverPart == Part::close, true);
+            if (effectView != nullptr)
+                drawIcon (expandRect(), expandIcon (inner (expandRect(), 9.0f), ! expanded), true, hoverPart == Part::expand, true);
         }
 
         if (loading && ! folded)
@@ -376,6 +408,13 @@ public:
         const bool show = ! folded;
         for (auto& k : knobs)
             k->knob.setVisible (show);
+        if (effectView != nullptr)
+        {
+            effectView->setVisible (show);
+            if (show)
+                effectView->setBounds (effectBounds (getHeight()));
+            return;
+        }
         if (wavetable != nullptr)
             wavetable->setVisible (show);
         if (pads != nullptr)
@@ -446,6 +485,10 @@ public:
         {
             case Part::power: owner.actions.setDeviceEnabled (deviceId, ! enabled); break;
             case Part::fold: owner.actions.setDeviceFolded (deviceId, ! folded); break;
+            case Part::expand:
+                // A view setting, like the panel height: not an undo step. The chain is rebuilt from the model.
+                owner.model.findDevice (deviceId).setExpanded (! expanded);
+                break;
             case Part::open:
                 if (processor != nullptr && owner.onOpenDevice)
                     owner.onOpenDevice (deviceId);
@@ -469,7 +512,8 @@ private:
         preset,
         fold,
         open,
-        close
+        close,
+        expand
     };
 
     struct BoundKnob
@@ -509,6 +553,36 @@ private:
     juce::Rectangle<int> openRect() const { return { getWidth() - 42, 4, 18, 18 }; }
     juce::Rectangle<int> foldRect() const { return { getWidth() - 62, 4, 18, 18 }; }
     juce::Rectangle<int> presetRect() const { return { getWidth() - 82, 4, 18, 18 }; }
+    juce::Rectangle<int> expandRect() const { return { getWidth() - 102, 4, 18, 18 }; }
+
+    // The body of the card below the header, less the sidechain line of a compressor or gate.
+    static constexpr int kEffectInsetX = 12, kEffectInsetY = 8;
+    juce::Rectangle<int> effectBounds (int cardHeight) const
+    {
+        auto body = juce::Rectangle<int> (0, kDeviceHeaderHeight, juce::jmax (0, getWidth()), juce::jmax (0, cardHeight - kDeviceHeaderHeight));
+        if (keyed)
+            body.removeFromBottom (18);
+        return body.reduced (kEffectInsetX, kEffectInsetY);
+    }
+
+    // Outward chevrons widen the card, inward ones narrow it back.
+    static juce::Path expandIcon (juce::Rectangle<float> a, bool outward)
+    {
+        juce::Path p;
+        const float w = a.getWidth() * 0.32f, h = a.getHeight() * 0.42f, cy = a.getCentreY();
+        for (int side = 0; side < 2; ++side)
+        {
+            const float dir = side == 0 ? -1.0f : 1.0f;
+            const float tip = a.getCentreX() + dir * (outward ? a.getWidth() * 0.5f : 0.6f);
+            const float back = tip - dir * (outward ? w : -w);
+            p.startNewSubPath (back, cy - h);
+            p.lineTo (tip, cy);
+            p.lineTo (back, cy + h);
+        }
+        juce::Path out;
+        juce::PathStrokeType (1.5f, juce::PathStrokeType::mitered, juce::PathStrokeType::rounded).createStrokedPath (out, p);
+        return out;
+    }
 
     Part partAt (juce::Point<int> p) const
     {
@@ -526,6 +600,8 @@ private:
             return Part::fold;
         if (presetRect().contains (p))
             return Part::preset;
+        if (effectView != nullptr && expandRect().contains (p))
+            return Part::expand;
         return Part::header;
     }
 
@@ -579,6 +655,9 @@ private:
     juce::AudioProcessor* processor = nullptr;
     std::unique_ptr<WavetableMini> wavetable;
     std::unique_ptr<DrumPads> pads;
+    std::unique_ptr<EffectView> effectView;
+    bool expanded = false;
+    juce::String headerNote;
     bool keyed = false; // a compressor or gate: the line "Сайдчейн: ..." at the bottom chooses its key track
     std::vector<std::unique_ptr<BoundKnob>> knobs;
     Part hoverPart = Part::none, pressedPart = Part::none;
@@ -616,7 +695,7 @@ public:
         const int h = juce::jmax (40, getHeight() > 0 ? getHeight() : owner.viewport.getMaximumVisibleHeight());
         for (auto& v : views)
         {
-            const int w = v->preferredWidth();
+            const int w = v->preferredWidth (h - 2 * pad);
             v->setBounds (x, pad, w, h - 2 * pad);
             x += w + kArrowGap;
         }
@@ -637,6 +716,7 @@ public:
     }
 
     int numViews() const { return (int) views.size(); }
+    DeviceView* viewAt (int index) const { return juce::isPositiveAndBelow (index, (int) views.size()) ? views[(size_t) index].get() : nullptr; }
 
     void paint (juce::Graphics& g) override
     {
@@ -853,6 +933,17 @@ void DeviceChainView::setTrack (int64_t id)
 int DeviceChainView::numDeviceViews() const
 {
     return content->numViews();
+}
+
+juce::Component* DeviceChainView::deviceView (int index) const
+{
+    return content->viewAt (index);
+}
+
+EffectView* DeviceChainView::effectView (int index) const
+{
+    auto* view = content->viewAt (index);
+    return view != nullptr ? view->getEffectView() : nullptr;
 }
 
 void DeviceChainView::resized()
