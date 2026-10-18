@@ -320,6 +320,8 @@ private:
     void applyTrackProperties (TrackRuntime&, const TrackRef&);
     void applyProjectProperties();
     DeviceInstance* acquireDevice (const DeviceRef&, std::set<int64_t>& used);
+    // The automation lanes of a track or the master, with their parameters resolved (the devices must be acquired).
+    std::vector<PlaybackGraph::Track::Lane> automationOf (const TrackRef&) const;
     std::shared_ptr<const daw::engine::MidiClip> acquireClip (const ClipRef&, std::set<int64_t>& used);
     std::unique_ptr<juce::AudioProcessor> makeProcessor (const DeviceRef&);
     void startPluginLoad (const DeviceRef&);
@@ -455,6 +457,7 @@ private:
     bool logEvents = false;                                              // audio thread: the current block is logged
     bool continueSong = false; // audio thread: the next start of the transport continues where the song stopped
     std::atomic<float> masterGain { 1.0f };
+    float lastMasterGainL = 1.0f, lastMasterGainR = 1.0f; // audio thread: the master gain at the end of the last block
     std::atomic<float> tuneA4 { 440.0f }; // project tuning, given to every Prisma
     std::atomic<int64_t> selectedTrackId { -1 };
     std::atomic<uint32_t> hardwareMidiCount { 0 };

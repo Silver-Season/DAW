@@ -135,7 +135,8 @@ private:
     void recordToSlotClicked();
     void recordArrangementClicked();
     void captureClicked();
-    void showPluginScanner();
+    // The plug-in list; `scanNow` also scans the VST3 folders and the Audio Units right away.
+    void showPluginScanner (bool scanNow = false);
 
     AudioEngine& engine;
     ProjectModel& model;

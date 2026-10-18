@@ -3,6 +3,7 @@
 #include "../Settings.h"
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
+#include "../engine/PluginFolders.h"
 #include "../library/UserLibrary.h"
 #include "Dialogs.h"
 #include "Theme.h"
@@ -999,6 +1000,136 @@ private:
 };
 
 //==============================================================================
+// Plug-ins: the folders a VST3 scan looks in, and the scan itself.
+class PluginsPage final : public Page
+{
+public:
+    PluginsPage (AudioEngine& e, Settings& s, SettingsWindow::Hooks& h) : engine (e), settings (s), hooks (h)
+    {
+        for (auto* l : { &heading, &hint, &auNote, &found })
+        {
+            l->setFont (theme().uiFont (12.5f, l == &heading ? 600 : 400));
+            l->setColour (juce::Label::textColourId, l == &heading ? theme().text : theme().dimText);
+            l->setJustificationType (juce::Justification::topLeft);
+        }
+        heading.setText (Strings::settingsui::vst3Folders, juce::dontSendNotification);
+        hint.setText (Strings::settingsui::vst3FoldersHint, juce::dontSendNotification);
+        auNote.setText (Strings::settingsui::auNote, juce::dontSendNotification);
+        addButton.setButtonText (Strings::settingsui::addFolder);
+        defaultButton.setButtonText (Strings::settingsui::byDefault);
+        scanButton.setButtonText (Strings::settingsui::scanNow);
+        listButton.setButtonText (Strings::settingsui::openPluginList);
+        addButton.onClick = [this] { addFolder(); };
+        defaultButton.onClick = [this] {
+            pluginfolders::setVst3Folders (props(), engine.getFormatManager(), {});
+            refresh();
+        };
+        scanButton.onClick = [this] {
+            if (hooks.scanPluginFolders)
+                hooks.scanPluginFolders();
+        };
+        listButton.onClick = [this] {
+            if (hooks.scanPlugins)
+                hooks.scanPlugins();
+        };
+        for (auto* c : std::initializer_list<juce::Component*> { &heading, &hint, &folders, &addButton, &defaultButton, &auNote, &found, &scanButton,
+                                                                  &listButton })
+            addAndMakeVisible (c);
+        refresh();
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (20, 16);
+        heading.setBounds (r.removeFromTop (24));
+        hint.setBounds (r.removeFromTop (22));
+        auto bottom = r.removeFromBottom (30);
+        scanButton.setBounds (bottom.removeFromRight (150));
+        bottom.removeFromRight (8);
+        listButton.setBounds (bottom.removeFromRight (150));
+        found.setBounds (bottom);
+        r.removeFromBottom (10);
+        auNote.setBounds (r.removeFromBottom (40));
+        r.removeFromBottom (6);
+        auto buttons = r.removeFromBottom (30);
+        addButton.setBounds (buttons.removeFromLeft (150));
+        buttons.removeFromLeft (8);
+        defaultButton.setBounds (buttons.removeFromLeft (130));
+        r.removeFromBottom (10);
+        folders.setBounds (r);
+    }
+
+    void refresh() override
+    {
+        folders.rows().clear();
+        for (const auto& f : pluginfolders::vst3Folders (props(), engine.getFormatManager()))
+            folders.rows().add (std::make_unique<FolderRow> (*this, f));
+        folders.update();
+        found.setText (Strings::settingsui::pluginsFound (engine.getKnownPlugins().getNumTypes()), juce::dontSendNotification);
+    }
+
+private:
+    class FolderRow final : public juce::Component
+    {
+    public:
+        FolderRow (PluginsPage& o, const juce::String& p) : owner (o), path (p)
+        {
+            button.setButtonText (Strings::settingsui::remove);
+            button.onClick = [this] {
+                auto list = pluginfolders::vst3Folders (owner.props(), owner.engine.getFormatManager());
+                list.removeString (path);
+                // removing the last folder would bring the defaults back: keep the list empty-able only through "Default"
+                if (list.isEmpty())
+                    return;
+                pluginfolders::setVst3Folders (owner.props(), owner.engine.getFormatManager(), list);
+                juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<PluginsPage> (&owner)] {
+                    if (safe != nullptr)
+                        safe->refresh();
+                });
+            };
+            addAndMakeVisible (button);
+        }
+        void paint (juce::Graphics& g) override
+        {
+            const bool exists = juce::File::isAbsolutePath (path) && juce::File (path).isDirectory();
+            g.setColour (exists ? theme().text : theme().dimText);
+            g.setFont (theme().numFont (11.5f));
+            g.drawText (path, getLocalBounds().withTrimmedLeft (10).withTrimmedRight (110), juce::Justification::centredLeft, true);
+        }
+        void resized() override { button.setBounds (getLocalBounds().reduced (4, 2).removeFromRight (96)); }
+
+    private:
+        PluginsPage& owner;
+        juce::String path;
+        juce::TextButton button;
+    };
+
+    juce::PropertiesFile& props() { return settings.getPropertiesFile(); }
+
+    void addFolder()
+    {
+        chooser = std::make_unique<juce::FileChooser> (Strings::settingsui::chooseVst3Folder, juce::File ("/Library/Audio/Plug-Ins"), "", useNativeChooser());
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                              [safe = juce::Component::SafePointer<PluginsPage> (this)] (const juce::FileChooser& fc) {
+                                  if (safe == nullptr || fc.getResult() == juce::File())
+                                      return;
+                                  auto list = pluginfolders::vst3Folders (safe->props(), safe->engine.getFormatManager());
+                                  list.addIfNotAlreadyThere (fc.getResult().getFullPathName());
+                                  pluginfolders::setVst3Folders (safe->props(), safe->engine.getFormatManager(), list);
+                                  safe->refresh();
+                              });
+    }
+
+    AudioEngine& engine;
+    Settings& settings;
+    SettingsWindow::Hooks& hooks;
+    juce::Label heading, hint, auNote, found;
+    juce::TextButton addButton, defaultButton, scanButton, listButton;
+    RowList folders;
+    std::unique_ptr<juce::FileChooser> chooser;
+};
+
+//==============================================================================
 class SettingsWindow::Content final : public juce::Component, private juce::ChangeListener
 {
 public:
@@ -1009,9 +1140,10 @@ public:
         pages[recording] = std::make_unique<RecordingPage> (e, s);
         pages[appearance] = std::make_unique<AppearancePage> (s);
         pages[library] = std::make_unique<LibraryPage> (s, h);
-        const juce::String names[5] { Strings::settingsui::tabSound, Strings::settingsui::tabMidi, Strings::settingsui::tabRecording,
-                                      Strings::settingsui::tabAppearance, Strings::settingsui::tabLibrary };
-        for (int i = 0; i < 5; ++i)
+        pages[plugins] = std::make_unique<PluginsPage> (e, s, h);
+        const juce::String names[kNumTabs] { Strings::settingsui::tabSound, Strings::settingsui::tabMidi, Strings::settingsui::tabRecording,
+                                             Strings::settingsui::tabAppearance, Strings::settingsui::tabLibrary, Strings::settingsui::tabPlugins };
+        for (int i = 0; i < kNumTabs; ++i)
         {
             addChildComponent (*pages[(size_t) i]);
             tabs[(size_t) i].setButtonText (names[i]);
@@ -1029,7 +1161,7 @@ public:
     void show (Tab t)
     {
         current = t;
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < kNumTabs; ++i)
         {
             pages[(size_t) i]->setVisible (i == (int) t);
             tabs[(size_t) i].setToggleState (i == (int) t, juce::dontSendNotification);
@@ -1063,6 +1195,7 @@ public:
 
 private:
     static constexpr int kTabWidth = 170;
+    static constexpr int kNumTabs = 6;
     void changeListenerCallback (juce::ChangeBroadcaster*) override
     {
         // a new theme repaints the pages; the colours of labels set at construction are refreshed by rebuilding
@@ -1071,8 +1204,8 @@ private:
         repaint();
     }
 
-    std::array<std::unique_ptr<Page>, 5> pages;
-    std::array<juce::TextButton, 5> tabs;
+    std::array<std::unique_ptr<Page>, kNumTabs> pages;
+    std::array<juce::TextButton, kNumTabs> tabs;
     Tab current = sound;
 };
 

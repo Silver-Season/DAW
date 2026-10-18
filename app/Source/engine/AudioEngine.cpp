@@ -1600,10 +1600,40 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
     for (const auto& t : graph->tracks) // the return tracks come last
         renderTrack (t, block, spb, numSamples, killNotes, anySolo, anyArmed);
 
+    // Master automation: parameters before the chain runs, volume and pan ramp across the block like a track's.
+    float masterVol = masterGain.load(), masterPan = 0.0f;
+    if (! graph->masterAutomation.empty() && transport.isPlaying() && block.numWindows > 0)
+    {
+        const double songBeat = block.windows[0].startBeat;
+        for (const auto& lane : graph->masterAutomation)
+        {
+            const float v = daw::engine::automationValueAt (lane.points, songBeat);
+            switch (lane.kind)
+            {
+                case PlaybackGraph::Track::Lane::volume:
+                {
+                    const float db = v * 66.0f - 60.0f;
+                    masterVol = db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db);
+                    break;
+                }
+                case PlaybackGraph::Track::Lane::pan: masterPan = juce::jlimit (-1.0f, 1.0f, v * 2.0f - 1.0f); break;
+                case PlaybackGraph::Track::Lane::parameter:
+                    if (std::abs (lane.param->getValue() - v) > 1.0e-5f)
+                        lane.param->setValue (v);
+                    break;
+            }
+        }
+    }
+
     // Master chain works on the first two channels of the (wider) master buffer
     processChain (graph->masterChain, master, numSamples, masterMidi, masterFxMidi, false);
 
-    master.applyGain (masterGain.load());
+    // The master pan is a balance: centre leaves both sides as they are.
+    const float masterL = masterVol * juce::jmin (1.0f, 1.0f - masterPan), masterR = masterVol * juce::jmin (1.0f, 1.0f + masterPan);
+    master.applyGainRamp (0, 0, numSamples, lastMasterGainL, masterL);
+    master.applyGainRamp (1, 0, numSamples, lastMasterGainR, masterR);
+    lastMasterGainL = masterL;
+    lastMasterGainR = masterR;
     // The spectrum of the top bar listens here, after the master gain and before the click.
     {
         uint32_t w = analysisWrite.load (std::memory_order_relaxed);

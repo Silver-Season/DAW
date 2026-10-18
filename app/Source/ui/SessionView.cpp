@@ -1257,6 +1257,8 @@ public:
 
     void updateMeter() { meter.push (view.engine.masterMeterL.exchange (0.0f), view.engine.masterMeterR.exchange (0.0f)); }
 
+    void mouseDown (const juce::MouseEvent&) override { view.commands.selectTrack (ProjectModel::kMasterTrackId); }
+
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
@@ -1380,6 +1382,7 @@ void SessionView::structureChanged (const juce::ValueTree& parent)
 
 void SessionView::changeListenerCallback (juce::ChangeBroadcaster*)
 {
+    repaint (masterHeaderArea);
     headers->repaint();
     grid->repaint();
     scenes->repaint();
@@ -1473,6 +1476,13 @@ void SessionView::scrollBarMoved (juce::ScrollBar* bar, double start)
     clampScroll();
     mixer->layoutStrips();
     repaintViews();
+}
+
+void SessionView::mouseDown (const juce::MouseEvent& e)
+{
+    // the master header selects the master: its chain opens in the bottom panel
+    if (masterHeaderArea.contains (e.getPosition()))
+        commands.selectTrack (ProjectModel::kMasterTrackId);
 }
 
 void SessionView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
@@ -1573,6 +1583,8 @@ void SessionView::paint (juce::Graphics& g)
 
     // the master column header
     fillCell (g, masterHeaderArea.toFloat(), t.panel2);
+    if (model.selectedTrack() == ProjectModel::kMasterTrackId)
+        strokeCell (g, masterHeaderArea.toFloat(), t.text, 2.0f);
     g.setColour (t.text);
     g.setFont (t.uiFont (12.5f, 600));
     g.drawText (Strings::masterName, masterHeaderArea.reduced (9, 0), juce::Justification::centredLeft, true);

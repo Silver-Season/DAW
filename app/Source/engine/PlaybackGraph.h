@@ -176,6 +176,8 @@ struct PlaybackGraph
     std::vector<Track> tracks;           // normal tracks first, then the return tracks
     std::array<TrackRuntime*, 2> returns {}; // return A and B (the first two return tracks), null if missing
     std::vector<DeviceInstance*> masterChain;
+    // Automation of the master (volume, pan, its effects), applied while the transport plays.
+    std::vector<Track::Lane> masterAutomation;
 
 private:
     static std::atomic<int>& liveGraphs()

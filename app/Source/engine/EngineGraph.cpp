@@ -467,6 +467,37 @@ void AudioEngine::finishPluginLoad (int64_t deviceId, uint64_t epoch, std::uniqu
     registerProcessor (deviceId, std::move (instance));
 }
 
+std::vector<PlaybackGraph::Track::Lane> AudioEngine::automationOf (const TrackRef& track) const
+{
+    std::vector<PlaybackGraph::Track::Lane> result;
+    for (const auto& lane : automation::lanes (track))
+    {
+        PlaybackGraph::Track::Lane l;
+        const auto target = lane.getProperty (ids::target).toString();
+        int64_t deviceId = -1;
+        int paramIndex = -1;
+        if (target == automation::volumeTarget)
+            l.kind = PlaybackGraph::Track::Lane::volume;
+        else if (target == automation::panTarget)
+            l.kind = PlaybackGraph::Track::Lane::pan;
+        else if (automation::parseDeviceTarget (target, deviceId, paramIndex))
+        {
+            l.kind = PlaybackGraph::Track::Lane::parameter;
+            if (const auto it = devices.find (deviceId); it != devices.end() && it->second->processor != nullptr)
+                if (const auto& params = it->second->processor->getParameters(); paramIndex >= 0 && paramIndex < params.size())
+                    l.param = params[paramIndex];
+            if (l.param == nullptr)
+                continue;
+        }
+        else
+            continue;
+        l.points = automation::points (lane);
+        if (! l.points.empty())
+            result.push_back (std::move (l));
+    }
+    return result;
+}
+
 DeviceInstance* AudioEngine::acquireDevice (const DeviceRef& d, std::set<int64_t>& used)
 {
     const auto id = d.id();
@@ -690,31 +721,7 @@ void AudioEngine::rebuildGraph()
         }
         gt.arrangementSignature = gt.arrangement.empty() ? 0 : signature.h;
         gt.isReturn = track.isReturn();
-        for (const auto& lane : automation::lanes (track))
-        {
-            PlaybackGraph::Track::Lane l;
-            const auto target = lane.getProperty (ids::target).toString();
-            int64_t deviceId = -1;
-            int paramIndex = -1;
-            if (target == automation::volumeTarget)
-                l.kind = PlaybackGraph::Track::Lane::volume;
-            else if (target == automation::panTarget)
-                l.kind = PlaybackGraph::Track::Lane::pan;
-            else if (automation::parseDeviceTarget (target, deviceId, paramIndex))
-            {
-                l.kind = PlaybackGraph::Track::Lane::parameter;
-                if (const auto it = devices.find (deviceId); it != devices.end() && it->second->processor != nullptr)
-                    if (const auto& params = it->second->processor->getParameters(); paramIndex >= 0 && paramIndex < params.size())
-                        l.param = params[paramIndex];
-                if (l.param == nullptr)
-                    continue;
-            }
-            else
-                continue;
-            l.points = automation::points (lane);
-            if (! l.points.empty())
-                gt.automation.push_back (std::move (l));
-        }
+        gt.automation = automationOf (track);
         graph->tracks.push_back (std::move (gt));
     }
     // Sidechain sources, once every track has its runtime.
@@ -742,6 +749,7 @@ void AudioEngine::rebuildGraph()
 
     for (const auto& device : DeviceRef::childrenOf (model->masterDevicesNode()))
         graph->masterChain.push_back (acquireDevice (device, usedDevices));
+    graph->masterAutomation = automationOf (model->masterTrack());
 
     // What disappeared from the model is retired, not deleted: the audio thread may still be using the
     // previous graph, which contains it.

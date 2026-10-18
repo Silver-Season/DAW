@@ -58,6 +58,7 @@ if(DAW_BUILD_JUCE)
     # Sources shared by the app and the engine tests: model, settings, engine, theme, built-in Prisma.
     set(DAW_APP_SHARED_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Settings.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PluginFolders.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Language.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
@@ -156,6 +157,7 @@ if(DAW_BUILD_JUCE)
             tests/SessionAudioUiTests.cpp
             tests/AudioRecordingTests.cpp
             tests/WarpTests.cpp
+            tests/MixTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
