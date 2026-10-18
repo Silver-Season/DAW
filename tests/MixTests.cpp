@@ -5,8 +5,65 @@
 #include "../app/Source/browser/BrowserActions.h"
 #include "../app/Source/library/UserLibrary.h"
 #include "../app/Source/model/Automation.h"
+#include "../app/Source/engine/DrumKitProcessor.h"
+#include "daw/drums/DrumSynth.h"
+#include "daw/synth/PrismaParams.h"
+#include <cmath>
 
 using namespace tests;
+namespace
+{
+struct Lvl { double peak = 0, rms = 0; };
+Lvl renderProc (juce::AudioProcessor& p, const std::vector<std::pair<int,int>>& notes, double seconds, int noteLenSamples)
+{
+    const double rate = 48000.0; const int block = 512;
+    p.setPlayConfigDetails (0, 2, rate, block);
+    p.prepareToPlay (rate, block);
+    juce::AudioBuffer<float> buf (2, block);
+    const int total = (int) (seconds * rate);
+    double sum = 0; double peak = 0; long n = 0;
+    for (int s = 0; s < total; s += block)
+    {
+        juce::MidiBuffer midi;
+        for (auto [at, note] : notes)
+        {
+            if (at >= s && at < s + block) midi.addEvent (juce::MidiMessage::noteOn (1, note, (juce::uint8) 100), at - s);
+            if (at + noteLenSamples >= s && at + noteLenSamples < s + block) midi.addEvent (juce::MidiMessage::noteOff (1, note), at + noteLenSamples - s);
+        }
+        buf.clear();
+        p.processBlock (buf, midi);
+        for (int c = 0; c < 2; ++c) for (int i = 0; i < block; ++i) { const double v = buf.getSample (c, i); sum += v * v; peak = std::max (peak, std::abs (v)); ++n; }
+    }
+    return { 20 * std::log10 (peak + 1e-12), 10 * std::log10 (sum / n + 1e-20) };
+}
+}
+void testDrumLevels()
+{
+    std::printf ("[mix] a factory drum groove peaks near -6 dBFS with the faders at 0 dB, in the range of the synth presets\n");
+    for (const auto& kit : daw::drums::factoryKits())
+    {
+        DrumKitProcessor d;
+        juce::MemoryBlock mb;
+        mb.fromBase64Encoding (DrumKitProcessor::factoryStateBase64 (kit.name));
+        d.setStateInformation (mb.getData(), (int) mb.getSize());
+        std::vector<std::pair<int, int>> groove; // kick on every beat, snare on 2 and 4, eighth hats, at 120 BPM
+        for (int b = 0; b < 8; ++b)
+        {
+            groove.push_back ({ b * 24000, 36 });
+            if (b % 2 == 1)
+                groove.push_back ({ b * 24000, 38 });
+            groove.push_back ({ b * 24000, 42 });
+            groove.push_back ({ b * 24000 + 12000, 42 });
+        }
+        const auto l = renderProc (d, groove, 4.0, 2000);
+        check (l.peak < -3.0 && l.peak > -10.0, juce::String (kit.name) + ": groove peak " + juce::String (l.peak, 1) + " dBFS");
+        check (l.rms > -26.0 && l.rms < -16.0, juce::String (kit.name) + ": groove RMS " + juce::String (l.rms, 1) + " dB");
+    }
+    PrismaProcessor p;
+    p.setCurrentProgram (0);
+    const auto chord = renderProc (p, { { 0, 60 }, { 0, 64 }, { 0, 67 } }, 3.0, 96000);
+    check (chord.rms > -30.0 && chord.rms < -14.0, "the first synth preset's chord sits in the same range: " + juce::String (chord.rms, 1) + " dB RMS");
+}
 
 namespace
 {
@@ -150,6 +207,7 @@ namespace tests
 {
 void runMixTests()
 {
+    testDrumLevels();
     testMasterAsTrack();
     testMasterEffectDrop();
     testMasterAutomation();

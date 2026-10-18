@@ -18,6 +18,9 @@ public:
     DrumKitProcessor();
     ~DrumKitProcessor() override;
 
+    // The output trim of the machine: -10 dB, so a factory groove peaks near -6 dBFS and sits with the synth presets.
+    static constexpr float kOutputGain = 0.31622777f;
+
     // Message thread
     void loadKit (const daw::drums::KitState&);
     const daw::drums::KitState& getKit() const { return kit; }

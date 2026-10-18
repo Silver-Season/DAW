@@ -463,8 +463,8 @@ public:
 
         for (const auto& v : visible)
         {
-            if (! v.track.isValid())
-                continue;
+            if (! v.track.isValid() || v.track.isReturn())
+                continue; // a return track has no clips, so its column has no slots
             auto* rt = view.engine.findRuntime (v.track.id());
             const int playingScene = rt != nullptr ? rt->playingSlot.load() : -1;
             const int queuedScene = rt != nullptr ? rt->queuedSlot.load() : -1;
@@ -609,6 +609,11 @@ public:
             return;
         }
         const auto id = view.columnTrack[(size_t) column];
+        if (view.model.findTrack (id).isReturn())
+        {
+            view.commands.selectTrack (id);
+            return;
+        }
         view.commands.selectSlot (id, scene);
         pressColumn = column;
         pressScene = scene;
@@ -654,7 +659,7 @@ public:
         dragScene = pressScene;
         dragPosition = e.getPosition();
         int column = -1, scene = -1;
-        if (hit (e.getPosition(), column, scene) && scene != stopRow)
+        if (hit (e.getPosition(), column, scene) && scene != stopRow && ! view.model.findTrack (view.columnTrack[(size_t) column]).isReturn())
         {
             dropColumn = column;
             dropScene = scene;
@@ -703,6 +708,8 @@ public:
         if (e.mods.isPopupMenu() || ! hit (e.getPosition(), column, scene) || scene == stopRow)
             return;
         const auto id = view.columnTrack[(size_t) column];
+        if (view.model.findTrack (id).isReturn())
+            return;
         if (view.model.findTrack (id).clipAt (scene).isValid())
         {
             // double-click on a clip: edit it
