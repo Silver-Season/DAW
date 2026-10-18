@@ -243,6 +243,11 @@ public:
 
     std::atomic<float> masterMeterL { 0.0f }, masterMeterR { 0.0f };
 
+    // The last kAnalysisSize samples of the master (mono), for the spectrum of the top bar. The audio thread overwrites
+    // the ring; a reader copies the newest `n` samples (a block may tear at the edge, which a display does not mind).
+    static constexpr int kAnalysisSize = 8192;
+    void copyAnalysis (float* dest, int n) const;
+
     //==========================================================================
     // Pre-listening of Prisma presets from the browser (message thread). It plays into the master after the
     // master chain, with the volume of the settings.
@@ -460,6 +465,8 @@ private:
     int blockNumInputs = 0;
     int64_t blockStartSample = 0;              // audio thread: engine sample of the block's first frame
     juce::AudioBuffer<float> lastMaster;       // audio thread: the master of the previous block, the "Resample" input
+    std::array<float, kAnalysisSize> analysis {};
+    std::atomic<uint32_t> analysisWrite { 0 };
     const PlaybackGraph* currentGraph = nullptr; // audio thread: the graph of the block being rendered (sends find their returns)
     std::atomic<int> audioRecordLatency { 0 }, driverRoundTrip { 0 };
     std::atomic<double> audioCorrectionMs { 0.0 };

@@ -993,6 +993,7 @@ inline const juce::String fader = make (utf8 ("Громкость"), utf8 ("Тя
 inline const juce::String volumeReadout = make (utf8 ("Громкость в дБ"), utf8 ("Двойной щелчок открывает ввод числа: Enter подтверждает, Esc отменяет."));
 inline const juce::String panKnob = make (utf8 ("Панорама"), utf8 ("Положение в стерео. Двойной щелчок возвращает в центр, Shift при вращении: точнее."));
 inline const juce::String audioFollowTempo = make (utf8 ("Под темп проекта"), utf8 ("Луп с известным темпом играет в темпе проекта: быстрее или медленнее, высота меняется вместе со скоростью (как Re-Pitch)."));
+inline const juce::String spectrum = make (utf8 ("Спектр мастера"), utf8 ("Что звучит на выходе: от баса слева до воздуха справа, наклон +4,5 дБ на октаву, как слышит ухо. Чёрточки показывают недавние пики."));
 inline const juce::String sendKnob = make (utf8 ("Посыл"), utf8 ("Отправляет часть звука после фейдера на возвратную дорожку A (ревер) или B (дилей). Первое касание создаёт возвратную дорожку, если её нет. Двойной щелчок выключает."));
 inline const juce::String cueKnob = make (utf8 ("Прослушивание"), utf8 ("Громкость предпрослушивания. ") + soon6);
 inline const juce::String meter = make (utf8 ("Уровень"), utf8 ("Пиковый уровень сигнала дорожки."));

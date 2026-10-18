@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Spectrum.h"
+
 #include "Controls.h"
 
 #include <vector>
@@ -64,7 +66,8 @@ private:
 
     NumberField tempo;
     std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, punchIn, punchOut, follow, backToArrangement, capture, version, scaleButton;
-    std::unique_ptr<FakeSlider> morph;
+    std::unique_ptr<FakeSlider> morph; // the A <-> B morph waits for snapshots; the spectrum has its place meanwhile
+    std::unique_ptr<Spectrum> spectrum;
     std::unique_ptr<Tabs> tabs;
     std::unique_ptr<Lamp> midiLamp, keysLamp;
     std::unique_ptr<CpuMeter> cpu;

@@ -450,6 +450,8 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     };
 
     morph = std::make_unique<FakeSlider>();
+    spectrum = std::make_unique<Spectrum> (engine);
+    addChildComponent (*spectrum);
     tabs = std::make_unique<Tabs>();
     tabs->onSwitch = [this] (bool arrangement) {
         if (onViewSwitched)
@@ -508,6 +510,7 @@ void TopBar::setKeysOctave (const juce::String& octave)
 
 void TopBar::tick()
 {
+    spectrum->tick();
     const bool playing = engine.isPlaying();
     play->setOn (playing);
 
@@ -752,6 +755,7 @@ void TopBar::resized()
     ribbonStripArea = {};
     capture->setVisible (false);
     morph->setVisible (false);
+    spectrum->setVisible (false);
     if (r.getWidth() >= ribbonWidth)
     {
         ribbonArea = juce::Rectangle<int> (ribbonWidth - 4, h).withCentre ({ r.getX() + (ribbonWidth - 4) / 2, cy });
@@ -759,11 +763,13 @@ void TopBar::resized()
         capture->setVisible (true);
         capture->setBounds (juce::Rectangle<int> (82, 24).withCentre ({ ribbonArea.getRight() - 4 - 41, cy }));
         r.removeFromLeft (ribbonWidth - 4 + gap);
-        if (r.getWidth() >= morphWidth)
-        {
-            morph->setVisible (true);
-            morph->setBounds (juce::Rectangle<int> (morphWidth, 22).withCentre ({ r.getX() + morphWidth / 2, cy }));
-        }
+    }
+    // The spectrum takes whatever is left in the middle (it gives way to the ribbon first).
+    if (r.getWidth() >= juce::jmin (morphWidth, 120) + gap)
+    {
+        const int w = juce::jmin (r.getWidth() - gap, 260);
+        spectrum->setVisible (true);
+        spectrum->setBounds (juce::Rectangle<int> (w, 34).withCentre ({ r.getX() + w / 2, cy }));
     }
 }
 } // namespace ui

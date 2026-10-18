@@ -307,6 +307,14 @@ void AudioEngine::updateRecordCompensation()
     recordCompensation = autoCompensation.load() + juce::roundToInt (correctionMs.load() * sampleRate.load() / 1000.0);
 }
 
+void AudioEngine::copyAnalysis (float* dest, int n) const
+{
+    n = juce::jlimit (0, kAnalysisSize, n);
+    const uint32_t end = analysisWrite.load (std::memory_order_acquire);
+    for (int i = 0; i < n; ++i)
+        dest[i] = analysis[(size_t) ((end - (uint32_t) n + (uint32_t) i) % (uint32_t) kAnalysisSize)];
+}
+
 void AudioEngine::setAudioLatencyCorrectionMs (double ms)
 {
     audioCorrectionMs = std::round (juce::jlimit (-100.0, 100.0, ms) * 10.0) / 10.0;
@@ -1585,6 +1593,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
     processChain (graph->masterChain, master, numSamples, masterMidi, masterFxMidi, false);
 
     master.applyGain (masterGain.load());
+    // The spectrum of the top bar listens here, after the master gain and before the click.
+    {
+        uint32_t w = analysisWrite.load (std::memory_order_relaxed);
+        const float* l = master.getReadPointer (0);
+        const float* r = master.getReadPointer (1);
+        for (int i = 0; i < numSamples; ++i)
+            analysis[(size_t) (w++ % (uint32_t) kAnalysisSize)] = 0.5f * (l[i] + r[i]);
+        analysisWrite.store (w, std::memory_order_release);
+    }
     // The "Resample" input of the next block: the master as it leaves, without the click.
     lastMaster.copyFrom (0, 0, master, 0, 0, numSamples);
     lastMaster.copyFrom (1, 0, master, 1, 0, numSamples);

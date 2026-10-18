@@ -83,6 +83,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/InputMenus.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/DrumPads.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ExportWindow.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Spectrum.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/AudioClipEditor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRoll.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollGrid.cpp
