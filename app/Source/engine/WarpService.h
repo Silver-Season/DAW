@@ -42,6 +42,8 @@ public:
 
     // Tests and export: wait until every queued job has finished.
     void waitForJobs();
+    // Export: stretch on the calling thread, so the copy is there in the same graph build (nothing plays in real time).
+    void setRenderInline (bool v) { renderInline = v; }
 
 private:
     struct Key
@@ -65,7 +67,10 @@ private:
         bool used = true;
     };
 
+    static std::shared_ptr<daw::engine::AudioSource> render (const daw::engine::AudioSource& original, double timeRatio, const juce::String& mode);
+
     juce::AudioFormatManager& formats;
+    bool renderInline = false;
     juce::ThreadPool pool { 2 };
     std::map<Key, Entry> cache;
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);

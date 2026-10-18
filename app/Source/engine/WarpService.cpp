@@ -75,6 +75,13 @@ std::shared_ptr<daw::engine::AudioSource> WarpService::stretched (const std::sha
         it->second.used = true;
         return it->second.result;
     }
+    if (renderInline)
+    {
+        auto& entry = cache[key];
+        entry.original = original;
+        entry.result = render (*original, timeRatio, mode);
+        return entry.result;
+    }
     // One render per file at a time: while the tempo is being dragged, only the last value gets rendered (the finished
     // render triggers a rebuild, which asks again for the then current ratio).
     for (const auto& [k, e] : cache)
@@ -86,18 +93,7 @@ std::shared_ptr<daw::engine::AudioSource> WarpService::stretched (const std::sha
 
     auto flag = alive;
     pool.addJob ([this, key, original, timeRatio, mode, flag] {
-        std::vector<std::vector<float>> in ((size_t) original->numChannels);
-        for (int c = 0; c < original->numChannels; ++c)
-            in[(size_t) c].assign (original->channel (c), original->channel (c) + original->length);
-        const auto out = daw::dsp::stretchOffline (in, original->sampleRate, timeRatio, modeOf (mode));
-        const auto frames = out.empty() ? (int64_t) 0 : (int64_t) out[0].size();
-        auto copy = std::make_shared<daw::engine::AudioSource> (original->numChannels, frames, original->sampleRate);
-        for (int c = 0; c < original->numChannels && frames > 0; ++c)
-        {
-            float* dest = c == 0 ? copy->left.get() : copy->right.get();
-            std::copy (out[(size_t) c].begin(), out[(size_t) c].end(), dest);
-        }
-        copy->publish (frames);
+        auto copy = render (*original, timeRatio, mode);
         juce::MessageManager::callAsync ([this, key, copy, flag] {
             if (! *flag)
                 return;
@@ -110,6 +106,23 @@ std::shared_ptr<daw::engine::AudioSource> WarpService::stretched (const std::sha
         });
     });
     return nullptr;
+}
+
+std::shared_ptr<daw::engine::AudioSource> WarpService::render (const daw::engine::AudioSource& original, double timeRatio, const juce::String& mode)
+{
+    std::vector<std::vector<float>> in ((size_t) original.numChannels);
+    for (int c = 0; c < original.numChannels; ++c)
+        in[(size_t) c].assign (original.channel (c), original.channel (c) + original.length);
+    const auto out = daw::dsp::stretchOffline (in, original.sampleRate, timeRatio, modeOf (mode));
+    const auto frames = out.empty() ? (int64_t) 0 : (int64_t) out[0].size();
+    auto copy = std::make_shared<daw::engine::AudioSource> (original.numChannels, frames, original.sampleRate);
+    for (int c = 0; c < original.numChannels && frames > 0; ++c)
+    {
+        float* dest = c == 0 ? copy->left.get() : copy->right.get();
+        std::copy (out[(size_t) c].begin(), out[(size_t) c].end(), dest);
+    }
+    copy->publish (frames);
+    return copy;
 }
 
 void WarpService::beginUse()

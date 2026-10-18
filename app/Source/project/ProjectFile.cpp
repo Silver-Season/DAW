@@ -24,6 +24,25 @@ const std::vector<Migration>& migrations()
         [] (juce::ValueTree& tree) {
             if (! tree.getChildWithName (ids::AUDIOFILES).isValid())
                 tree.appendChild (juce::ValueTree (ids::AUDIOFILES), nullptr);
+        },
+        // 3 -> 4 (stage 7): a clip that follows the project tempo keeps the tempo of its audio itself (`originalTempo`),
+        // and says how it is stretched (`warpMode`). Older clips took the tempo from their FILE.
+        [] (juce::ValueTree& tree) {
+            const auto pool = tree.getChildWithName (ids::AUDIOFILES);
+            std::function<void (juce::ValueTree)> walk = [&] (juce::ValueTree node) {
+                if (node.hasType (ids::CLIP) && (bool) node.getProperty (ids::warp, false) && ! node.hasProperty (ids::originalTempo))
+                {
+                    const auto file = AudioFileRef (pool.getChildWithProperty (ids::id, node.getProperty (ids::file, -1)));
+                    if (file.isValid() && file.tempo() > 0.0)
+                    {
+                        node.setProperty (ids::originalTempo, file.tempo(), nullptr);
+                        node.setProperty (ids::warpMode, ProjectModel::warpModeFor (file), nullptr);
+                    }
+                }
+                for (auto child : node)
+                    walk (child);
+            };
+            walk (tree.getChildWithName (ids::TRACKS));
         }
     };
     return steps;

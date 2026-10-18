@@ -50,6 +50,7 @@ OfflineRenderer::OfflineRenderer (Settings& s, const ProjectModel& source, Audio
     engine = std::make_unique<AudioEngine> (settings, false);
     engine->setProjectFolder (live.getProjectFolder());
     engine->setModel (model.get());
+    engine->getWarp().setRenderInline (true);
 }
 
 OfflineRenderer::~OfflineRenderer()
@@ -92,6 +93,7 @@ OfflineRenderer::Result OfflineRenderer::renderNow()
     engine->rebuildGraphIfNeeded();
     engine->audioDeviceAboutToStart (&device);
     engine->getAudioPool().waitForLoads();
+    engine->rebuildGraph(); // with every file loaded, warped clips get their stretched copies (rendered here, see WarpService)
     for (int i = 0; i < model->numTracks(); ++i)
         for (const auto& d : model->trackAt (i).devices())
             if (auto* p = engine->findProcessor (d.id()))

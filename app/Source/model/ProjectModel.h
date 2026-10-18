@@ -10,7 +10,7 @@
 class ProjectModel
 {
 public:
-    static constexpr int kSchemaVersion = 3; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3); 3: AUDIOFILES (stage 5)
+    static constexpr int kSchemaVersion = 4; // 2: ARRANGEMENT clips, markers, arrangement loop (stage 3); 3: AUDIOFILES (stage 5); 4: clip warp tempo and mode (stage 7)
     static constexpr int kMaxUndoTransactions = 500;
 
     juce::ValueTree root;
