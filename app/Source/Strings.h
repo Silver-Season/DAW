@@ -604,6 +604,7 @@ inline juce::String choice (const juce::String& c)
 {
     static const std::map<juce::String, const char*> names {
         { "Off", "Выкл" }, { "On", "Вкл" }, { "Stereo", "Стерео" }, { "Left/Right", "Лев./Прав." }, { "Mid/Side", "Mid/Side" }, { "Both", "Оба" },
+        { "Left/Mid", "L / Mid" }, { "Right/Side", "R / Side" }, { "Peak", "Пик" },
         { "Low cut 6", "Срез НЧ 6" }, { "Low cut 12", "Срез НЧ 12" }, { "Low cut 24", "Срез НЧ 24" }, { "Low cut 48", "Срез НЧ 48" },
         { "Low shelf", "Полка НЧ" }, { "Bell", "Колокол" }, { "Notch", "Режекция" }, { "High shelf", "Полка ВЧ" }, { "High cut 6", "Срез ВЧ 6" },
         { "High cut 12", "Срез ВЧ 12" }, { "High cut 24", "Срез ВЧ 24" }, { "High cut 48", "Срез ВЧ 48" }, { "Sine", "Синус" },
@@ -636,6 +637,69 @@ inline juce::String categoryName (const juce::String& category)
     return it != names.end() ? utf8 (it->second) : category;
 }
 inline const juce::String gainReduction = utf8 ("Подавление");
+
+// Captions of the effect devices' own controls (ui/EffectViews): short enough for a knob cell, full words where they fit.
+inline juce::String caption (const juce::String& id)
+{
+    static const std::map<juce::String, const char*> names {
+        { "threshold", "Порог" }, { "ratio", "Ratio" }, { "attack", "Атака" }, { "release", "Релиз" }, { "knee", "Колено" },
+        { "makeup", "Makeup" }, { "lookahead", "Упрежд." }, { "scHpf", "ФВЧ кл." }, { "hysteresis", "Гистерез." }, { "hold", "Удерж." },
+        { "floor", "Глубина" }, { "ceiling", "Потолок" }, { "gain", "Усиление" }, { "size", "Размер" }, { "decay", "Спад" },
+        { "predelay", "Предзад." }, { "width", "Ширина" }, { "damping", "Демпф." }, { "lowCut", "Срез НЧ" }, { "diffusion", "Диффузия" },
+        { "modulation", "Модуляц." }, { "timeL", "L" }, { "timeR", "R" }, { "feedback", "Обр. связь" }, { "hp", "ФВЧ" }, { "lp", "ФНЧ" },
+        { "modRate", "Частота" }, { "modDepth", "Глубина" }, { "ducking", "Дакинг" }, { "drive", "Драйв" }, { "tone", "Тон" },
+        { "bias", "Смещение" }, { "input", "Вход" }, { "bits", "Биты" }, { "rate", "Частота" }, { "freq", "Частота" },
+        { "resonance", "Резонанс" }, { "lfoRate", "Частота" }, { "lfoDepth", "LFO" }, { "envDepth", "Огибающ." },
+        { "envAttack", "Атака" }, { "envRelease", "Релиз" }, { "depth", "Глубина" }, { "delay", "Задержка" }, { "phase", "Фаза" },
+        { "center", "Центр" }, { "offset", "Сдвиг" }, { "mix", "Микс" }, { "output", "Выход" },
+        // choices and switches
+        { "autoRelease", "Авторелиз" }, { "autoMakeup", "Авто-makeup" }, { "detector", "Детектор" }, { "scListen", "Слушать" },
+        { "truePeak", "True peak" }, { "freeze", "Заморозка" }, { "predelaySync", "Синхр." }, { "sync", "Синхр." },
+        { "lfoSync", "Синхр." }, { "link", "L = R" }, { "pingPong", "Пинг-понг" }, { "mode", "Режим" }, { "dither", "Дизер" },
+        { "type", "Тип" }, { "lfoShape", "Форма" }, { "shape", "Форма" }, { "voices", "Голоса" }, { "stages", "Ступени" },
+        { "div", "Доля" }, { "lfoDiv", "Доля" }, { "divL", "L" }, { "divR", "R" },
+    };
+    const auto it = names.find (id);
+    return it != names.end() ? utf8 (it->second) : id;
+}
+
+// Titles of the groups of an expanded effect.
+namespace groups
+{
+inline const juce::String dynamics = utf8 ("Сжатие");
+inline const juce::String gate = utf8 ("Порог");
+inline const juce::String limiter = utf8 ("Лимитер");
+inline const juce::String time = utf8 ("Время");
+inline const juce::String output = utf8 ("Выход");
+inline const juce::String sidechain = utf8 ("Сайдчейн");
+inline const juce::String space = utf8 ("Пространство");
+inline const juce::String tone = utf8 ("Тон");
+inline const juce::String echo = utf8 ("Повторы");
+inline const juce::String modulation = utf8 ("Модуляция");
+inline const juce::String drive = utf8 ("Драйв");
+inline const juce::String crush = utf8 ("Биткрашер");
+inline const juce::String filter = utf8 ("Фильтр");
+inline const juce::String lfo = utf8 ("LFO");
+inline const juce::String envelope = utf8 ("Огибающая");
+inline const juce::String sound = utf8 ("Звук");
+inline const juce::String common = utf8 ("Общее");
+inline const juce::String other = utf8 ("Прочее");
+inline juce::String band (int number) { return utf8 ("Полоса ") + juce::String (number); }
+} // namespace groups
+
+inline const juce::String gr = utf8 ("GR");
+inline juce::String bands (int n)
+{
+    const int lastTwo = n % 100, last = n % 10;
+    const char* word = (lastTwo >= 11 && lastTwo <= 14) ? "полос" : (last == 1 ? "полоса" : (last >= 2 && last <= 4 ? "полосы" : "полос"));
+    return juce::String (n) + " " + utf8 (word);
+}
+inline juce::String seconds (float s) { return juce::String (s, s < 10.0f ? 1 : 0).replaceCharacter ('.', ',') + utf8 (" с"); }
+inline juce::String decibels (float db) { return juce::String (db, 1).replaceCharacter ('.', ',').replace ("-", utf8 ("−")) + utf8 (" дБ"); }
+inline const juce::String channelL = "L";
+inline const juce::String channelR = "R";
+inline const juce::String expand = utf8 ("Развернуть");
+inline const juce::String collapse = utf8 ("Свернуть до главных");
 } // namespace fx
 
 // Inputs and monitoring of a track (docs/spec/05-audio-recording.md, task 5.3)
@@ -1025,6 +1089,13 @@ inline const juce::String deviceFold = make (utf8 ("Свернуть"), utf8 ("�
 inline const juce::String deviceOpen = make (utf8 ("Открыть в окне"), utf8 ("Полный редактор устройства в отдельном окне."));
 inline const juce::String deviceClose = make (utf8 ("Удалить устройство"), utf8 ("Убирает устройство из цепочки. Cmd+Z возвращает."));
 inline const juce::String deviceHeader = make (utf8 ("Заголовок устройства"), utf8 ("Тяните, чтобы переставить устройство. Delete удаляет выделенное."));
+inline const juce::String deviceExpand = make (utf8 ("Развернуть устройство"), utf8 ("Показывает все параметры эффекта прямо в цепочке, по группам. Ещё щелчок возвращает главные."));
+inline const juce::String fxChoice = make (utf8 ("Выбор"), utf8 ("Щелчок открывает список вариантов."));
+inline const juce::String fxToggle = make (utf8 ("Переключатель"), utf8 ("Щелчок включает и выключает."));
+inline const juce::String fxValue = make (utf8 ("Значение"), utf8 ("Тяните вверх и вниз, колесо меняет, двойной щелчок возвращает значение по умолчанию. Shift: точнее."));
+inline const juce::String eqCurve = make (utf8 ("Кривая эквалайзера"), utf8 ("Тяните точку полосы: частота и усиление. Колесо над точкой: ширина Q. Двойной щелчок включает и выключает полосу."));
+inline const juce::String fxDisplay = make (utf8 ("Картина эффекта"), utf8 ("Показывает, что эффект делает со звуком при текущих настройках."));
+inline const juce::String dynamicsDisplay = make (utf8 ("Кривая и подавление"), utf8 ("Кривая вход/выход, точка показывает уровень входа, столбик справа: подавление в дБ."));
 inline const juce::String deviceKnob = make (utf8 ("Параметр устройства"), utf8 ("Тяните, колесо меняет, двойной щелчок возвращает значение по умолчанию. Shift: точнее."));
 inline const juce::String wavetable = make (utf8 ("Wavetable"), utf8 ("Форма волны выбранной таблицы и положение внутри неё."));
 inline const juce::String missingDevice = make (utf8 ("Плагин не найден"), utf8 ("Состояние сохранено и вернётся, когда плагин появится. Звук идёт насквозь."));

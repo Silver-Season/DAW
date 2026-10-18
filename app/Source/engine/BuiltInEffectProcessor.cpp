@@ -1,6 +1,7 @@
 #include "BuiltInEffectProcessor.h"
 
 #include "../Strings.h"
+#include "../ui/EffectViews.h"
 
 namespace
 {
@@ -120,7 +121,10 @@ void BuiltInEffectProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
 juce::AudioProcessorEditor* BuiltInEffectProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor (*this);
+    // The same faces as in the device chain, expanded, rather than a generic list of sliders.
+    if (effect == nullptr)
+        return new juce::GenericAudioProcessorEditor (*this);
+    return new ui::EffectEditor (*this);
 }
 
 void BuiltInEffectProcessor::getStateInformation (juce::MemoryBlock& dest)
@@ -148,36 +152,6 @@ void BuiltInEffectProcessor::setStateInformation (const void* data, int size)
         if (index >= 0)
             params[(size_t) index]->setValueNotifyingHost (params[(size_t) index]->convertTo0to1 ((float) p->getDoubleAttribute ("v")));
     }
-}
-
-std::vector<int> BuiltInEffectProcessor::defaultMacros() const
-{
-    static const std::map<juce::String, std::vector<const char*>> knobs {
-        { "eq8", { "b2gain", "b3gain", "b4gain", "b5gain", "b6gain", "b7gain", "b1on", "b8on" } },
-        { "comp", { "threshold", "ratio", "attack", "release", "knee", "makeup", "mix", "output" } },
-        { "gate", { "threshold", "hysteresis", "attack", "hold", "release", "floor", "lookahead", "output" } },
-        { "limiter", { "ceiling", "gain", "release", "lookahead", "truePeak", "autoRelease", "output" } },
-        { "reverb", { "size", "decay", "predelay", "damping", "lowCut", "width", "diffusion", "mix" } },
-        { "delay", { "divL", "divR", "feedback", "pingPong", "hp", "lp", "ducking", "mix" } },
-        { "drive", { "mode", "drive", "tone", "bias", "input", "mix", "output" } },
-        { "crush", { "bits", "rate", "dither", "mix", "output" } },
-        { "filter", { "type", "freq", "resonance", "drive", "lfoDepth", "lfoRate", "envDepth", "mix" } },
-        { "chorus", { "voices", "rate", "depth", "delay", "width", "feedback", "mix", "output" } },
-        { "flanger", { "rate", "depth", "delay", "feedback", "phase", "sync", "div", "mix" } },
-        { "phaser", { "stages", "rate", "depth", "center", "feedback", "phase", "sync", "mix" } },
-        { "autopan", { "rate", "div", "sync", "depth", "shape", "phase", "offset", "mix" } },
-    };
-    std::vector<int> result;
-    if (effect == nullptr)
-        return result;
-    if (const auto it = knobs.find (type); it != knobs.end())
-        for (const auto* id : it->second)
-            if (const int index = effect->paramIndex (id); index >= 0)
-                result.push_back (index);
-    for (int i = 0; result.size() < 8 && i < (int) params.size(); ++i)
-        if (std::find (result.begin(), result.end(), i) == result.end())
-            result.push_back (i);
-    return result;
 }
 
 juce::String BuiltInEffectProcessor::stateBase64 (const juce::String& t, const std::vector<std::pair<juce::String, float>>& values)

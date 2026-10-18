@@ -90,6 +90,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollLanes.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/PianoRollProps.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/QuantiseWindow.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/EffectViews.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/DetailPanel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementRuler.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/ArrangementHeaders.cpp
@@ -137,6 +138,7 @@ if(DAW_BUILD_JUCE)
             tests/AudioUiTests.cpp
             tests/SessionAudioUiTests.cpp
             tests/AudioRecordingTests.cpp
+            tests/EffectUiTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
