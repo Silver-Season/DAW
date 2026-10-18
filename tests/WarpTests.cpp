@@ -159,9 +159,10 @@ void testStretchedPlayback()
     const double before = frequency (r.left, 24000, 96000);
     check (std::abs (before - 440.0 * 100.0 / 120.0) < 2.0, "meanwhile it is resampled to the project tempo: " + juce::String (before, 1) + " Hz");
 
+    const auto generation = r.f.engine.getPublishedGeneration();
     settle (r.f.engine);
-    check (r.f.engine.isGraphDirty(), "a ready copy asks for a new graph");
     r.f.engine.rebuildGraphIfNeeded();
+    check (r.f.engine.getPublishedGeneration() > generation, "a ready copy brings a new graph");
     r.left.clear();
     r.run (2 * 48000);
     const double after = frequency (r.left, 24000, 96000);

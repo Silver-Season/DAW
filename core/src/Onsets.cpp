@@ -24,11 +24,15 @@ constexpr double kPreferredLow = 90.0, kPreferredHigh = 150.0;
 // Octave decision (see oddShare in estimateTempo): synthetic and real patterns put a real double-time level at 0.58
 // and above (house, techno, drum & bass at 174 over 87) and a hip-hop beat at 2T at 0.48 and below.
 constexpr double kOddShareForDouble = 0.53, kOddShareIfPreferred = 0.35;
+// Above 150 the faster level has to be clearer still: a 100 BPM loop with loud off-beat hats must not read as 200,
+// while drum & bass at 174 (snares on the in-between beats of 87) stays well above it.
+constexpr double kOddShareAboveFast = 0.6;
 
 struct Flux
 {
     std::vector<float> full; // spectral flux of frame k (centred on sample k * kHop) over all bins
     std::vector<float> low;  // the same below 200 Hz: kick drums, used to find the downbeat
+    std::vector<float> body; // the same below 2.5 kHz: kicks, snares, bass and chords, but hardly any hats
     double frameRate = 0.0;
 };
 
@@ -39,6 +43,7 @@ Flux spectralFlux (const float* x, int64_t n, double rate)
     const auto numFrames = (size_t) (n / kHop + 1);
     f.full.assign (numFrames, 0.0f);
     f.low.assign (numFrames, 0.0f);
+    f.body.assign (numFrames, 0.0f);
 
     std::vector<double> window (kFrame);
     double windowSum = 0.0;
@@ -50,6 +55,7 @@ Flux spectralFlux (const float* x, int64_t n, double rate)
 
     constexpr int bins = kFrame / 2;
     const int lowBins = std::clamp ((int) std::ceil (200.0 * kFrame / rate), 1, bins);
+    const int bodyBins = std::clamp ((int) std::ceil (2500.0 * kFrame / rate), lowBins, bins);
     const double scale = 2.0 / windowSum; // a full-scale sine reads 1
     constexpr double compression = 1000.0;
 
@@ -62,7 +68,7 @@ Flux spectralFlux (const float* x, int64_t n, double rate)
     };
 
     const auto accumulate = [&] (size_t frame, std::vector<float>& mag) {
-        float sum = 0.0f, lowSum = 0.0f;
+        float sum = 0.0f, lowSum = 0.0f, bodySum = 0.0f;
         for (int j = 1; j <= bins; ++j)
         {
             const float d = mag[(size_t) j] - prev[(size_t) j];
@@ -71,10 +77,13 @@ Flux spectralFlux (const float* x, int64_t n, double rate)
                 sum += d;
                 if (j <= lowBins)
                     lowSum += d;
+                if (j <= bodyBins)
+                    bodySum += d;
             }
         }
         f.full[frame] = sum;
         f.low[frame] = lowSum;
+        f.body[frame] = bodySum;
         std::swap (prev, mag);
     };
 
@@ -226,20 +235,22 @@ void gaussianSmooth (std::vector<float>& v, double sigma)
 // Onset strength for tempo and beats. Summed over bins, a broadband hat outweighs a kick, and the grid then locks onto
 // the off-beats; adding the low band on equal footing puts the kick back in charge. The moving average is removed
 // (half-wave rectified) so slow swells of pads and fades carry no periodicity.
-std::vector<float> beatEnvelope (const Flux& f)
+// `withoutHats` builds it from the band below 2.5 kHz instead of all bins: what is left of an off-beat hat there is small.
+std::vector<float> beatEnvelope (const Flux& f, bool withoutHats = false)
 {
-    const auto size = f.full.size();
+    const auto& band = withoutHats ? f.body : f.full;
+    const auto size = band.size();
     double fullMean = 0.0, lowMean = 0.0;
     for (size_t k = 0; k < size; ++k)
     {
-        fullMean += f.full[k];
+        fullMean += band[k];
         lowMean += f.low[k];
     }
     std::vector<float> env (size, 0.0f);
     if (fullMean <= 0.0)
         return env;
     for (size_t k = 0; k < size; ++k)
-        env[k] = (float) (f.full[k] * (double) size / fullMean + (lowMean > 0.0 ? f.low[k] * (double) size / lowMean : 0.0));
+        env[k] = (float) (band[k] * (double) size / fullMean + (lowMean > 0.0 ? f.low[k] * (double) size / lowMean : 0.0));
     gaussianSmooth (env, 1.0);
 
     const auto radius = (int64_t) std::lround (0.4 * f.frameRate);
@@ -530,6 +541,7 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
     const double frameRate = flux.frameRate;
 
     const auto env = beatEnvelope (flux);
+    const auto bodyEnv = beatEnvelope (flux, true);
     const auto maxLag = (size_t) std::min ((double) env.size() * 0.75, 8.0 * frameRate);
     const auto r = autocorrelation (env, maxLag);
 
@@ -564,7 +576,8 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
         // Onset strength on the odd beats of a grid at `b` against the even ones (the smaller over the larger, so the
         // grid's phase does not matter): near 1 when every beat is a real beat (four on the floor, snares on 2 and 4),
         // low when the in-between beats only carry off-beat hats. The autocorrelation cannot tell these apart: it
-        // sees the same eighth-note lattice in both.
+        // sees the same eighth-note lattice in both. The strength is read below 2.5 kHz: in the log spectrum a noisy
+        // hat spreads over so many bins that over all of them it weighs as much as a kick.
         const auto oddShare = [&] (double b) {
             const auto beats = trackBeats (env, 60.0 * frameRate / b);
             double sums[2] = {};
@@ -572,8 +585,8 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
             for (size_t i = 0; i < beats.size(); ++i)
             {
                 float v = 0.0f;
-                for (int64_t j = std::max<int64_t> (0, beats[i] - 2); j <= std::min ((int64_t) env.size() - 1, beats[i] + 2); ++j)
-                    v = std::max (v, env[(size_t) j]);
+                for (int64_t j = std::max<int64_t> (0, beats[i] - 2); j <= std::min ((int64_t) bodyEnv.size() - 1, beats[i] + 2); ++j)
+                    v = std::max (v, bodyEnv[(size_t) j]);
                 sums[i % 2] += v;
                 ++counts[i % 2];
             }
@@ -594,7 +607,8 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
             const double faster = localBest (bpm * 2.0);
             const double share = oddShare (faster);
             const bool preferred = bpm < kPreferredLow && faster >= kPreferredLow && faster <= kPreferredHigh;
-            if (share >= kOddShareForDouble || (preferred && share >= kOddShareIfPreferred))
+            const double needed = faster > kPreferredHigh ? kOddShareAboveFast : kOddShareForDouble;
+            if (share >= needed || (preferred && share >= kOddShareIfPreferred))
                 bpm = faster;
             else
                 break;
@@ -609,7 +623,7 @@ TempoEstimate estimateTempo (const float* mono, int64_t numSamples, double sampl
 
     // Beat tracking, then the tempo from the beat positions: far finer than the 5.8 ms frame grid.
     Grid grid;
-    const auto track = [&] (double tempo) { grid = placeBeats (trackBeats (env, 60.0 * frameRate / tempo), frameRate, onsets, 60.0 * frameRate / tempo); };
+    const auto track = [&] (double tempo) { grid = placeBeats (trackBeats (bodyEnv, 60.0 * frameRate / tempo), frameRate, onsets, 60.0 * frameRate / tempo); };
     if (bpm > 0.0)
     {
         track (bpm);

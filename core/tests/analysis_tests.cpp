@@ -268,6 +268,25 @@ int main()
         }
     });
 
+    // Live test: dropped loops between 80 and 110 often came out at twice their tempo.
+    test ("slower loops with off-beat hats and a lead-in do not read at double tempo", [] {
+        const struct
+        {
+            double bpm;
+            Style style;
+        } cases[] = { { 100.0, Style::house }, { 96.0, Style::house }, { 105.0, Style::house },
+                      { 85.0, Style::hipHop }, { 90.0, Style::hipHop }, { 98.0, Style::hipHop } };
+        for (const auto& c : cases)
+            for (int bars : { 2, 4 })
+            {
+                const auto s = drums (c.bpm, bars, c.style, 0.0, -48.0, 0.25, 0.0, (unsigned) bars);
+                const auto t = analyse (s);
+                std::printf ("  %.0f BPM, %d bars -> %.4f (conf %.2f), first %.2f ms\n", c.bpm, bars, t.bpm, t.confidence, t.firstBeatSeconds * 1000.0);
+                check (std::abs (t.bpm / c.bpm - 1.0) < 0.005, fmt ("%.0f BPM loop after a lead-in reads within 0.5 %% (got %.4f)", c.bpm, t.bpm));
+                check (std::abs (t.firstBeatSeconds - 0.25) < 0.012, fmt ("%.0f BPM: first beat after the lead-in (%.2f ms)", c.bpm, t.firstBeatSeconds * 1000.0));
+            }
+    });
+
     test ("2-bar loops", [] {
         for (double bpm : { 92.0, 124.0, 140.0, 174.0 })
         {
