@@ -7,6 +7,7 @@
 #include "../app/Source/engine/SessionRecorder.h"
 #include "../app/Source/model/ArrangementEdit.h"
 #include "../app/Source/engine/DrumKitProcessor.h"
+#include "../app/Source/engine/OfflineRenderer.h"
 
 #include <functional>
 
@@ -502,10 +503,54 @@ void testSendsAndSidechain()
 }
 } // namespace
 
+namespace
+{
+void testExport()
+{
+    std::printf ("[4.1] export: the arrangement renders offline to a WAV of the right length, normalised to its peak\n");
+    Fixture f;
+    FakeDevice dev (512, 48000.0);
+    f.engine.audioDeviceAboutToStart (&dev);
+    f.model.setTempo (120.0);
+    auto track = addPrismaTrack (f.model, 0);
+    auto a = arrangement::addEmptyClip (f.model, track, 0.0, 8.0);
+    for (int i = 0; i < 8; ++i)
+        a.clip().addNote ({ (double) i, 1.0, 60 + i, 100 }, nullptr); // the last one sounds up to the end
+    f.engine.rebuildGraphIfNeeded();
+
+    const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("daw-rec-export");
+    folder.deleteRecursively();
+    OfflineRenderer::Options o;
+    o.startBeat = 0.0;
+    o.endBeat = 8.0;
+    o.file = folder.getChildFile ("song.wav");
+    o.tail = false;
+    o.normalisePeakDb = -1.0;
+    OfflineRenderer renderer (f.settings, f.model, f.engine, o);
+    const auto r = renderer.renderNow();
+    check (r.ok && o.file.existsAsFile(), "the file was written: " + r.error);
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatReader> reader (wav.createReaderFor (o.file.createInputStream().release(), true));
+    check (reader != nullptr && reader->lengthInSamples == 4 * 48000, "8 beats at 120 BPM = 4 s exactly without the tail");
+    check (std::abs (r.peakDb + 1.0) < 0.05, "normalised to -1 dBFS: " + juce::String (r.peakDb));
+    check (r.sourcePeakDb > -40.0, "the song made sound");
+
+    o.tail = true;
+    o.normalisePeakDb = 1.0;
+    o.file = folder.getChildFile ("tail.wav");
+    OfflineRenderer withTail (f.settings, f.model, f.engine, o);
+    const auto r2 = withTail.renderNow();
+    check (r2.ok && r2.seconds > 4.01 && r2.seconds < 14.5, "the tail rings out after the end: " + juce::String (r2.seconds) + " s");
+    f.engine.audioDeviceStopped();
+    folder.deleteRecursively();
+}
+} // namespace
+
 namespace tests
 {
 void runBuiltInEffectTests()
 {
+    testExport();
     testSendsAndSidechain();
     testBuiltInEffectDevice();
     testDrumKitDevice();

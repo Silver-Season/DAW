@@ -469,7 +469,7 @@ void MainComponent::getCommandInfo (juce::CommandID id, juce::ApplicationCommand
         case saveProjectAs: set (M::saveAs, fileCategory, true, key ('s', cmd | shift)); break;
         case saveTemplate: set (M::saveTemplate, fileCategory, true); break;
         case versionHistory: set (M::versionHistory, fileCategory, true); break;
-        case exportAudio: set (M::exportAudio, fileCategory, false, key ('r', cmd | shift)); break;
+        case exportAudio: set (M::exportAudio, fileCategory, true, key ('r', cmd | shift)); break;
         case showInFinder: set (M::showInFinder, fileCategory, doc.folder() != juce::File() && doc.folder().exists()); break;
         case scanPlugins: set (M::scanPlugins, fileCategory, true); break;
         case findMissingFiles: set (M::findMissing, fileCategory, hasMissingFiles()); break;
@@ -586,6 +586,7 @@ bool MainComponent::perform (const InvocationInfo& info)
         case openSettings: showSettings (ui::SettingsWindow::sound); return true;
         case scanPlugins: showPluginScanner(); return true;
         case findMissingFiles: findMissingFilesClicked(); return true;
+        case exportAudio: showExport(); return true;
         case deleteUnusedRecordings: deleteUnusedRecordingsClicked(); return true;
         case quitApp: juce::JUCEApplication::getInstance()->systemRequestedQuit(); return true;
 
@@ -1008,6 +1009,20 @@ void MainComponent::deleteUnusedRecordingsClicked()
                      safe->model.undo.clearUndoHistory(); // undo could bring back clips whose files are gone
                      safe->infoBar->showMessage (Strings::menu::deletedRecordings (files.size()), 3000);
                  });
+}
+
+void MainComponent::showExport()
+{
+    if (exportWindow != nullptr)
+    {
+        exportWindow->toFront (true);
+        return;
+    }
+    const auto folder = doc.folder() != juce::File() ? doc.folder().getChildFile ("Exports")
+                                                     : juce::File::getSpecialLocation (juce::File::userMusicDirectory).getChildFile ("DAW").getChildFile ("Exports");
+    const auto name = doc.name() + " " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d");
+    exportWindow = std::make_unique<ui::ExportWindow> (settings, model, engine, folder, juce::File::createLegalFileName (name),
+                                                       [this] { juce::MessageManager::callAsync ([this] { exportWindow.reset(); }); });
 }
 
 void MainComponent::doOpen (const juce::File& file)

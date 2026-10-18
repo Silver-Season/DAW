@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/ExportWindow.h"
+
 #include "../../plugins/prisma/Source/PrismaEditor.h"
 #include "browser/BrowserActions.h"
 #include "browser/BrowserSources.h"
@@ -113,6 +115,7 @@ private:
     bool hasMissingFiles() const;
     void findMissingFilesClicked();
     void deleteUnusedRecordingsClicked();
+    void showExport();
     void documentChanged();
     juce::File projectsFolder() const;
 
@@ -147,6 +150,7 @@ private:
     ui::EditCommands editCommands;
 
     std::unique_ptr<ui::TopBar> topBar;
+    std::unique_ptr<ui::ExportWindow> exportWindow;
     std::unique_ptr<ui::BrowserPanel> browser;
     std::unique_ptr<ui::SessionView> session;
     std::unique_ptr<ui::DetailPanel> detail;

@@ -457,6 +457,40 @@ inline const juce::String float32 = utf8 ("32 (float)");
 inline const juce::String testNote = utf8 ("Записанный звук сдвигается раньше на задержку входа и выхода. Чтобы измерить её точно, соедините кабелем выход 1 карты с выбранным входом и нажмите «Измерить»: прозвучат 10 щелчков. Ползунок поправляет вручную.");
 } // namespace audioRec
 
+// The export window (docs/spec/04-export.md)
+namespace exportUi
+{
+inline const juce::String title = utf8 ("Экспорт");
+inline const juce::String range = utf8 ("Диапазон");
+inline const juce::String format = utf8 ("Формат");
+inline const juce::String bits = utf8 ("Разрядность");
+inline const juce::String normalise = utf8 ("Нормализация");
+inline const juce::String wholeSong = utf8 ("Вся песня");
+inline const juce::String loop = utf8 ("Петля");
+inline const juce::String none = utf8 ("Нет");
+inline const juce::String peak01 = utf8 ("По пику −0,1 dBFS");
+inline const juce::String peak1 = utf8 ("По пику −1 dBFS");
+inline const juce::String tail = utf8 ("Добавлять хвост (ревер, дилей)");
+inline const juce::String exportButton = utf8 ("Экспорт…");
+inline const juce::String close = utf8 ("Закрыть");
+inline const juce::String cancel = utf8 ("Отмена");
+inline const juce::String showInFinder = utf8 ("Показать в Finder");
+inline const juce::String rendering = utf8 ("Рендер…");
+inline const juce::String cancelled = utf8 ("Экспорт отменён");
+inline const juce::String failed = utf8 ("Не получилось: ");
+inline const juce::String emptyArrangement = utf8 ("Аранжировка пуста. Запишите выступление из Session View на шкалу (F9) и повторите экспорт.");
+inline juce::String done (const juce::String& file, double seconds, double peakDb)
+{
+    const int s = (int) std::round (seconds);
+    return utf8 ("Готово: ") + file + "\n" + juce::String (s / 60) + ":" + juce::String (s % 60).paddedLeft ('0', 2) + utf8 (", пик ")
+           + juce::String (peakDb, 1).replace (".", ",") + " dBFS";
+}
+inline juce::String clipping (double peakDb)
+{
+    return utf8 ("Пик +") + juce::String (peakDb, 1).replace (".", ",") + utf8 (" dBFS: в файле будет клиппинг. Включите нормализацию или лимитер на мастере.");
+}
+} // namespace exportUi
+
 // Return tracks and sends (docs/spec/06-effects-mixing.md, task 6.3)
 namespace returns
 {
