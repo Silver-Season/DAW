@@ -48,6 +48,9 @@ inline const juce::String undoTempo = utf8 ("Темп");
 inline const juce::String undoMasterVolume = utf8 ("Громкость мастера");
 
 // Undo transaction names of the Arrangement (stage 3)
+inline const juce::String undoAutoEdit = utf8 ("Изменить автоматизацию");
+inline const juce::String undoAutoDelete = utf8 ("Удалить точку автоматизации");
+inline const juce::String undoAutoClear = utf8 ("Удалить автоматизацию");
 inline const juce::String undoArrNewClip = utf8 ("Новый клип на шкале");
 inline const juce::String undoArrMoveClips = utf8 ("Переместить клипы");
 inline const juce::String undoArrCopyClips = utf8 ("Копировать клипы");
@@ -830,6 +833,14 @@ inline const juce::String removeTime = utf8 ("Удалить время");
 inline const juce::String newMarker = utf8 ("Маркер в позиции курсора");
 inline const juce::String followPlayhead = utf8 ("Следовать за курсором");
 inline const juce::String backToArrangement = utf8 ("Вернуть аранжировку");
+
+// Automation mode (task 6.7)
+inline const juce::String automationMode = utf8 ("Автоматизация (A)");
+inline const juce::String autoVolume = utf8 ("Громкость");
+inline const juce::String autoPan = utf8 ("Панорама");
+inline const juce::String autoParameter = utf8 ("Параметр");
+inline const juce::String autoNoDevices = utf8 ("Устройств нет");
+inline const juce::String autoCurve = utf8 ("Изгиб");
 } // namespace arrangement
 
 // Mixer
@@ -1045,6 +1056,8 @@ inline const juce::String editorGridArea = make (utf8 ("Сетка нот"), utf
 inline const juce::String editorVelocity = make (utf8 ("Сила нажатия"), utf8 ("Тяните столбик. Alt+тянуть по нескольким столбикам рисует рампу."));
 inline const juce::String editorControllers = make (utf8 ("Контроллеры"), utf8 ("Колесо модуляции, питч-бенд и сустейн. Полоса сворачивается."));
 inline const juce::String arrangementView = make (utf8 ("Arrangement"), utf8 ("Шкала времени проекта. Пробел играет с точки старта, Shift+Пробел продолжает с места остановки. Tab возвращает в Session."));
+inline const juce::String arrAutomationLanes = make (utf8 ("Огибающая"), utf8 ("Щелчок по линии добавляет точку, перетаскивание двигает её (Alt или Cmd: без привязки к сетке). Alt+протяжка по отрезку: изгиб. Двойной щелчок по точке удаляет её, Delete при выделенном времени удаляет точки в нём. A: выйти из режима автоматизации."));
+inline const juce::String arrAutomationChooser = make (utf8 ("Что автоматизировать"), utf8 ("Громкость, панорама или параметр устройства этой дорожки. Дорожки с готовой огибающей отмечены точкой."));
 inline const juce::String arrLanes = make (utf8 ("Дорожки"), utf8 ("Протяжка по пустому месту выделяет время, двойной щелчок рисует клип на такт. Cmd+колесо: масштаб, Alt+колесо: высота дорожки, Shift+колесо: прокрутка по времени."));
 inline const juce::String arrClip = make (utf8 ("Клип на шкале"), utf8 ("Тяните, чтобы переместить (Alt: копия, Cmd: без прилипания). Двойной щелчок открывает редактор нот, правая кнопка открывает меню. Cmd+E разрезает, Cmd+D дублирует."));
 inline const juce::String arrClipLeftEdge = make (utf8 ("Левый край клипа"), utf8 ("Тяните, чтобы обрезать начало: содержимое остаётся на месте."));

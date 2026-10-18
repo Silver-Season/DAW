@@ -49,6 +49,7 @@ enum : juce::CommandID
 
     toggleBrowser,
     toggleFollow,
+    toggleAutomation, // A (handled by the Arrangement View by key code)
     toggleDetail,
     toggleMixer,
     switchView,

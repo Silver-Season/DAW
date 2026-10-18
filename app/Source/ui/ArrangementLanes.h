@@ -31,6 +31,18 @@ public:
         int row = -1;
     };
     Hit clipHit (juce::Point<int>) const;
+
+    // Automation mode: what lies under a point of the lanes. `point` is the index of a dot, `onLine` is true within a few
+    // pixels of the envelope line (also where the line is only the current mixer value of a lane without points).
+    struct AutoHit
+    {
+        int row = -1;
+        int point = -1;
+        bool onLine = false;
+    };
+    AutoHit autoHitAt (juce::Point<int>) const;
+    // Where the envelope of a row is drawn: the lane minus a margin; value 1 is the top.
+    juce::Rectangle<float> envelopeArea (int row) const;
     bool isGestureRunning() const { return gesture != Gesture::none; }
 
     void paint (juce::Graphics&) override;
@@ -50,7 +62,9 @@ private:
         move,
         resizeLeft,
         resizeRight,
-        selectTime
+        selectTime,
+        autoMove,
+        autoBend
     };
 
     void paintGrid (juce::Graphics&, juce::Rectangle<int> area) const;
@@ -65,6 +79,11 @@ private:
     void showClipMenu (juce::Point<int> screenPosition);
     void showEmptyMenu (juce::Point<int> screenPosition, double beat);
     void updateMoveGesture (const juce::MouseEvent&);
+    void paintEnvelope (juce::Graphics&, int row) const;
+    // Starts an envelope gesture if the press is on the envelope of a lane; false lets the clips have the click.
+    bool beginAutomationGesture (const juce::MouseEvent&);
+    void dragAutomation (const juce::MouseEvent&);
+    float valueForY (int row, float y) const;
     void finishRename (const juce::String& text, int64_t aclipId);
 
     ArrangementView& view;
@@ -87,6 +106,12 @@ private:
     bool movedEnough = false;
     bool pressedOnEmpty = false;
     std::unique_ptr<InlineEditor> renameEditor;
+    // automation
+    juce::ValueTree autoPointNode;
+    int64_t autoTrackId = -1;
+    juce::String autoTargetId, readoutText;
+    float bendStart = 0.0f, bendDirection = 1.0f;
+    juce::Point<float> readoutAt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ArrangementLanes)
 };

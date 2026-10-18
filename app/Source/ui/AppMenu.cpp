@@ -103,6 +103,7 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::toggleMixer);
             add (commands::switchView);
             add (commands::toggleFollow);
+            add (commands::toggleAutomation);
             add (commands::toggleClipEditor);
             add (commands::toggleKeyboardStrip);
             menu.addSeparator();
