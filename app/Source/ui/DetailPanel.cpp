@@ -488,6 +488,7 @@ public:
             case Part::expand:
                 // A view setting, like the panel height: not an undo step. The chain is rebuilt from the model.
                 owner.model.findDevice (deviceId).setExpanded (! expanded);
+                owner.revealDevice = deviceId;
                 break;
             case Part::open:
                 if (processor != nullptr && owner.onOpenDevice)
@@ -701,6 +702,7 @@ public:
         }
         dropZone = { x, pad, 180, h - 2 * pad };
         setSize (juce::jmax (x + 180 + pad, owner.viewport.getMaximumVisibleWidth()), h);
+        repaint(); // the arrows and the drop zone moved with the cards
     }
 
     void tick()
@@ -958,6 +960,21 @@ void DeviceChainView::rebuild()
     const auto viewPosition = viewport.getViewPosition();
     content->rebuild (model.findTrack (trackId));
     viewport.setViewPosition (viewPosition);
+    // A card that was just expanded scrolls into view as a whole, as far as it fits.
+    if (revealDevice >= 0)
+    {
+        for (int i = 0; i < content->numViews(); ++i)
+            if (auto* view = content->viewAt (i); view != nullptr && view->id() == revealDevice)
+            {
+                const int visible = viewport.getViewWidth();
+                int x = viewport.getViewPositionX();
+                if (view->getRight() + 12 > x + visible)
+                    x = view->getRight() + 12 - visible;
+                x = juce::jmin (x, view->getX() - 12);
+                viewport.setViewPosition (juce::jmax (0, x), viewport.getViewPositionY());
+            }
+        revealDevice = -1;
+    }
     content->applySelection (selection.get());
 }
 

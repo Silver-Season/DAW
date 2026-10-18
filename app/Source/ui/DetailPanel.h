@@ -121,6 +121,7 @@ private:
     std::unique_ptr<Content> content;
     int64_t trackId = -1;
     bool dirty = true;
+    int64_t revealDevice = -1; // scrolled into view after the next rebuild (a card that was just expanded)
     browser::BrowserActions* dropActions = nullptr;
 };
 } // namespace ui

@@ -539,7 +539,7 @@ std::unique_ptr<EffectView::Spec> specFor (const juce::String& type)
             s->bottom.push_back (B (n + "gain").noCaption().ofBand (b));
             s->bottom.push_back (B (n + "q").named ("Q").ofBand (b));
             auto g = group ({}, { C (n + "type").noCaption(), B (n + "freq").noCaption(), B (n + "gain").noCaption(), B (n + "q").named ("Q"),
-                                  C (n + "ch").noCaption() },
+                                  C (n + "ch").noCaption().dim ("mode", 0) },
                             98);
             g.titleItem = T (n + "on").named (Strings::fx::groups::band (b + 1));
             s->groups.push_back (g);
@@ -1201,7 +1201,9 @@ public:
         left = juce::jmax (left, 1.0e-3f);
         right = juce::jmax (right, 1.0e-3f);
         const float feedback = frozen ? 1.0f : v ("feedback") / 100.0f;
-        const float window = juce::jmax (left, right) * (ping ? 7.0f : 6.5f);
+        // As many echoes as stay above -26 dB, at least three and at most sixteen.
+        const float audible = feedback > 0.01f ? 1.0f + std::log (0.05f) / std::log (juce::jmin (feedback, 0.97f)) : 1.0f;
+        const float window = juce::jmax (left, right) * (juce::jlimit (3.0f, 16.0f, audible) + 0.6f);
         const float mid = r.getCentreY(), half = r.getHeight() * 0.5f - 2.0f;
 
         g.setColour (t.line.withAlpha (0.7f));
