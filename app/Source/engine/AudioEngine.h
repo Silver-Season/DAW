@@ -460,6 +460,7 @@ private:
     int blockNumInputs = 0;
     int64_t blockStartSample = 0;              // audio thread: engine sample of the block's first frame
     juce::AudioBuffer<float> lastMaster;       // audio thread: the master of the previous block, the "Resample" input
+    const PlaybackGraph* currentGraph = nullptr; // audio thread: the graph of the block being rendered (sends find their returns)
     std::atomic<int> audioRecordLatency { 0 }, driverRoundTrip { 0 };
     std::atomic<double> audioCorrectionMs { 0.0 };
 

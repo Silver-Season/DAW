@@ -186,6 +186,11 @@ void AudioEngine::applyTrackProperties (TrackRuntime& rt, const TrackRef& t)
     rt.arm = t.arm();
     rt.inputMode = (int) inputModeFor (t.input());
     rt.transpose = juce::jlimit (-48, 48, t.transpose());
+    for (int i = 0; i < 2; ++i)
+    {
+        const float sendDb = t.sendDb (i);
+        rt.sendGain[i] = sendDb <= TrackRef::kMinSendDb ? 0.0f : juce::Decibels::decibelsToGain (sendDb);
+    }
     const auto in = AudioInputSpec::parse (t.input());
     rt.audioInput = (int) in.kind;
     rt.inputLeft = in.left;
@@ -231,7 +236,8 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     if (type == ids::TRACK)
     {
         if (property == ids::volumeDb || property == ids::pan || property == ids::mute || property == ids::solo
-            || property == ids::arm || property == ids::input || property == ids::transpose || property == ids::monitor)
+            || property == ids::arm || property == ids::input || property == ids::transpose || property == ids::monitor
+            || property == ids::sendA || property == ids::sendB)
         {
             std::lock_guard<std::recursive_mutex> sl (buildLock);
             const auto it = runtimes.find ((int64_t) (juce::int64) tree.getProperty (ids::id, -1));
@@ -250,7 +256,7 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
             if (it != devices.end())
                 it->second->enabled = DeviceRef (tree).enabled();
         }
-        else if (property == ids::kind || property == ids::pluginDesc)
+        else if (property == ids::kind || property == ids::pluginDesc || property == ids::sidechain)
             graphDirty = true;
     }
     else if (type == ids::MASTER || type == ids::PROJECT)
@@ -618,8 +624,31 @@ void AudioEngine::rebuildGraph()
             gt.arrangement.push_back (std::move (p));
         }
         gt.arrangementSignature = gt.arrangement.empty() ? 0 : signature.h;
+        gt.isReturn = track.isReturn();
         graph->tracks.push_back (std::move (gt));
     }
+    // Sidechain sources, once every track has its runtime.
+    {
+        size_t i = 0;
+        for (const auto& track : model->tracks())
+        {
+            auto& gt = graph->tracks[i++];
+            for (const auto& device : track.devices())
+            {
+                TrackRuntime* key = nullptr;
+                if (const auto source = device.sidechainTrack(); source >= 0 && source != track.id())
+                    if (const auto it = runtimes.find (source); it != runtimes.end())
+                        key = it->second.get();
+                gt.sidechains.push_back (key);
+            }
+        }
+    }
+    // Return tracks play after every track that can send to them.
+    std::stable_partition (graph->tracks.begin(), graph->tracks.end(), [] (const PlaybackGraph::Track& t) { return ! t.isReturn; });
+    int returnIndex = 0;
+    for (auto& t : graph->tracks)
+        if (t.isReturn && returnIndex < 2)
+            graph->returns[(size_t) returnIndex++] = t.runtime;
 
     for (const auto& device : DeviceRef::childrenOf (model->masterDevicesNode()))
         graph->masterChain.push_back (acquireDevice (device, usedDevices));

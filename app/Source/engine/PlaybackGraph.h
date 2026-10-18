@@ -43,6 +43,8 @@ struct TrackRuntime
         fxMidi.ensureSize (64);
         events.reserve (4096);
         inputBuffer.setSize (2, maxBlock, false, true, false);
+        returnBus.setSize (2, maxBlock, false, true, false);
+        keyBuffer.setSize (2, maxBlock, false, true, false);
     }
 
     const int64_t trackId;
@@ -57,6 +59,7 @@ struct TrackRuntime
     std::atomic<int> audioInput { (int) AudioInputKind::none };
     std::atomic<int> inputLeft { 0 }, inputRight { 1 };
     std::atomic<int> monitorMode { (int) MonitorMode::automatic };
+    std::atomic<float> sendGain[2] { { 0.0f }, { 0.0f } }; // to return A and B, post-fader
     // The recording stream of the track, for the message thread (the audio thread uses the graph's pointer). Replaced
     // only while it is idle.
     std::shared_ptr<RecordStream> recordStream;
@@ -101,6 +104,9 @@ struct TrackRuntime
     double backBeat = 0.0;              // that boundary, on the monotonic clock
     juce::AudioBuffer<float> buffer;
     juce::AudioBuffer<float> inputBuffer; // the sound input of this block (audio tracks)
+    juce::AudioBuffer<float> returnBus;   // a return track: what the sends gave it in this block
+    juce::AudioBuffer<float> keyBuffer;   // the track's sound after its chain, before the fader: the key of a sidechain
+    float lastSendGain[2] {};
     juce::MidiBuffer midi, fxMidi;
     std::vector<daw::MidiEvent> events;
     float lastGainL = 0.0f, lastGainR = 0.0f;
@@ -148,8 +154,13 @@ struct PlaybackGraph
         // track records its input; a MIDI track whose record source is "audio" records what its instrument plays.
         std::shared_ptr<RecordStream> stream;
         bool recordsOutput = false;
+        bool isReturn = false;
+        // Per device of `chain`: the track whose keyBuffer feeds its sidechain (null = none). A source later in the
+        // order is heard one block late, which is inaudible for ducking and needs no ordering of the graph.
+        std::vector<TrackRuntime*> sidechains;
     };
-    std::vector<Track> tracks;
+    std::vector<Track> tracks;           // normal tracks first, then the return tracks
+    std::array<TrackRuntime*, 2> returns {}; // return A and B (the first two return tracks), null if missing
     std::vector<DeviceInstance*> masterChain;
 
 private:

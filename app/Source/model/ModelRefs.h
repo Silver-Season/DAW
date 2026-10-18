@@ -208,6 +208,9 @@ public:
     juce::String pluginDesc() const { return get<juce::String> (ids::pluginDesc, {}); }
     juce::String stateBase64() const { return get<juce::String> (ids::state, {}); }
     juce::String macroParams() const { return get<juce::String> (ids::macroParams, {}); }
+    // The track whose sound keys a compressor or gate (task 6.5), -1 = its own input.
+    int64_t sidechainTrack() const { return (int64_t) (juce::int64) state.getProperty (ids::sidechain, -1); }
+    void setSidechainTrack (int64_t id, juce::UndoManager* um) const { set (ids::sidechain, (juce::int64) id, um); }
 
     static juce::Array<DeviceRef> childrenOf (const juce::ValueTree& devicesNode)
     {
@@ -259,6 +262,11 @@ public:
     juce::String input() const { return get<juce::String> (ids::input, "all-midi"); }
     juce::String monitor() const { return get<juce::String> (ids::monitor, "auto"); }
     juce::String recordSource() const { return get<juce::String> (ids::recordSource, "midi"); }
+    // A return track (docs/spec/06-effects-mixing.md, task 6.3): no clips, its chain gets what the sends give it.
+    bool isReturn() const { return type() == "return"; }
+    // Sends to the first two return tracks (A and B), post-fader, in dB; kMinSendDb or less = off.
+    static constexpr float kMinSendDb = -60.0f;
+    float sendDb (int which) const { return get<float> (which == 0 ? ids::sendA : ids::sendB, kMinSendDb); }
     int width() const { return get<int> (ids::width, 120); }
     // Semitones added to every note that reaches the instrument, live ones included (-48..+48).
     int transpose() const { return get<int> (ids::transpose, 0); }
@@ -275,6 +283,7 @@ public:
     void setInput (const juce::String& v, juce::UndoManager* um) const { set (ids::input, v, um); }
     void setMonitor (const juce::String& v, juce::UndoManager* um) const { set (ids::monitor, v, um); }
     void setRecordSource (const juce::String& v, juce::UndoManager* um) const { set (ids::recordSource, v, um); }
+    void setSendDb (int which, float db, juce::UndoManager* um) const { set (which == 0 ? ids::sendA : ids::sendB, juce::jlimit (kMinSendDb, 6.0f, db), um); }
     void setWidth (int v, juce::UndoManager* um) const { set (ids::width, v, um); }
     void setTranspose (int v, juce::UndoManager* um) const { set (ids::transpose, v, um); }
     void setArrangementHeight (int v, juce::UndoManager* um) const { set (ids::arrHeight, v, um); }

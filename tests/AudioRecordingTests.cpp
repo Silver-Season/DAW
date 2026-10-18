@@ -450,10 +450,63 @@ void testDrumKitDevice()
 }
 } // namespace
 
+namespace
+{
+void setParam (juce::AudioProcessor* p, const juce::String& id, float value)
+{
+    if (p != nullptr)
+        for (auto* param : p->getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (param); r != nullptr && r->paramID == id)
+                r->setValueNotifyingHost (r->convertTo0to1 (value));
+}
+
+void testSendsAndSidechain()
+{
+    std::printf ("[6.3] spec test 7: a send of -6 dB gives the return half the level; [6.5] a sidechain ducks a track\n");
+    SoundRig rig;
+    rig.track.setMonitor ("in", nullptr);
+    rig.track.setInput ("audio:0", nullptr);
+    auto ret = rig.f.model.addTrack ("return");
+    rig.f.engine.rebuildGraphIfNeeded();
+    rig.signal = [] (int ch, int64_t) { return ch == 0 ? 0.25f : 0.0f; };
+    const auto level = [&rig] {
+        rig.blocks_ (8);
+        return rig.out.getMagnitude (0, 0, kBlock);
+    };
+    check (std::abs (level() - 0.25f) < 1.0e-3f, "without a send only the track sounds");
+    rig.track.setSendDb (0, -6.0206f, nullptr);
+    check (std::abs (level() - 0.375f) < 2.0e-3f, "send -6 dB adds half the level through the return: " + juce::String (level()));
+    rig.track.setVolumeDb (-6.0206f, nullptr);
+    check (std::abs (level() - 0.1875f) < 2.0e-3f, "the send is post-fader");
+    rig.track.setVolumeDb (0.0f, nullptr);
+    rig.track.setSendDb (0, TrackRef::kMinSendDb, nullptr);
+    rig.f.model.deleteTrack (ret.id());
+
+    // Sidechain: a compressor on the track, keyed by a second (silent) track that gets input 2.
+    auto key = rig.f.model.addTrack ("audio");
+    key.setInput ("audio:1", nullptr);
+    key.setMonitor ("in", nullptr);
+    key.setVolumeDb (-70.0f, nullptr);
+    auto comp = rig.f.model.addDevice (rig.track, "fx", "Comp");
+    comp.setPluginDesc ("comp", nullptr);
+    comp.setSidechainTrack (key.id(), nullptr);
+    rig.f.engine.rebuildGraphIfNeeded();
+    auto* p = rig.f.engine.findProcessor (comp.id());
+    setParam (p, "threshold", -40.0f);
+    setParam (p, "ratio", 20.0f);
+    setParam (p, "attack", 0.1f);
+    check (std::abs (level() - 0.25f) < 0.02f, "a silent key leaves the track alone, though the track itself is loud");
+    rig.signal = [] (int ch, int64_t) { return ch == 0 ? 0.25f : 0.9f; };
+    rig.blocks_ (40);
+    check (level() < 0.08f, "a loud key ducks it: " + juce::String (level()));
+}
+} // namespace
+
 namespace tests
 {
 void runBuiltInEffectTests()
 {
+    testSendsAndSidechain();
     testBuiltInEffectDevice();
     testDrumKitDevice();
 }

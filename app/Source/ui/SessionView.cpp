@@ -3,6 +3,7 @@
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "../engine/SessionRecorder.h"
+#include "../engine/BuiltInEffectProcessor.h"
 #include "../Settings.h"
 #include "../project/AudioImport.h"
 #include "ArrangementView.h"
@@ -1010,10 +1011,22 @@ public:
         auto& model = view.model;
         const auto t = model.findTrack (trackId);
 
-        for (auto* k : { &sendA, &sendB })
+        for (int i = 0; i < 2; ++i)
         {
-            k->setEnabled (false);
+            auto* k = i == 0 ? &sendA : &sendB;
             k->setHelpText (Strings::help::sendKnob);
+            k->valueText = [] (double knob) { return sendText (knob); };
+            k->setDefaultValue (0.0);
+            k->onGestureStart = [this, i] {
+                view.model.undo.beginNewTransaction (Strings::undoSend);
+                ensureReturn (view.model, i); // the first touch of A or B makes its return track
+            };
+            k->onValueChange = [this, i, k] (double knob) {
+                if (auto track = view.model.findTrack (trackId); track.isValid())
+                    track.setSendDb (i, sendDbOf (knob), &view.model.undo);
+                juce::ignoreUnused (k);
+            };
+            k->setEnabled (! t.isReturn());
             addAndMakeVisible (*k);
         }
         sendA.setCaption (Strings::labelSendA);
@@ -1100,6 +1113,38 @@ public:
         arm.setState (track.arm());
         sendA.setRingColour (theme().palette (track.colour()));
         sendB.setRingColour (theme().palette (track.colour()));
+        if (force || ! sendA.isDragging())
+            sendA.setValue (sendKnobOf (track.sendDb (0)));
+        if (force || ! sendB.isDragging())
+            sendB.setValue (sendKnobOf (track.sendDb (1)));
+    }
+
+    // Send knob: 0 = off, the rest -60..+6 dB with the middle of the travel at -12 dB.
+    static float sendDbOf (double v) { return v <= 0.001 ? TrackRef::kMinSendDb : (float) (TrackRef::kMinSendDb + std::pow (v, 0.5) * 66.0); }
+    static double sendKnobOf (float db) { return db <= TrackRef::kMinSendDb ? 0.0 : std::pow ((db - TrackRef::kMinSendDb) / 66.0, 2.0); }
+    static juce::String sendText (double v)
+    {
+        const float db = sendDbOf (v);
+        return db <= TrackRef::kMinSendDb ? juce::String::fromUTF8 ("\xe2\x88\x92\xe2\x88\x9e") : juce::String (db, 1) + " dB";
+    }
+
+    // Return A or B, made on demand: A with a reverb, B with a delay, both fully wet.
+    static void ensureReturn (ProjectModel& model, int which)
+    {
+        int count = 0;
+        for (const auto& t : model.tracks())
+            count += t.isReturn() ? 1 : 0;
+        while (count <= which)
+        {
+            const bool reverb = count == 0;
+            auto ret = model.addTrack ("return");
+            ret.setName (reverb ? Strings::returns::reverbName : Strings::returns::delayName, &model.undo);
+            auto fx = model.addDevice (ret, "fx", Strings::fx::effectName (reverb ? "reverb" : "delay"));
+            fx.setPluginDesc (reverb ? "reverb" : "delay", &model.undo);
+            // fully wet: the dry sound is in the track already
+            fx.setStateBase64 (BuiltInEffectProcessor::stateBase64 (reverb ? "reverb" : "delay", { { "mix", 100.0f } }), &model.undo);
+            ++count;
+        }
     }
 
     void updateMeter()

@@ -172,6 +172,8 @@ public:
         if (processor != nullptr && kind != "missing")
         {
             std::vector<std::pair<juce::AudioProcessorParameter*, juce::String>> bindings;
+            if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (processor); fx != nullptr && fx->getEffect() != nullptr)
+                keyed = fx->getEffect()->acceptsSidechain();
             if (auto* drums = dynamic_cast<DrumKitProcessor*> (processor))
             {
                 pads = std::make_unique<DrumPads> (owner.engine, *drums, trackColour);
@@ -348,6 +350,19 @@ public:
             g.drawText (Strings::detail::loading, body.withTrimmedTop (body.getHeight() / 2 + 10), juce::Justification::centredTop, true);
         }
 
+        if (keyed && ! folded)
+        {
+            const auto line = sidechainRect();
+            const auto source = owner.model.findTrack (owner.model.findDevice (deviceId).sidechainTrack());
+            g.setFont (t.uiFont (11.0f));
+            g.setColour (t.dimText);
+            g.drawText (Strings::returns::sidechain + ": ", line, juce::Justification::centredLeft, false);
+            g.setColour (source.isValid() ? t.textPalette (source.colour()) : t.text);
+            g.setFont (t.uiFont (11.0f, 600));
+            g.drawText ((source.isValid() ? source.name() : Strings::returns::sidechainNone) + juce::String::fromUTF8 (" \xe2\x96\xbe"),
+                        line.withTrimmedLeft (74), juce::Justification::centredLeft, true);
+        }
+
         if (missing && ! folded)
         {
             g.setColour (t.dimText);
@@ -397,6 +412,12 @@ public:
     void mouseDown (const juce::MouseEvent& e) override
     {
         owner.selection.selectDevice (owner.trackId, deviceId);
+        if (keyed && ! folded && sidechainRect().contains (e.getPosition()))
+        {
+            showSidechainMenu();
+            pressedPart = Part::none;
+            return;
+        }
         pressedPart = partAt (e.getPosition());
         dragging = false;
     }
@@ -462,6 +483,28 @@ private:
     bool isInstrument() const { return owner.model.findDevice (deviceId).state.getParent().indexOf (owner.model.findDevice (deviceId).state) == 0; }
 
     juce::Rectangle<int> powerRect() const { return { 4, 3, 20, 20 }; }
+    juce::Rectangle<int> sidechainRect() const { return { 12, getHeight() - 20, getWidth() - 24, 16 }; }
+
+    void showSidechainMenu()
+    {
+        juce::PopupMenu menu;
+        const auto device = owner.model.findDevice (deviceId);
+        std::vector<int64_t> ids { -1 };
+        menu.addItem (1, Strings::returns::sidechainNone, true, device.sidechainTrack() < 0);
+        for (const auto& t : owner.model.tracks())
+            if (t.id() != owner.trackId)
+            {
+                ids.push_back (t.id());
+                menu.addItem ((int) ids.size(), t.name(), true, device.sidechainTrack() == t.id());
+            }
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [&model = owner.model, id = deviceId, ids] (int r) {
+            const auto d = model.findDevice (id);
+            if (r < 1 || ! d.isValid() || d.sidechainTrack() == ids[(size_t) r - 1])
+                return;
+            model.undo.beginNewTransaction (Strings::returns::undoSidechain);
+            d.setSidechainTrack (ids[(size_t) r - 1], &model.undo);
+        });
+    }
     juce::Rectangle<int> closeRect() const { return { getWidth() - 22, 4, 18, 18 }; }
     juce::Rectangle<int> openRect() const { return { getWidth() - 42, 4, 18, 18 }; }
     juce::Rectangle<int> foldRect() const { return { getWidth() - 62, 4, 18, 18 }; }
@@ -536,6 +579,7 @@ private:
     juce::AudioProcessor* processor = nullptr;
     std::unique_ptr<WavetableMini> wavetable;
     std::unique_ptr<DrumPads> pads;
+    bool keyed = false; // a compressor or gate: the line "Сайдчейн: ..." at the bottom chooses its key track
     std::vector<std::unique_ptr<BoundKnob>> knobs;
     Part hoverPart = Part::none, pressedPart = Part::none;
 };

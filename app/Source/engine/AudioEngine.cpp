@@ -1,5 +1,6 @@
 #include "AudioEngine.h"
 
+#include "BuiltInEffectProcessor.h"
 #include "RtCheck.h"
 
 #include "daw/engine/AudioAnalysis.h"
@@ -958,7 +959,8 @@ double songBeatAtMono (const daw::engine::Transport::Block& block, double spb, d
 // are effects and get an empty MIDI buffer. A disabled effect lets the sound through; a disabled
 // instrument is silent.
 void processChain (const std::vector<DeviceInstance*>& chain, juce::AudioBuffer<float>& storage, int numSamples,
-                   juce::MidiBuffer& midi, juce::MidiBuffer& emptyMidi, bool firstIsInstrument)
+                   juce::MidiBuffer& midi, juce::MidiBuffer& emptyMidi, bool firstIsInstrument,
+                   const std::vector<TrackRuntime*>* sidechains = nullptr)
 {
     for (size_t i = 0; i < chain.size(); ++i)
     {
@@ -966,6 +968,9 @@ void processChain (const std::vector<DeviceInstance*>& chain, juce::AudioBuffer<
         const bool isInstrument = firstIsInstrument && i == 0;
         if (d == nullptr || d->processor == nullptr)
             continue;
+        if (sidechains != nullptr && i < sidechains->size() && (*sidechains)[i] != nullptr)
+            if (auto* fx = dynamic_cast<BuiltInEffectProcessor*> (d->processor.get()))
+                fx->setSidechain ((*sidechains)[i]->keyBuffer.getArrayOfReadPointers());
 
         const int channels = d->numChannels.load (std::memory_order_relaxed);
         juce::AudioBuffer<float> view (storage.getArrayOfWritePointers(), channels, numSamples);
@@ -1368,15 +1373,22 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     if (acceptsLiveMidi (rt, true, anyArmed))
         addLive (keyboardMidi);
 
-    if (t.audio)
-        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false);
+    if (t.isReturn)
+    {
+        // A return track plays what the sends of this block gave it, through its effects.
+        rt.buffer.copyFrom (0, 0, rt.returnBus, 0, 0, numSamples);
+        rt.buffer.copyFrom (1, 0, rt.returnBus, 1, 0, numSamples);
+        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false, &t.sidechains);
+    }
+    else if (t.audio)
+        processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, false, &t.sidechains);
     else
     {
         // Start from silence so that a missing or disabled instrument cannot feed old audio into the effects.
         rt.buffer.clear (0, 0, numSamples);
         rt.buffer.clear (1, 0, numSamples);
         if (! t.chain.empty())
-            processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true);
+            processChain (t.chain, rt.buffer, numSamples, rt.midi, rt.fxMidi, true, &t.sidechains);
         // Record source "audio": what the instrument and its effects play, before the fader. Nothing is late.
         if (t.recordsOutput)
             feedRecordStream (t, rt.buffer, block, spb, numSamples, 0);
@@ -1384,7 +1396,8 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
             return;
     }
 
-    const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load());
+    // Solo leaves the return tracks on, like in Live: a soloed track keeps its reverb.
+    const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load() || t.isReturn);
     const float vol = audible ? rt.volumeGain.load() : 0.0f;
     const float pan = juce::jlimit (-1.0f, 1.0f, rt.pan.load());
     const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f; // equal-power pan law
@@ -1393,6 +1406,24 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
 
     const float* srcL = rt.buffer.getReadPointer (0);
     const float* srcR = rt.buffer.getReadPointer (1);
+    // The key of any sidechain that listens to this track: its sound before the fader.
+    rt.keyBuffer.copyFrom (0, 0, rt.buffer, 0, 0, numSamples);
+    rt.keyBuffer.copyFrom (1, 0, rt.buffer, 1, 0, numSamples);
+    // Sends: post-fader and post-pan, to return A and B (a return track does not send).
+    if (! t.isReturn && currentGraph != nullptr)
+        for (int k = 0; k < 2; ++k)
+            if (auto* target = currentGraph->returns[(size_t) k]; target != nullptr)
+            {
+                const float send = rt.sendGain[k].load (std::memory_order_relaxed);
+                if (send <= 0.0f && rt.lastSendGain[k] <= 0.0f)
+                    continue;
+                const float g = audible ? vol * send : 0.0f;
+                target->returnBus.addFromWithRamp (0, 0, srcL, numSamples, rt.lastSendGain[k] * std::cos (angle) * juce::MathConstants<float>::sqrt2,
+                                                   g * std::cos (angle) * juce::MathConstants<float>::sqrt2);
+                target->returnBus.addFromWithRamp (1, 0, srcR, numSamples, rt.lastSendGain[k] * std::sin (angle) * juce::MathConstants<float>::sqrt2,
+                                                   g * std::sin (angle) * juce::MathConstants<float>::sqrt2);
+                rt.lastSendGain[k] = g;
+            }
     master.addFromWithRamp (0, 0, srcL, numSamples, rt.lastGainL, gainL);
     master.addFromWithRamp (1, 0, srcR, numSamples, rt.lastGainR, gainR);
     rt.lastGainL = gainL;
@@ -1517,7 +1548,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
         anyRecording = anyRecording || state == TrackRuntime::recordWaiting || state == TrackRuntime::recordRunning;
     }
 
-    for (const auto& t : graph->tracks)
+    currentGraph = graph;
+    for (auto* r : graph->returns)
+        if (r != nullptr)
+            r->returnBus.clear (0, numSamples);
+    for (const auto& t : graph->tracks) // the return tracks come last
         renderTrack (t, block, spb, numSamples, killNotes, anySolo, anyArmed);
 
     // Master chain works on the first two channels of the (wider) master buffer

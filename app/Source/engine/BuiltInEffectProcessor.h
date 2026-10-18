@@ -51,6 +51,9 @@ public:
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
 
+    // The state of a new effect of `type` with some parameters set (by id), base64 as a DEVICE node keeps it.
+    static juce::String stateBase64 (const juce::String& type, const std::vector<std::pair<juce::String, float>>& values);
+
     // The default eight knobs of the compact view for this type: parameter indices.
     std::vector<int> defaultMacros() const;
 

@@ -457,6 +457,18 @@ inline const juce::String float32 = utf8 ("32 (float)");
 inline const juce::String testNote = utf8 ("Записанный звук сдвигается раньше на задержку входа и выхода. Чтобы измерить её точно, соедините кабелем выход 1 карты с выбранным входом и нажмите «Измерить»: прозвучат 10 щелчков. Ползунок поправляет вручную.");
 } // namespace audioRec
 
+// Return tracks and sends (docs/spec/06-effects-mixing.md, task 6.3)
+namespace returns
+{
+inline const juce::String reverbName = utf8 ("A Ревер");
+inline const juce::String delayName = utf8 ("B Дилей");
+inline const juce::String newReturn = utf8 ("Новая возвратная дорожка");
+inline const juce::String sidechain = utf8 ("Сайдчейн");
+inline const juce::String sidechainNone = utf8 ("нет (свой вход)");
+inline const juce::String undoSidechain = utf8 ("Сайдчейн");
+} // namespace returns
+inline const juce::String undoSend = utf8 ("Посыл");
+
 // Inspiration: generated parts and sounds
 namespace inspiration
 {
@@ -946,7 +958,7 @@ inline const juce::String masterHeader = make (utf8 ("Мастер"), utf8 ("О�
 inline const juce::String fader = make (utf8 ("Громкость"), utf8 ("Тяните фейдер, колесо меняет, двойной щелчок сбрасывает в 0 дБ. Shift: точнее."));
 inline const juce::String volumeReadout = make (utf8 ("Громкость в дБ"), utf8 ("Двойной щелчок открывает ввод числа: Enter подтверждает, Esc отменяет."));
 inline const juce::String panKnob = make (utf8 ("Панорама"), utf8 ("Положение в стерео. Двойной щелчок возвращает в центр, Shift при вращении: точнее."));
-inline const juce::String sendKnob = make (utf8 ("Посыл"), utf8 ("Отправляет часть сигнала на возвратную дорожку. ") + soon6);
+inline const juce::String sendKnob = make (utf8 ("Посыл"), utf8 ("Отправляет часть звука после фейдера на возвратную дорожку A (ревер) или B (дилей). Первое касание создаёт возвратную дорожку, если её нет. Двойной щелчок выключает."));
 inline const juce::String cueKnob = make (utf8 ("Прослушивание"), utf8 ("Громкость предпрослушивания. ") + soon6);
 inline const juce::String meter = make (utf8 ("Уровень"), utf8 ("Пиковый уровень сигнала дорожки."));
 inline const juce::String activator = make (utf8 ("Дорожка включена"), utf8 ("Показывает номер дорожки. Выключенная дорожка молчит."));

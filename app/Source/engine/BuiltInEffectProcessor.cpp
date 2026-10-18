@@ -179,3 +179,15 @@ std::vector<int> BuiltInEffectProcessor::defaultMacros() const
             result.push_back (i);
     return result;
 }
+
+juce::String BuiltInEffectProcessor::stateBase64 (const juce::String& t, const std::vector<std::pair<juce::String, float>>& values)
+{
+    BuiltInEffectProcessor p (t);
+    for (const auto& [id, v] : values)
+        if (p.effect != nullptr)
+            if (const int index = p.effect->paramIndex (id.toStdString()); index >= 0)
+                p.params[(size_t) index]->setValueNotifyingHost (p.params[(size_t) index]->convertTo0to1 (v));
+    juce::MemoryBlock block;
+    p.getStateInformation (block);
+    return block.toBase64Encoding();
+}
