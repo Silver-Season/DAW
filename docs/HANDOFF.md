@@ -24,6 +24,15 @@ In progress on other branches, not merged (both stopped on 2026-10-18):
 
 README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
 
+Owner's live-test list after the demo song (2026-10-18), to plan with the owner; the demo check's own list is in `docs/demo/README.md`:
+1. **Per-track Session/Arrangement switch.** Each track chooses on its own whether it plays the timeline or Session clips (sections, live). Switching a track to live starts its loop on the bar.
+2. **Grid inside clips on the timeline.** The bar/beat grid is hidden under clip bodies in the Arrangement, so notes cannot be lined up by eye.
+3. **Drag and drop of a track into the song**, with a choice of an existing track or a new one; more generally a fast way to add a track (a button, or empty space below the last track that accepts drops).
+4. **New MIDI or audio tracks cannot be created in the Arrangement View.**
+5. **Pan sliders react to the scroll wheel**, which causes misclicks while scrolling: mouse drag only.
+6. **Tempo detection of dropped audio is often wrong, and there is still no warp.** Critical (stage 7, branch `claude/funny-euler-1vls48`).
+7. **Waveforms in the Arrangement look bad when zoomed in, and the audio clip editor at the bottom cannot zoom.**
+
 Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), real warp (stage 7), a design pass.
 
 ## How to continue
