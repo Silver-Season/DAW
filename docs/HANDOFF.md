@@ -31,6 +31,8 @@ Warp part 2 (branch `claude/project-thread-aqlatg`, thread "warp"; the design di
 - Next (part 3): tempo and time signature track (7.5), the project following a performance played without a click, rendering ahead of the cursor (7.1), tap tempo, audio quantize with strength across tracks.
 - `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion. When merging it after the English UI, turn every new `utf8 ("…")` in `Strings.h` into `tr ("English", "…")`.
 
+Logo and app icon (thread "design and logo"): `ui::drawLogo` redrawn as the glass prism with the incoming beam and six spectrum bars, theme-aware; the app icon is `app/Resources/brand/AppIcon-1024.png` (`ICON_BIG`), sources in `media/brand/`. A design pass is being discussed with the owner: three directions for the main window (glass and light, instrument, living canvas); no restyling before the owner picks one.
+
 README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
 
 Owner's live-test list after the demo song (2026-10-18), all seven done on `claude/project-thread-0292na`; the demo check's own list is in `docs/demo/README.md`:

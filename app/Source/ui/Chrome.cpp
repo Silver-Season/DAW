@@ -163,25 +163,79 @@ void ScanlineOverlay::paint (juce::Graphics& g)
 //==============================================================================
 void drawLogo (juce::Graphics& g, juce::Rectangle<float> area)
 {
+    // The same geometry as media/brand/*.svg: a glass prism, the incoming beam and six spectrum bars like tracks.
+    // Drawn in a 100-unit square whose content spans x 3..98, y 22..78; it is fitted into the area by that content.
     const auto& t = theme();
-    const float s = juce::jmin (area.getWidth(), area.getHeight()) / 44.0f;
-    const auto origin = area.getTopLeft();
+    const juce::Rectangle<float> content (3.0f, 20.0f, 96.0f, 60.0f);
+    const float s = juce::jmin (area.getWidth() / content.getWidth(), area.getHeight() / content.getHeight());
+    const auto origin = area.getCentre() - content.getCentre() * s;
     auto pt = [&] (float x, float y) { return juce::Point<float> (origin.x + x * s, origin.y + y * s); };
+    auto px = [&] (float units) { return juce::jmax (1.0f, units * s); };
 
-    juce::Path tri;
-    tri.startNewSubPath (pt (22, 5));
-    tri.lineTo (pt (39, 37));
-    tri.lineTo (pt (5, 37));
-    tri.closeSubPath();
-    g.setColour (t.text.withAlpha (0.9f));
-    g.fillPath (tri);
+    const juce::Point<float> a (40, 22), b (68, 78), c (12, 78), p (46, 64);
+    auto rightEdge = [&] (float y) { return a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y); };
+    const float beamY = 50.0f, beamX = a.x + (c.x - a.x) * (beamY - a.y) / (c.y - a.y);
+    auto path = [&] (std::initializer_list<juce::Point<float>> pts, bool closed) {
+        juce::Path r;
+        bool first = true;
+        for (auto q : pts)
+        {
+            const auto w = pt (q.x, q.y);
+            if (first) r.startNewSubPath (w); else r.lineTo (w);
+            first = false;
+        }
+        if (closed) r.closeSubPath();
+        return r;
+    };
 
-    const int rayHues[6] { 0, 2, 4, 7, 9, 12 };
+    // Spectrum bars first: the glass in front lets their roots show through.
+    static constexpr float barY[6] { 42, 48, 54, 60, 66, 72 }, barEnd[6] { 96, 98.5f, 95, 98.5f, 94, 90 };
+    const int barHues[6] { 0, 2, 4, 7, 9, 12 };
+    const float barH = juce::jmax (1.2f, 3.4f * s);
     for (int k = 0; k < 6; ++k)
     {
-        g.setColour (juce::Colour::fromHSL (t.hues[(size_t) rayHues[k]] / 360.0f, 0.9f, 0.62f, 1.0f));
-        const auto a = pt (30.0f, 21.0f + (float) k * 2.4f);
-        g.fillRect (juce::Rectangle<float> (a.x, a.y, 14.0f * s, 2.2f * s));
+        const auto colour = juce::Colour::fromHSL (t.hues[(size_t) barHues[k]] / 360.0f, 0.95f, 0.58f, 1.0f);
+        const auto from = pt (rightEdge (barY[k]) - 1.5f, barY[k]);
+        const auto bar = juce::Rectangle<float> (from.x, from.y - barH * 0.5f, pt (barEnd[k], 0).x - from.x, barH);
+        if (t.glow > 0.0f)
+            for (float spread : { 2.2f, 1.2f })
+            {
+                g.setColour (colour.withAlpha (0.16f * t.glow));
+                g.fillRoundedRectangle (bar.expanded (barH * spread * 0.5f), barH * (0.5f + spread * 0.5f));
+            }
+        g.setColour (colour);
+        g.fillRoundedRectangle (bar, barH * 0.5f);
     }
+
+    const auto ink = t.text;
+    g.setColour (ink);
+    g.drawLine (juce::Line<float> (pt (3, beamY), pt (beamX, beamY)), px (2.2f));
+
+    g.setColour (ink.withAlpha (0.30f));
+    g.fillPath (path ({ a, c, p }, true));
+    g.setColour (ink.withAlpha (0.16f));
+    g.fillPath (path ({ a, p, b }, true));
+    g.setColour (ink.withAlpha (0.08f));
+    g.fillPath (path ({ c, b, p }, true));
+
+    // The inner edges and the refracted beam only read at icon sizes; in the top bar they turn into noise.
+    if (s >= 0.6f)
+    {
+        g.setColour (ink.withAlpha (0.75f));
+        g.drawLine (juce::Line<float> (pt (beamX, beamY), pt (rightEdge (57), 57)), px (1.4f));
+        const juce::PathStrokeType thin (px (0.9f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+        g.setColour (ink.withAlpha (0.6f));
+        g.strokePath (path ({ a, p, b }, false), thin);
+        g.strokePath (path ({ p, c }, false), thin);
+    }
+
+    const auto outline = path ({ a, b, c }, true);
+    if (t.glow > 0.0f)
+    {
+        g.setColour (ink.withAlpha (0.18f * t.glow));
+        g.strokePath (outline, juce::PathStrokeType (px (4.0f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    g.setColour (ink);
+    g.strokePath (outline, juce::PathStrokeType (px (1.6f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 } // namespace ui
