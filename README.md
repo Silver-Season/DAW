@@ -143,6 +143,18 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 
 ![Arrangement in automation mode: volume envelopes, Prism theme](media/stage6-automation-prism.png)
 
+## Warp and the owner's live-test list (stage 7, part 1)
+
+- **Warp**: an audio clip that follows the project tempo keeps its pitch. A stretched copy of the file is rendered in the background (Rubber Band), the clip plays resampled until it is ready, and export renders the copies itself. Modes: Beats for drums, Complex and Complex Pro for full mixes, Tones for voices and solo lines, Texture, and Re-Pitch (speed and pitch together). The clip editor has the Warp switch, the mode, the file tempo with ×2 and ÷2.
+- **Tempo of dropped audio**: a file without a tempo in its name is analysed in the background (onsets, beat tracking, the first downbeat); its clips then follow the project tempo and start on the first beat. Loops with off-beat hats no longer read at double tempo.
+- **Each track picks the timeline or Session**: the play button in an Arrangement track header starts the track's Session clip on the next bar; lit, it gives this one track back to the timeline.
+- The grid shows inside clips on the timeline; waveforms stay sharp when zoomed in (sample by sample at the end); the audio clip editor zooms with the wheel or a pinch.
+- "+ MIDI" and "+ Audio" under the last track, and the space below it takes sounds, instruments and MIDI files for a new track. Pan controls no longer move when the wheel scrolls past them.
+
+![Arrangement: grid inside clips, per-track Session switch, add-track buttons, Prism theme](media/stage7-arrangement-prism.png)
+
+![The audio clip editor with warp, zoomed in, Prism theme](media/stage7-warp-editor-prism.png)
+
 ## English interface
 
 English is the default UI language. Settings → Appearance → Language switches to Russian (and back); the choice applies after a restart. Every UI text is a `tr ("English", "Русский")` pair in `app/Source/Strings.h`, and the engine tests run once in each language.
