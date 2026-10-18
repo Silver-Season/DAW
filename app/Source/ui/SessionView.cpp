@@ -1036,6 +1036,7 @@ public:
         pan.setBipolar (true);
         pan.setDefaultValue (0.5);
         pan.setHelpText (Strings::help::panKnob);
+        pan.setWheelChangesValue (false);
         pan.valueText = [] (double val) {
             const int p = juce::roundToInt ((val * 2.0 - 1.0) * 50.0);
             return p == 0 ? juce::String ("C") : juce::String (std::abs (p)) + (p < 0 ? "L" : "R");

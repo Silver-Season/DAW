@@ -160,7 +160,10 @@ public:
     bool rewindSong();
     // The orange "Back to arrangement" button: at the next launch-quantisation boundary the session clips stop and every
     // track plays its arrangement again; notes under the position are chased. While stopped it happens at once.
-    bool backToArrangement();
+    // Every track (-1) or one track gives up its Session clips and plays the timeline again, at the next launch boundary.
+    bool backToArrangement (int64_t trackId = -1);
+    // The track switches to Session View: the clip of that slot starts on the next bar line, whatever the launch quantisation.
+    bool launchClipOnBar (int64_t trackId, int scene);
     // True when at least one track plays (or was stopped in) Session View instead of the arrangement: the button lights up.
     bool anyTrackInSession() const { return anyInSession.load(); }
 

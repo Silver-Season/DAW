@@ -47,6 +47,11 @@ public:
             repaint();
         }
     }
+    void setIcon (std::function<juce::Path (juce::Rectangle<float>)> iconFn)
+    {
+        icon = std::move (iconFn);
+        repaint();
+    }
     void setText (const juce::String& s)
     {
         if (s != text)
@@ -163,12 +168,8 @@ public:
             onGestureStart();
         change (0.0);
     }
-    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) override
-    {
-        if (onGestureStart)
-            onGestureStart();
-        change (value + (w.deltaY > 0 ? 0.02 : -0.02));
-    }
+    // The wheel scrolls the headers: turning the pan by accident while scrolling the tracks was too easy.
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override { juce::Component::mouseWheelMove (e, w); }
 
 private:
     void change (double v)
@@ -195,8 +196,22 @@ public:
         : view (v), trackId (id),
           activator (juce::String(), Strings::help::activator, MiniButton::Style::activator),
           solo ("S", Strings::help::solo, MiniButton::Style::solo), arm (juce::String(), Strings::help::arm, MiniButton::Style::arm),
-          chooser (Strings::arrangement::autoVolume, Strings::help::arrAutomationChooser)
+          chooser (Strings::arrangement::autoVolume, Strings::help::arrAutomationChooser),
+          live ([] (juce::Rectangle<float> a) { return icons::play (a); }, Strings::help::arrLiveToSession)
     {
+        // Session or timeline, per track: the switch launches the track's clip on the next bar, or gives it back.
+        live.onClick = [this] (const juce::MouseEvent&) {
+            const auto track = view.model.findTrack (trackId);
+            if (! track.isValid())
+                return;
+            if (auto* rt = view.engine.findRuntime (trackId); rt != nullptr && rt->inSession.load())
+            {
+                view.engine.backToArrangement (trackId);
+                return;
+            }
+            if (const int scene = liveScene (track); scene >= 0)
+                view.engine.launchClipOnBar (trackId, scene);
+        };
         chooser.onClick = [this] (const juce::MouseEvent&) {
             view.model.setSelectedTrack (trackId);
             view.automationMenu (trackId).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&chooser));
@@ -232,7 +247,7 @@ public:
             if (auto track = view.model.findTrack (trackId); track.isValid())
                 view.actions.setTrackArm (trackId, ! track.arm(), ! e.mods.isCommandDown());
         };
-        for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &volume, &pan })
+        for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &volume, &pan })
             addAndMakeVisible (c);
         refreshValues (true);
     }
@@ -261,6 +276,22 @@ public:
         activator.setText (juce::String (view.model.indexOfTrack (trackId) + 1));
         solo.setOn (track.solo());
         arm.setOn (track.arm());
+        auto* rt = view.engine.findRuntime (trackId);
+        const bool inSession = rt != nullptr && rt->inSession.load();
+        if (rt != nullptr && rt->playingSlot.load() >= 0)
+            lastPlayedScene = rt->playingSlot.load();
+        if (inSession != live.on)
+        {
+            live.setOn (inSession);
+            if (inSession)
+                live.setIcon ([] (juce::Rectangle<float> a) { return icons::backToArrangement (a); });
+            else
+                live.setIcon ([] (juce::Rectangle<float> a) { return icons::play (a); });
+        }
+        const auto liveHelp = inSession ? Strings::help::arrLiveToArrangement
+                                        : (liveScene (track) >= 0 ? Strings::help::arrLiveToSession : Strings::help::arrLiveNoClips);
+        if (live.getHelpText() != liveHelp)
+            live.setHelpText (liveHelp);
         const auto summary = track.name() + "|" + juce::String (track.colour());
         if (summary != shown)
         {
@@ -309,10 +340,12 @@ public:
         const int pad = 8, btn = compact ? 18 : 20;
         auto r = getLocalBounds().withTrimmedLeft (kStripe + pad).withTrimmedRight (pad).withTrimmedBottom (1);
         auto top = compact ? r.withSizeKeepingCentre (r.getWidth(), btn) : r.removeFromTop (juce::jmin (h - 2, 6 + btn)).withTrimmedTop (5).withHeight (btn);
-        // right to left: record, solo, on
+        // right to left: record, solo, Session / timeline, on
         arm.setBounds (top.removeFromRight (btn));
         top.removeFromRight (3);
         solo.setBounds (top.removeFromRight (btn));
+        top.removeFromRight (3);
+        live.setBounds (top.removeFromRight (btn));
         top.removeFromRight (3);
         activator.setBounds (top.removeFromLeft (btn + 2));
         top.removeFromLeft (6);
@@ -406,6 +439,17 @@ public:
     }
 
 private:
+    // The slot the switch launches: the clip this track played last, else its first clip; -1 if it has none.
+    int liveScene (const TrackRef& track) const
+    {
+        if (lastPlayedScene >= 0 && lastPlayedScene < track.numSlots() && track.clipAt (lastPlayedScene).isValid())
+            return lastPlayedScene;
+        for (int s = 0; s < track.numSlots(); ++s)
+            if (track.clipAt (s).isValid())
+                return s;
+        return -1;
+    }
+
     void finishRename (const juce::String& text)
     {
         auto* dying = editor.release();
@@ -454,7 +498,8 @@ private:
 
     ArrangementView& view;
     int64_t trackId;
-    MiniButton activator, solo, arm, chooser;
+    MiniButton activator, solo, arm, chooser, live;
+    int lastPlayedScene = -1;
     bool shownAutomation = false;
     NumberField volume;
     PanDrag pan;

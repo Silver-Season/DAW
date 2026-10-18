@@ -250,9 +250,14 @@ bool AudioEngine::rewindSong()
     return pushCommand ({ EngineCommand::Type::rewind, -1, -1 });
 }
 
-bool AudioEngine::backToArrangement()
+bool AudioEngine::backToArrangement (int64_t trackId)
 {
-    return pushCommand ({ EngineCommand::Type::backToArrangement, -1, -1 });
+    return pushCommand ({ EngineCommand::Type::backToArrangement, trackId, -1 });
+}
+
+bool AudioEngine::launchClipOnBar (int64_t trackId, int scene)
+{
+    return pushCommand ({ EngineCommand::Type::launchClip, trackId, scene, juce::jmax (1.0, beatsPerBar.load()) });
 }
 
 bool AudioEngine::startRecord (int64_t trackId, int scene, bool noOverdub)
@@ -571,9 +576,9 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
         if (end < rt.recordEndBeat.load())
             rt.recordEndBeat = end;
     };
-    const auto launch = [&] (const PlaybackGraph::Track& t, int scene, const daw::engine::MidiClip* clip) {
+    const auto launch = [&] (const PlaybackGraph::Track& t, int scene, const daw::engine::MidiClip* clip, double quantiseBeats) {
         recordingEndsWithLaunch (*t.runtime);
-        t.runtime->player.launch (scene, clip, now, q);
+        t.runtime->player.launch (scene, clip, now, quantiseBeats);
         playing = true; // launching a clip starts the transport
     };
 
@@ -654,13 +659,13 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
             case EngineCommand::Type::launchClip:
                 if (auto* t = findTrack (c.trackId))
                     if (auto* clip = slotClip (*t, c.sceneIndex))
-                        launch (*t, c.sceneIndex, clip);
+                        launch (*t, c.sceneIndex, clip, c.beat > 0.0 && playing.load() ? c.beat : q); // beat: a quantisation of its own
                 break;
             case EngineCommand::Type::launchScene:
                 for (const auto& t : graph.tracks)
                 {
                     if (auto* clip = slotClip (t, c.sceneIndex))
-                        launch (t, c.sceneIndex, clip);
+                        launch (t, c.sceneIndex, clip, q);
                     else
                         t.runtime->player.stop (now, q);
                 }
@@ -707,6 +712,8 @@ void AudioEngine::processCommands (const PlaybackGraph& graph)
                 for (const auto& t : graph.tracks)
                 {
                     auto& rt = *t.runtime;
+                    if (c.trackId >= 0 && rt.trackId != c.trackId)
+                        continue; // only the one track
                     if (! rt.inSession.load() && rt.player.playingSlot() == daw::engine::ClipPlayer::kNoClip)
                         continue; // already plays its arrangement
                     rt.player.stop (now, q);
