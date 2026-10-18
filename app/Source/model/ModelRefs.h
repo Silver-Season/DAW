@@ -208,6 +208,9 @@ public:
     juce::String name() const { return get<juce::String> (ids::name, {}); }
     bool enabled() const { return get<bool> (ids::enabled, true); }
     bool folded() const { return get<bool> (ids::folded, false); }
+    // A built-in effect shows all its parameters in the chain instead of the main ones. A view setting: not undoable.
+    bool expanded() const { return get<bool> (ids::expanded, false); }
+    void setExpanded (bool v) const { set (ids::expanded, v, nullptr); }
     juce::String pluginDesc() const { return get<juce::String> (ids::pluginDesc, {}); }
     juce::String stateBase64() const { return get<juce::String> (ids::state, {}); }
     juce::String macroParams() const { return get<juce::String> (ids::macroParams, {}); }
