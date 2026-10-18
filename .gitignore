@@ -3,3 +3,6 @@ build*/
 *.xcodeproj
 compile_commands.json
 .claude/worktrees/
+
+# Local release packages; publish as GitHub assets rather than Git blobs.
+dist/

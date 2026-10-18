@@ -21,36 +21,25 @@ jobs:
         run: ctest --test-dir build --output-on-failure
       - name: Validate the Audio Unit
         run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto build/plugins/prisma/Prisma_artefacts/Release/AU/Prisma.component "$HOME/Library/Audio/Plug-Ins/Components/Prisma.component"
           killall -9 AudioComponentRegistrar || true
           auval -v aumu Prsm Dawp
-      - name: Package DMG
-        run: |
-          set -e
-          R=build/plugins/prisma/Prisma_artefacts/Release
-          mkdir -p dist/DAW/Plugins
-          cp -R build/app/DAW_artefacts/Release/DAW.app dist/DAW/
-          cp -R "$R/AU/Prisma.component" "$R/VST3/Prisma.vst3" "$R/Standalone/Prisma.app" dist/DAW/Plugins/
-          # Ad-hoc signature: required on Apple Silicon; not notarised, so Gatekeeper still asks once.
-          codesign --force --deep --sign - dist/DAW/DAW.app dist/DAW/Plugins/*
-          ln -s /Applications dist/DAW/Applications
-          cp packaging/INSTALL.txt packaging/INSTALL-ru.txt dist/DAW/
-          # hdiutil on hosted runners sometimes fails with "Resource busy"; a short wait and another try gets through.
-          for i in 1 2 3 4; do
-            hdiutil create -volname DAW -srcfolder dist/DAW -ov -format UDZO dist/DAW-macOS.dmg && break
-            [ "$i" = 4 ] && exit 1
-            sleep $((i * 5))
-          done
+      - name: Package and verify DMG
+        run: ./scripts/package-mac.sh "$PWD/build" "$PWD/dist/DAW-macOS.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: DAW-macOS
-          path: dist/DAW-macOS.dmg
+          path: |
+            dist/DAW-macOS.dmg
+            dist/DAW-macOS.dmg.sha256
       - name: Publish nightly release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete nightly --yes --cleanup-tag || true
-          gh release create nightly dist/DAW-macOS.dmg --prerelease --target "${{ github.sha }}" \
+          gh release create nightly dist/DAW-macOS.dmg dist/DAW-macOS.dmg.sha256 --prerelease --target "${{ github.sha }}" \
             --title "Nightly build" --notes "Automatic build of the latest main (${{ github.sha }}). See INSTALL.txt inside the image."
 
   linux:

@@ -16,7 +16,9 @@ Verified locally: macOS arm64 Release app and engine-test build succeeded; all 1
 
 Next: review the actual native captures with the owner, then assess whether a full backdrop renderer is worth the additional work. Further visual verification is still needed for Audio/Warp, drums, export, hover/focus states, and the settings/synth windows in the four legacy themes. No new features should be inferred from the generated concepts. The conceptual images/archives under `media/design/` remain local and mostly untracked; the HTML optics prototype and its assets are committed.
 
-Publication: local branch only; no push or PR was created, and GitHub main was not changed. Do not restart GitHub authentication without the owner's instruction. The local build is `/private/tmp/prisma-glass-native/app/DAW_artefacts/Release/DAW.app`; the build and logs are temporary, while source, handoff and final captures are kept in the repository.
+Packaging follow-up requested by the owner: `scripts/package-mac.sh BUILD_DIR OUTPUT.dmg` now packages the app and Prisma AU/VST3/Standalone, stages/signs outside File Provider folders, includes license notices and build metadata, verifies the DMG and mounted signatures, and writes a SHA-256 sidecar. CI uses this packager and explicitly installs its AU on the ephemeral runner before auval (normal builds keep PRISMA_COPY_AFTER_BUILD off). The local package is arm64; it must not be described as universal. See `docs/design/GLASS-UI-RELEASE.md` for the final package result.
+
+Publication remains blocked by missing GitHub Git credentials: the push failed with "could not read Username". No push or PR was created, and GitHub main was not changed. The owner has now authorized publishing this branch and its DMG. Source/docs/screenshots are committed locally; a later authorized login can unblock the push and artifact publication. The local build is `/private/tmp/prisma-glass-native/app/DAW_artefacts/Release/DAW.app`.
 
 ## Now (2026-10-18)
 
