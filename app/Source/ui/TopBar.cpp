@@ -597,7 +597,7 @@ void TopBar::paint (juce::Graphics& g)
     g.setColour (t.text);
     g.setFont (t.uiFont (15.0f, 600));
     if (! compact)
-        g.drawText (Strings::labelAppName, logoArea.withTrimmedLeft (30).withWidth (80), juce::Justification::centredLeft, false);
+        g.drawText (Strings::labelAppName, logoArea.withX (logoArea.getRight() + 8).withWidth (80), juce::Justification::centredLeft, false);
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
         fillCell (g, area.toFloat(), t.panel);
@@ -696,10 +696,10 @@ void TopBar::resized()
     };
 
     // Left to right
-    logoArea = juce::Rectangle<int> (22, 22).withCentre ({ r.getX() + 11, cy });
+    logoArea = juce::Rectangle<int> (46, 30).withCentre ({ r.getX() + 23, cy });
     // Below this width the name of the program, and some padding, give way to the transport buttons of stage 3.
     compact = getWidth() < 1400;
-    r.removeFromLeft ((compact ? 22 : 108) + gap);
+    r.removeFromLeft ((compact ? 46 : 132) + gap);
 
     tempo.setBounds (juce::Rectangle<int> (80, h).withCentre ({ r.getX() + 40, cy }));
     r.removeFromLeft (80 + small);

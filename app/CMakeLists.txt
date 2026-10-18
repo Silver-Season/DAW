@@ -2,6 +2,7 @@ juce_add_gui_app(DAW
     PRODUCT_NAME "DAW"
     COMPANY_NAME "DAW Project"
     BUNDLE_ID "com.dawproject.daw"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/brand/AppIcon-1024.png"
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "DAW needs audio input access to record.")
 
