@@ -181,7 +181,10 @@ public:
     prisma_ui::KeyboardPanel& getKeyboardPanel() { return keyboard; }
 
 private:
-    bool ownsComputerKeys() const { return processor.wrapperType != juce::AudioProcessor::wrapperType_Undefined; }
+  bool ownsComputerKeys () const
+  {
+      return synthProcessor.wrapperType != juce::AudioProcessor::wrapperType_Undefined;
+  }
     void timerCallback() override;
     prisma_ui::Section& makeOscSection (int osc);
 
@@ -194,7 +197,7 @@ private:
         return ref;
     }
 
-    PrismaProcessor& processor;
+    PrismaProcessor& synthProcessor;
     prisma_ui::PrismaLookAndFeel lnf;
     std::vector<std::unique_ptr<juce::Component>> owned;
 

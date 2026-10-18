@@ -176,7 +176,10 @@ public:
             const auto track = view.model.findTrack (view.columnTrack[(size_t) i]);
             if (! track.isValid())
                 continue;
-            fillCell (g, b.toFloat(), t.palette (track.colour()));
+            if (t.glass)
+                glass::accent (g, b.toFloat (), t.palette (track.colour ()), t.radius * 0.7f);
+            else
+                fillCell (g, b.toFloat (), t.palette (track.colour ()));
             if (track.id() == selectedTrack)
                 strokeCell (g, b.toFloat(), t.text, 2.0f);
             g.setColour (t.clipInk);
@@ -512,14 +515,32 @@ public:
                 if (audioClip)
                     audioSource = view.engine.peekAudioSource (clip.fileId());
                 const bool missing = audioClip && audioSource == nullptr;
-                const auto ink = missing ? t.dimText : t.clipInk;
-                fillCell (g, cell, missing ? t.panel2.interpolatedWith (t.dimText, 0.16f) : t.clipColour (clip.colour(), isPlaying));
+                const auto ink = missing ? t.dimText : (t.glass ? t.text : t.clipInk);
+                if (t.glass && !missing)
+                {
+                    fillCell (g, cell, t.panel.interpolatedWith (colour, isPlaying ? 0.65f : 0.28f), 0.7f);
+                    g.setColour (colour);
+                    g.fillRoundedRectangle (cell.reduced (4, 0).withHeight (2).translated (0, 2), 1.0f);
+                }
+                else
+                    fillCell (g,
+                              cell,
+                              missing ? t.panel2.interpolatedWith (t.dimText, 0.16f)
+                                      : t.clipColour (clip.colour (), isPlaying));
                 if (audioSource != nullptr)
                 {
                     const auto area = cell.withTrimmedLeft (26.0f).withTrimmedRight (4.0f).withTrimmedTop (15.0f).withTrimmedBottom (3.0f); // under the name
                     juce::Graphics::ScopedSaveState save (g);
                     g.reduceClipRegion (cell.toNearestInt());
-                    drawAudioWaveform (g, area, *audioSource, clip, 0.0, false, clip.lengthBeats(), clip.contentTempo (view.model.tempo()), t.clipInk.withAlpha (0.7f));
+                    drawAudioWaveform (g,
+                                       area,
+                                       *audioSource,
+                                       clip,
+                                       0.0,
+                                       false,
+                                       clip.lengthBeats (),
+                                       clip.contentTempo (view.model.tempo ()),
+                                       ink.withAlpha (0.7f));
                     if (audioSource->peaksAvailable.load (std::memory_order_acquire) < audioSource->numPeaks)
                         peaksPending = true; // still decoding: repaint on the next tick to show more
                 }

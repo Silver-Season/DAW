@@ -65,6 +65,25 @@ void Knob::paint (juce::Graphics& g)
     auto captionArea = area.removeFromBottom (captionHeight);
     const float d = juce::jmin (area.getWidth(), area.getHeight());
     const auto knob = juce::Rectangle<float> (d, d).withCentre (area.getCentre());
+    if (t.glass)
+    {
+        glass::knob (g,
+                     knob.reduced (1.0f),
+                     (float)value,
+                     isEnabled () ? ringColour.value_or (t.accentFill) : t.dimText.withAlpha (0.5f),
+                     bipolar);
+        if (caption.isNotEmpty ())
+        {
+            const bool showValue = (hover || gestureOpen) && valueText && isEnabled ();
+            g.setColour (showValue ? t.text : t.dimText);
+            g.setFont (showValue ? t.numFont (10.0f) : t.uiFont (10.5f));
+            g.drawText (showValue ? valueText (value) : caption,
+                        captionArea.toNearestInt ().expanded (6, 0),
+                        juce::Justification::centred,
+                        false);
+        }
+        return;
+    }
     const float thickness = juce::jmax (3.0f, d * 0.16f);
     const float radius = d * 0.5f - thickness * 0.5f;
     const float alpha = isEnabled() ? 1.0f : 0.4f;
@@ -261,6 +280,18 @@ void Fader::paint (juce::Graphics& g)
     g.fillRect (cx - 7.0f, zeroY, 14.0f, 1.0f);
 
     const auto thumb = thumbArea();
+    if (t.glass)
+    {
+        const auto lens =
+          juce::Rectangle<float> (juce::jmin (bounds.getWidth (), 24.0f), 16.0f).withCentre (thumb.getCentre ());
+        g.setColour (t.accentFill.withAlpha (0.65f));
+        g.fillRoundedRectangle (
+          juce::Rectangle<float> (3.0f, juce::jmax (0.0f, bounds.getBottom () - thumb.getCentreY ()))
+            .withPosition (cx - 1.5f, thumb.getCentreY ()),
+          1.5f);
+        glass::lens (g, lens, t.accentFill, true);
+        return;
+    }
     g.setColour (t.text);
     g.fillRoundedRectangle (juce::Rectangle<float> (juce::jmin (bounds.getWidth(), 22.0f), thumb.getHeight()).withCentre (thumb.getCentre()), 3.0f);
     g.setColour (t.chrome.withAlpha (0.55f));

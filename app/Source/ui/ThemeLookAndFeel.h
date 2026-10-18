@@ -13,6 +13,7 @@ public:
 
     // Re-reads colours and the default font from the current theme.
     void refresh();
+    static void refreshComponent (juce::Component&, const Theme& previous);
 
     void drawPopupMenuBackground (juce::Graphics&, int width, int height) override;
     void drawMenuBarBackground (juce::Graphics&, int width, int height, bool isMouseOverBar, juce::MenuBarComponent&) override;
@@ -25,4 +26,16 @@ public:
     juce::Font getPopupMenuFont() override;
     juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour, bool isMouseOver, bool isButtonDown) override;
+    void drawLinearSlider (juce::Graphics&,
+                           int,
+                           int,
+                           int,
+                           int,
+                           float,
+                           float,
+                           float,
+                           juce::Slider::SliderStyle,
+                           juce::Slider&) override;
+    void drawRotarySlider (juce::Graphics&, int, int, int, int, float, float, float, juce::Slider&) override;
+    void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool, bool) override;
 };

@@ -1,4 +1,5 @@
 #include "ThemeLookAndFeel.h"
+#include "GlassMaterial.h"
 
 ThemeLookAndFeel::ThemeLookAndFeel()
 {
@@ -71,6 +72,37 @@ void ThemeLookAndFeel::refresh()
     setColour (juce::TableHeaderComponent::outlineColourId, t.line);
     setColour (juce::TableHeaderComponent::highlightColourId, t.panel2);
     setColour (juce::HyperlinkButton::textColourId, t.accent);
+    if (t.glass)
+    {
+        setColour (juce::TextButton::buttonOnColourId, t.accentFill);
+        setColour (juce::TextButton::textColourOnId, t.inkOn (t.accentFill));
+        setColour (juce::Slider::trackColourId, t.accentFill);
+    }
+}
+
+void ThemeLookAndFeel::refreshComponent (juce::Component& component, const Theme& previous)
+{
+    const auto& next = theme();
+    const std::pair<juce::Colour, juce::Colour> colours[] {
+        { previous.text, next.text }, { previous.dimText, next.dimText },
+        { previous.panel, next.panel }, { previous.panel2, next.panel2 },
+        { previous.chrome, next.chrome }, { previous.line, next.line },
+        { previous.accent, next.accent }, { previous.accent2, next.accent2 }
+    };
+    for (int id : std::initializer_list<int> { juce::Label::textColourId, juce::ComboBox::backgroundColourId, juce::ComboBox::outlineColourId,
+                    juce::ComboBox::textColourId, juce::ComboBox::arrowColourId, juce::TextEditor::backgroundColourId,
+                    juce::TextEditor::outlineColourId, juce::TextEditor::focusedOutlineColourId })
+        if (component.isColourSpecified (id))
+            for (const auto& pair : colours)
+                if (component.findColour (id) == pair.first)
+                {
+                    component.setColour (id, pair.second);
+                    break;
+                }
+    if (auto* editor = dynamic_cast<juce::TextEditor*> (&component))
+        editor->applyColourToAllText (next.text);
+    for (auto* child : component.getChildren())
+        refreshComponent (*child, previous);
 }
 
 juce::Font ThemeLookAndFeel::getPopupMenuFont()
@@ -142,8 +174,106 @@ void ThemeLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b,
         fill = t.panel2.brighter (0.1f);
     else if (over)
         fill = background.interpolatedWith (t.panel2, 0.7f);
-    g.setColour (fill.withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.5f));
-    g.fillRoundedRectangle (r, t.radius);
+    if (t.glass)
+    {
+        if (b.getToggleState ())
+            ui::glass::accent (g, r, fill, t.radius);
+        else
+            ui::glass::surface (g, r, fill.withMultipliedAlpha (b.isEnabled () ? 1.0f : 0.5f), t.radius);
+    }
+    else
+    {
+        g.setColour (fill.withMultipliedAlpha (b.isEnabled () ? 1.0f : 0.5f));
+        g.fillRoundedRectangle (r, t.radius);
+    }
     g.setColour (t.line);
     g.drawRoundedRectangle (r, t.radius, 1.0f);
+    if (b.hasKeyboardFocus (false))
+    {
+        g.setColour (t.accent);
+        g.drawRoundedRectangle (r.reduced (1.0f), t.radius, 2.0f);
+    }
+}
+
+void
+ThemeLookAndFeel::drawLinearSlider (juce::Graphics& g,
+                                    int x,
+                                    int y,
+                                    int w,
+                                    int h,
+                                    float pos,
+                                    float lo,
+                                    float hi,
+                                    juce::Slider::SliderStyle style,
+                                    juce::Slider& s)
+{
+    const auto& t = theme ();
+    if (!t.glass || (style != juce::Slider::LinearHorizontal && style != juce::Slider::LinearVertical))
+    {
+        LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, pos, lo, hi, style, s);
+        return;
+    }
+    const bool vertical = style == juce::Slider::LinearVertical;
+    const auto bounds = juce::Rectangle<float> ((float)x, (float)y, (float)w, (float)h);
+    const auto track = vertical ? bounds.withSizeKeepingCentre (4.0f, bounds.getHeight ())
+                                : bounds.withSizeKeepingCentre (bounds.getWidth (), 4.0f);
+    g.setColour (t.line);
+    g.fillRoundedRectangle (track, 2.0f);
+    const auto filled = vertical ? track.withTop (pos) : track.withRight (pos);
+    ui::glass::accent (g, filled, s.isEnabled () ? t.accentFill : t.dimText, 2.0f);
+    const auto centre =
+      vertical ? juce::Point<float> (bounds.getCentreX (), pos) : juce::Point<float> (pos, bounds.getCentreY ());
+    ui::glass::lens (g, juce::Rectangle<float> (22.0f, 18.0f).withCentre (centre), t.accentFill, vertical);
+}
+
+void
+ThemeLookAndFeel::drawRotarySlider (juce::Graphics& g,
+                                    int x,
+                                    int y,
+                                    int w,
+                                    int h,
+                                    float pos,
+                                    float start,
+                                    float end,
+                                    juce::Slider& s)
+{
+    if (!theme ().glass)
+    {
+        LookAndFeel_V4::drawRotarySlider (g, x, y, w, h, pos, start, end, s);
+        return;
+    }
+    const float diameter = juce::jmax (12.0f, (float)juce::jmin (w, h) - 5.0f);
+    ui::glass::knob (g,
+                     juce::Rectangle<float> (diameter, diameter)
+                       .withCentre ({ (float)x + (float)w * 0.5f, (float)y + (float)h * 0.5f }),
+                     pos,
+                     s.isEnabled () ? theme ().accentFill : theme ().dimText,
+                     s.getMinimum () < 0.0 && s.getMaximum () > 0.0);
+}
+
+void
+ThemeLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bool over, bool down)
+{
+    const auto& t = theme ();
+    if (!t.glass)
+    {
+        LookAndFeel_V4::drawToggleButton (g, b, over, down);
+        return;
+    }
+    const auto track = juce::Rectangle<float> (32.0f, 18.0f).withCentre ({ 19.0f, (float)b.getHeight () * 0.5f });
+    g.setColour (b.getToggleState () ? t.accentFill : t.line);
+    g.fillRoundedRectangle (track, 9.0f);
+    ui::glass::lens (g,
+                     juce::Rectangle<float> (18.0f, 18.0f)
+                       .withCentre ({ track.getX () + (b.getToggleState () ? 24.0f : 8.0f), track.getCentreY () }),
+                     t.accentFill);
+    g.setColour (b.isEnabled () ? t.text : t.dimText);
+    g.setFont (t.uiFont (12.0f));
+    g.drawFittedText (
+      b.getButtonText (), b.getLocalBounds ().withTrimmedLeft (43), juce::Justification::centredLeft, 2);
+    if (b.hasKeyboardFocus (false))
+    {
+        g.setColour (t.accent);
+        g.drawRoundedRectangle (b.getLocalBounds ().toFloat ().reduced (1.0f), t.radius, 2.0f);
+    }
 }

@@ -1365,4 +1365,21 @@ inline const juce::String showDetail = tr ("Show bottom panel (Cmd+Alt+L)", "П�
 inline const juce::String hideMixer = tr ("Hide mixer (Cmd+Alt+M)", "Скрыть микшер (Cmd+Alt+M)");
 inline const juce::String showMixer = tr ("Show mixer (Cmd+Alt+M)", "Показать микшер (Cmd+Alt+M)");
 } // namespace tips
+namespace appearance
+{
+inline const juce::String custom = tr ("Custom accent", "Свой акцент");
+inline const juce::String primary = tr ("Primary colour", "Основной · HEX");
+inline const juce::String secondary = tr ("Secondary colour", "Второй · HEX");
+inline const juce::String gradient = tr ("Gradient", "Градиент");
+inline const juce::String angle = tr ("Gradient angle", "Направление");
+inline const juce::String glow = tr ("Glow", "Подсветка");
+inline const juce::String glass = tr ("Glass depth", "Глубина стекла");
+inline const juce::String opaque = tr ("Reduce transparency", "Уменьшить прозрачность");
+inline const juce::String reset = tr ("Reset appearance", "Сбросить оформление");
+inline const juce::String colourHelp =
+  tr ("Enter a HEX colour, e.g. #16BDDD. Enter applies it. Track and recording colours keep their meaning.",
+      "Шесть цифр HEX, например #16BDDD. Enter применяет цвет. Цвета дорожек и записи сохраняют своё значение.");
+inline const juce::String preview = tr ("CHANGES APPLY IMMEDIATELY", "ИЗМЕНЕНИЯ ПРИМЕНЯЮТСЯ СРАЗУ");
+
+}
 } // namespace Strings

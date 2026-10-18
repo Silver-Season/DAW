@@ -7,6 +7,17 @@ Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ![Session View, Prism theme](media/session-prism.png)
 
+## Configurable glass appearance
+
+Glass · Light and Glass · Dark add a shared material for controls and panels, alongside the original four themes. **Appearance** in the top bar opens two custom accent colours, gradients and their angle, glass depth, playback glow and an opaque fallback. Choices are remembered separately from projects; record/play and track colours retain their musical meaning.
+
+The two-row top bar keeps navigation above transport and provides direct access to the existing export dialog. The latest main’s prism, beam, six spectrum tracks and app icon are retained and follow the theme. The built-in Prisma editor follows the host's theme; external plugins retain their own interface.
+
+The native lens refracts its own control track. Full-window backdrop refraction and pointer-following highlights from the HTML optics study remain a separate rendering step. [Rendering details and verification](docs/design/GLASS-UI.md) · [Native captures in all six themes](media/ui-glass/index.html).
+
+![Session in Glass Light](media/ui-glass/glass-light-session.png)
+![Session in Glass Dark](media/ui-glass/glass-dark-session.png)
+
 ## Window, themes and menus (stage 1b)
 
 - **Window**: top bar (tempo, time signature, play/stop, position, MIDI and computer-keyboard lamps, CPU), browser on the left (see below), Session View, a bottom panel with the device chain (8 Prisma knobs, drag to reorder devices, on/off, collapse), and an info bar with help for whatever is under the mouse. Browser width, bottom panel height and panel visibility are remembered.

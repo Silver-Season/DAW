@@ -70,6 +70,7 @@ public:
     bool perform (const InvocationInfo&) override;
 
     // Access for the screenshot script and tests.
+    void openClipEditor (int64_t trackId, int scene);
     ui::SessionView& getSessionView() { return *session; }
     ui::ArrangementView& getArrangementView() { return *arrangement; }
     ui::InfoBar& getInfoBar() { return *infoBar; }
@@ -97,7 +98,6 @@ private:
     void setDetailVisible (bool);
     void setArrangementShown (bool);
     void setKeyboardStripVisible (bool);
-    void openClipEditor (int64_t trackId, int scene);
     void openArrangementClip (int64_t trackId, int64_t aclipId);
     int currentDetailHeight() const;
     void showProjectProperties();
@@ -176,6 +176,7 @@ private:
     int browserWidth, detailHeight, editorHeight, dragStartSize = 0;
     bool browserVisible, detailVisible;
     juce::String lastTitle;
+    Theme appliedTheme { theme() };
     std::unique_ptr<juce::FileChooser> chooser;
 
     std::map<int64_t, std::unique_ptr<PluginWindow>> editorWindows; // by device id

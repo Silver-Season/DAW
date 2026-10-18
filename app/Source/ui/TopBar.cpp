@@ -60,7 +60,7 @@ public:
             const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : (role == Role::warning ? t.warning : t.accent));
             fill = accent;
             border = accent;
-            ink = t.clipInk;
+            ink = t.inkOn (accent);
             if ((role == Role::play || role == Role::warning) && t.glow > 0.0f)
                 juce::DropShadow (accent.withAlpha (0.6f), juce::roundToInt (14.0f * t.glow), {}).drawForRectangle (g, getLocalBounds().reduced (3));
         }
@@ -73,6 +73,8 @@ public:
             border = border.withMultipliedAlpha (0.6f);
         }
         fillCell (g, r, fill);
+        if (t.glass && on)
+            glass::accent (g, r, fill, t.radius);
         strokeCell (g, r, border);
 
         g.setColour (ink);
@@ -387,6 +389,22 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     backToArrangement = std::make_unique<IconButton> (I::backToArrangement, juce::String(), Role::warning, Strings::help::backToArrangement);
     capture = std::make_unique<IconButton> (nullptr, Strings::transport::capture, Role::normal, Strings::help::ribbon);
     version = std::make_unique<IconButton> (nullptr, Strings::transport::versionNone, Role::normal, Strings::help::version);
+    appearanceButton =
+      std::make_unique<IconButton> (nullptr, Strings::settingsui::tabAppearance, Role::normal, Strings::menu::settings);
+    exportButton =
+      std::make_unique<IconButton> (nullptr, Strings::menu::exportAudio, Role::normal, Strings::menu::exportAudio);
+    appearanceButton->onClick = [this]
+    {
+        if (onAppearanceClicked)
+            onAppearanceClicked ();
+    };
+    exportButton->onClick = [this]
+    {
+        if (onExportClicked)
+            onExportClicked ();
+    };
+    addAndMakeVisible (*appearanceButton);
+    addAndMakeVisible (*exportButton);
     scaleButton = std::make_unique<IconButton> (nullptr, Strings::transport::scaleOff, Role::normal, Strings::help::scaleButton);
     scaleButton->onClick = [this] {
         showScalePicker (*scaleButton, model.scaleRoot(), model.scaleMode(), [this] (int root, const juce::String& mode) {
@@ -593,11 +611,18 @@ void TopBar::paint (juce::Graphics& g)
     g.setColour (t.line);
     g.fillRect (0, getHeight() - 1, getWidth(), 1);
 
+    if (t.glass)
+        glass::surface (g, getLocalBounds ().toFloat ().withTrimmedTop (53.0f).reduced (8.0f, 5.0f), t.panel, 12.0f);
     ui::drawLogo (g, logoArea.toFloat());
     g.setColour (t.text);
-    g.setFont (t.uiFont (15.0f, 600));
-    if (! compact)
-        g.drawText (Strings::labelAppName, logoArea.withTrimmedLeft (30).withWidth (80), juce::Justification::centredLeft, false);
+    g.setFont (t.uiFont (22.0f, 600));
+    g.drawText (Strings::labelAppName, juce::Rectangle<int> (64, 10, 105, 34), juce::Justification::centredLeft, false);
+    g.setColour (t.dimText);
+    g.setFont (t.uiFont (12.5f));
+    g.drawFittedText (projectName,
+                      juce::Rectangle<int> (185, 10, juce::jmax (60, getWidth () / 2 - 350), 34),
+                      juce::Justification::centredLeft,
+                      1);
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
         fillCell (g, area.toFloat(), t.panel);
@@ -687,89 +712,68 @@ void TopBar::paintRibbon (juce::Graphics& g)
 
 void TopBar::resized()
 {
-    constexpr int pad = 14, gap = 10, small = 6, h = 30;
-    auto r = getLocalBounds().reduced (pad, 0);
-    const int cy = getHeight() / 2;
-    auto place = [&] (juce::Component& c, int w, int height = 30) {
-        c.setBounds (juce::Rectangle<int> (w, height).withCentre ({ r.getX() + w / 2, cy }));
-        r.removeFromLeft (w);
+    constexpr int h = 30, gap = 7, cy = 77;
+    logoArea = { 17, 7, 38, 38 };
+    tabs->setBounds (getWidth () / 2 - 112, 10, 224, 32);
+    exportButton->setBounds (getWidth () - 214, 10, 103, 32);
+    appearanceButton->setBounds (getWidth () - 104, 10, 90, 32);
+    version->setBounds (getWidth () - 323, 10, 100, 32);
+    int x = 22;
+    auto place = [&] (juce::Component& c, int width)
+    {
+        c.setBounds (x, cy - h / 2, width, h);
+        x += width + gap;
     };
-
-    // Left to right
-    logoArea = juce::Rectangle<int> (22, 22).withCentre ({ r.getX() + 11, cy });
-    // Below this width the name of the program, and some padding, give way to the transport buttons of stage 3.
-    compact = getWidth() < 1400;
-    r.removeFromLeft ((compact ? 22 : 108) + gap);
-
-    tempo.setBounds (juce::Rectangle<int> (80, h).withCentre ({ r.getX() + 40, cy }));
-    r.removeFromLeft (80 + small);
-    signatureArea = juce::Rectangle<int> (60, h).withCentre ({ r.getX() + 30, cy });
-    r.removeFromLeft (60 + small);
-    place (*scaleButton, compact ? 86 : 100);
-    r.removeFromLeft (small);
-    place (*metronome, h);
-    r.removeFromLeft (gap);
-
-    place (*play, h);
-    r.removeFromLeft (small);
-    place (*stop, h);
-    r.removeFromLeft (small);
-    place (*record, h);
-    r.removeFromLeft (small);
+    place (*stop, 32);
+    place (*play, 32);
+    place (*record, 32);
     place (*overdub, 40);
-    r.removeFromLeft (small);
-    const int positionWidth = compact ? 82 : 90;
-    positionArea = juce::Rectangle<int> (positionWidth, h).withCentre ({ r.getX() + positionWidth / 2, cy });
-    r.removeFromLeft (positionWidth + small);
-    place (*loop, h);
-    r.removeFromLeft (small);
+    positionArea = { x, cy - h / 2, 90, h };
+    x += 104;
+    place (tempo, 82);
+    signatureArea = { x, cy - h / 2, 54, h };
+    x += 61;
+    place (*scaleButton, 104);
+    place (*metronome, 30);
+    place (*loop, 30);
     place (*punchIn, 28);
-    r.removeFromLeft (small);
     place (*punchOut, 28);
-    r.removeFromLeft (small);
-    place (*follow, h);
-    r.removeFromLeft (small);
-    place (*backToArrangement, h);
-    r.removeFromLeft (gap);
-
-    // Right to left: what has to stay visible at the minimum window width
-    auto takeRight = [&] (juce::Component& c, int w, int height = 30) {
-        c.setBounds (juce::Rectangle<int> (w, height).withCentre ({ r.getRight() - w / 2, cy }));
-        r.removeFromRight (w);
+    place (*follow, 30);
+    place (*backToArrangement, 30);
+    auto right = getWidth () - 16;
+    auto take = [&] (juce::Component& c, int width)
+    {
+        right -= width;
+        c.setBounds (right, cy - h / 2, width, h);
+        right -= gap;
     };
-    takeRight (*cpu, compact ? 56 : 80, 20);
-    takeRight (*diskLamp, 20, 20);
-    r.removeFromRight (small);
-    takeRight (*keysLamp, compact ? 70 : 80, 20);
-    takeRight (*midiLamp, 52, 20);
-    r.removeFromRight (gap);
-    takeRight (*version, compact ? 76 : 96);
-    r.removeFromRight (gap);
-    takeRight (*tabs, compact ? 150 : 176, 30);
-    r.removeFromRight (gap);
-
-    // Middle: the ribbon and the morph slider appear only if there is room for them.
-    const int ribbonWidth = 58 + 130 + 10 + 86 + 6;
-    const int morphWidth = 18 + 90 + 18 + 24;
+    take (*cpu, 80);
+    take (*diskLamp, 20);
+    take (*keysLamp, 78);
+    take (*midiLamp, 48);
     ribbonArea = {};
     ribbonStripArea = {};
     capture->setVisible (false);
     morph->setVisible (false);
     spectrum->setVisible (false);
-    if (r.getWidth() >= ribbonWidth)
+    if (right - x >= 290)
     {
-        ribbonArea = juce::Rectangle<int> (ribbonWidth - 4, h).withCentre ({ r.getX() + (ribbonWidth - 4) / 2, cy });
-        ribbonStripArea = juce::Rectangle<int> (130, 24).withCentre ({ ribbonArea.getX() + 58 + 65, cy });
+        ribbonArea = { x, cy - h / 2, 286, h };
+        ribbonStripArea = { x + 58, cy - 12, 130, 24 };
         capture->setVisible (true);
-        capture->setBounds (juce::Rectangle<int> (82, 24).withCentre ({ ribbonArea.getRight() - 4 - 41, cy }));
-        r.removeFromLeft (ribbonWidth - 4 + gap);
+        capture->setBounds (x + 196, cy - 12, 82, 24);
+        x += 296;
     }
-    // The spectrum takes whatever is left in the middle (it gives way to the ribbon first).
-    if (r.getWidth() >= juce::jmin (morphWidth, 120) + gap)
+    else if (right - x >= 82)
     {
-        const int w = juce::jmin (r.getWidth() - gap, 260);
+        capture->setVisible (true);
+        capture->setBounds (x, cy - 12, 82, 24);
+        x += 89;
+    }
+    if (right - x >= 100)
+    {
         spectrum->setVisible (true);
-        spectrum->setBounds (juce::Rectangle<int> (w, 34).withCentre ({ r.getX() + w / 2, cy }));
+        spectrum->setBounds (x, cy - 17, juce::jmin (right - x, 260), 34);
     }
 }
 } // namespace ui

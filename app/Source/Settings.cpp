@@ -47,7 +47,11 @@ void Settings::save()
 }
 
 //==============================================================================
-juce::String Settings::theme() const { return props->getValue ("theme", "prism"); }
+juce::String
+Settings::theme () const
+{
+    return props->getValue ("theme", "glass-dark");
+}
 void Settings::setTheme (const juce::String& id) { props->setValue ("theme", id); }
 
 double Settings::uiScale() const { return juce::jlimit (0.8, 1.5, props->getDoubleValue ("uiScale", 1.0)); }
@@ -55,6 +59,16 @@ void Settings::setUiScale (double scale) { props->setValue ("uiScale", juce::jli
 
 bool Settings::animations() const { return props->getBoolValue ("animations", true); }
 void Settings::setAnimations (bool on) { props->setValue ("animations", on); }
+juce::String
+Settings::appearance () const
+{
+    return props->getValue ("appearance");
+}
+void
+Settings::setAppearance (const juce::String& json)
+{
+    props->setValue ("appearance", json);
+}
 
 //==============================================================================
 int Settings::browserWidth() const { return juce::jlimit (180, 420, props->getIntValue ("browserWidth", 236)); }

@@ -48,6 +48,78 @@ const char* const kColourTokens[] = { "background", "chrome", "panel", "panel2",
                                       "accent", "accent2", "record", "play", "clipInk" };
 } // namespace
 
+juce::String
+Appearance::toJson () const
+{
+    auto* obj = new juce::DynamicObject ();
+    obj->setProperty ("customAccent", customAccent);
+    obj->setProperty ("primary", primary.toDisplayString (false));
+    obj->setProperty ("secondary", secondary.toDisplayString (false));
+    obj->setProperty ("gradient", gradient);
+    obj->setProperty ("reduceTransparency", reduceTransparency);
+    obj->setProperty ("angle", angle);
+    obj->setProperty ("glow", glow);
+    obj->setProperty ("glass", glass);
+    return juce::JSON::toString (juce::var (obj), true);
+}
+
+bool
+Appearance::fromJson (const juce::String& json, Appearance& result)
+{
+    const auto value = juce::JSON::parse (json);
+    auto* obj = value.getDynamicObject ();
+    if (obj == nullptr)
+        return false;
+    Appearance a;
+    for (const auto* key : { "primary", "secondary" })
+    {
+        if (!obj->hasProperty (key))
+            continue;
+        const auto hex = obj->getProperty (key).toString ().trimCharactersAtStart ("#");
+        if (hex.length () != 6 || !hex.containsOnly ("0123456789abcdefABCDEF"))
+            return false;
+        (juce::String (key) == "primary" ? a.primary : a.secondary) =
+          juce::Colour (0xff000000u | (juce::uint32)hex.getHexValue32 ());
+    }
+    auto number = [&] (const char* key, float fallback, float maximum)
+    {
+        const auto v = obj->hasProperty (key) ? (float)(double)obj->getProperty (key) : fallback;
+        return std::isfinite (v) ? juce::jlimit (0.0f, maximum, v) : fallback;
+    };
+    a.angle = number ("angle", a.angle, 360.0f);
+    a.glow = number ("glow", a.glow, 1.0f);
+    a.glass = number ("glass", a.glass, 1.0f);
+    a.customAccent = (bool)obj->getProperty ("customAccent");
+    a.gradient = obj->hasProperty ("gradient") ? (bool)obj->getProperty ("gradient") : true;
+    a.reduceTransparency = (bool)obj->getProperty ("reduceTransparency");
+    result = a;
+    return true;
+}
+
+juce::Colour
+Theme::inkOn (juce::Colour fill) const
+{
+    auto ink = contrast (text, fill) >= contrast (clipInk, fill) ? text : clipInk;
+    if (glass && contrast (ink, fill) < 4.5f)
+        ink = contrast (juce::Colours::white, fill) >= contrast (juce::Colours::black, fill) ? juce::Colours::white
+                                                                                             : juce::Colours::black;
+    return ink;
+}
+
+juce::Colour
+Theme::readable (juce::Colour colour) const
+{
+    const auto target = isLight () ? juce::Colours::black : juce::Colours::white;
+    const auto original = colour;
+    for (int i = 0; i <= 100; ++i)
+    {
+        colour = original.interpolatedWith (target, (float)i / 100.0f);
+        if (contrast (colour, panel) >= 4.5f && contrast (colour, chrome) >= 4.5f)
+            return colour;
+    }
+    return target;
+}
+
 //==============================================================================
 juce::Colour Theme::palette (int index) const
 {
@@ -150,6 +222,21 @@ bool Theme::fromJson (const juce::String& json, Theme& result, juce::String& err
     t.glow = juce::jmax (0.0f, (float) (double) obj->getProperty ("glow"));
     t.radius = juce::jmax (0.0f, (float) (double) obj->getProperty ("radius"));
     t.scanlines = (bool) obj->getProperty ("scanlines");
+    t.glass = (bool)obj->getProperty ("glass");
+    t.accentFill = t.accent;
+    t.accentFill2 = t.accent2;
+    for (const auto* key : { "accentFill", "accentFill2" })
+        if (obj->hasProperty (key))
+        {
+            const auto hex = obj->getProperty (key).toString ().trimCharactersAtStart ("#");
+            if (hex.length () != 6 || !hex.containsOnly ("0123456789abcdefABCDEF"))
+            {
+                error = juce::String ("bad colour in token ") + key;
+                return false;
+            }
+            (juce::String (key) == "accentFill" ? t.accentFill : t.accentFill2) =
+              juce::Colour (0xff000000u | (juce::uint32)hex.getHexValue32 ());
+        }
     t.fontUi = obj->getProperty ("fontUi").toString();
     t.fontNum = obj->getProperty ("fontNum").toString();
 
@@ -181,7 +268,7 @@ ThemeManager& ThemeManager::get()
 juce::StringArray ThemeManager::reload (const juce::File& userDir)
 {
     juce::StringArray problems;
-    const auto previous = themes.empty() ? juce::String ("prism") : current().id;
+    const auto previous = themes.empty () ? juce::String ("glass-dark") : current ().id;
     std::vector<Theme> loaded;
 
     auto add = [&] (const juce::String& source, const juce::String& json) {
@@ -202,7 +289,9 @@ juce::StringArray ThemeManager::reload (const juce::File& userDir)
     };
 
     // Built-in themes in a fixed order, then anything else that is embedded.
-    const char* order[] = { "prism_json", "neon_json", "studio_json", "paper_json" };
+    const char* order[] = {
+        "prism_json", "neon_json", "studio_json", "paper_json", "glasslight_json", "glassdark_json"
+    };
     for (const char* name : order)
     {
         int size = 0;
@@ -228,6 +317,40 @@ void ThemeManager::setCurrent (const juce::String& id)
         if (themes[i].id == id)
             index = (int) i;
     currentIndex = index;
+    updateEffective ();
     ++generationCounter;
     sendChangeMessage();
+}
+
+void
+ThemeManager::setAppearance (const Appearance& value)
+{
+    // Round-trip validation also protects programmatic callers from non-finite/out-of-range input.
+    Appearance valid;
+    if (!Appearance::fromJson (value.toJson (), valid))
+        return;
+    preferences = valid;
+    updateEffective ();
+    ++generationCounter;
+    sendChangeMessage ();
+}
+
+void
+ThemeManager::updateEffective ()
+{
+    effective = themes[(size_t)currentIndex];
+    if (preferences.customAccent)
+    {
+        effective.accentFill = preferences.primary;
+        effective.accentFill2 = preferences.secondary;
+        effective.accent = effective.readable (preferences.primary);
+        effective.accent2 = effective.readable (preferences.secondary);
+    }
+    effective.gradients = preferences.gradient && effective.glass;
+    effective.gradientAngle = preferences.angle;
+    if (effective.glass)
+    {
+        effective.material = preferences.reduceTransparency ? 0.0f : preferences.glass;
+        effective.glow = preferences.reduceTransparency ? 0.0f : preferences.glow;
+    }
 }

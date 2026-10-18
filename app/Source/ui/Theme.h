@@ -6,6 +6,16 @@
 #include <array>
 #include <vector>
 
+// Application preferences, deliberately separate from the project's musical colours.
+struct Appearance
+{
+    bool customAccent = false, gradient = true, reduceTransparency = false;
+    juce::Colour primary{ 0xff16bddd }, secondary{ 0xff9855ef };
+    float angle = 25.0f, glow = 0.35f, glass = 0.7f;
+    juce::String toJson () const;
+    static bool fromJson (const juce::String&, Appearance&);
+};
+
 // Colour, font and shape tokens of one skin (docs/spec/01-layout-project.md, task 1.8). Components take every
 // colour and font from the current Theme; the model stores clip colours as palette indices.
 struct Theme
@@ -23,6 +33,23 @@ struct Theme
     float glow = 0.0f;   // strength of the glow around playing clips, 0 = none
     float radius = 6.0f; // corner radius of cells, buttons and panels, px
     bool scanlines = false;
+    bool glass = false, gradients = false;
+    float material = 0.0f, gradientAngle = 25.0f;
+    juce::Colour accentFill, accentFill2;
+    bool isLight () const
+    {
+        return background.getPerceivedBrightness () > 0.5f;
+    }
+    juce::Colour highlight () const
+    {
+        return juce::Colours::white;
+    }
+    juce::Colour shadow () const
+    {
+        return juce::Colours::black;
+    }
+    juce::Colour inkOn (juce::Colour fill) const;
+    juce::Colour readable (juce::Colour colour) const;
     juce::String fontUi { "Onest" }, fontNum { "JetBrains Mono" };
 
     // Palette colour i (0..15); inactive clips use the same colour at 55 % opacity.
@@ -49,13 +76,21 @@ class ThemeManager : public juce::ChangeBroadcaster
 public:
     static ThemeManager& get();
 
-    const Theme& current() const { return themes[(size_t) currentIndex]; }
+    const Theme& current () const
+    {
+        return effective;
+    }
     const std::vector<Theme>& all() const { return themes; }
     // Bumped on every theme change; caches (glow images, scanlines) compare it.
     int generation() const { return generationCounter; }
 
     // Falls back to the first theme for an unknown id.
     void setCurrent (const juce::String& id);
+    void setAppearance (const Appearance&);
+    const Appearance& appearance () const
+    {
+        return preferences;
+    }
 
     // Re-reads the built-in themes (from the embedded JSON files) and the user ones from `userDir`.
     // Returns the files that could not be parsed, with the reason.
@@ -67,6 +102,9 @@ private:
     std::vector<Theme> themes;
     int currentIndex = 0;
     int generationCounter = 0;
+    Appearance preferences;
+    Theme effective;
+    void updateEffective ();
 };
 
 inline const Theme& theme() { return ThemeManager::get().current(); }

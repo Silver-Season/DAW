@@ -177,8 +177,7 @@ void DrumPads::paint (juce::Graphics& g)
         auto fill = empty ? t.panel2 : t.panel2.interpolatedWith (colour, 0.35f + 0.6f * flash);
         if (i == hoverDrop)
             fill = t.accent.withAlpha (0.5f);
-        g.setColour (fill);
-        g.fillRoundedRectangle (b, 4.0f);
+        fillCell (g, b, fill);
         if (flash > 0.05f && t.glow > 0.0f)
         {
             g.setColour (colour.withAlpha (0.35f * flash * t.glow));
@@ -186,7 +185,7 @@ void DrumPads::paint (juce::Graphics& g)
         }
         g.setColour (i == selected ? t.text : t.line);
         g.drawRoundedRectangle (b.reduced (0.5f), 4.0f, i == selected ? 1.5f : 1.0f);
-        g.setColour (empty ? t.dimText : t.clipInk);
+        g.setColour (empty ? t.dimText : (t.glass ? t.inkOn (fill) : t.clipInk));
         g.setFont (t.uiFont (10.5f, 500));
         g.drawFittedText (empty ? juce::String (daw::drums::padMap()[(size_t) i].noteName) : juce::String (pad.name), b.toNearestInt().reduced (4),
                           juce::Justification::centred, 2, 0.8f);

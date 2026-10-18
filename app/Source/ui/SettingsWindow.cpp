@@ -708,34 +708,62 @@ class AppearancePage final : public Page
 public:
     explicit AppearancePage (Settings& s) : settings (s)
     {
-        for (auto* l : { &themeLabel, &scaleLabel, &languageLabel })
-        {
-            l->setFont (theme().uiFont (12.5f, 600));
-            l->setColour (juce::Label::textColourId, theme().text);
-            addAndMakeVisible (*l);
-        }
-        themeLabel.setText (Strings::settingsui::themeHeading, juce::dontSendNotification);
-        scaleLabel.setText (Strings::settingsui::scale, juce::dontSendNotification);
         for (int pct = 80; pct <= 150; pct += 10)
-            scaleBox.addItem (juce::String (pct) + " %", pct);
-        scaleBox.setSelectedId (juce::jlimit (80, 150, juce::roundToInt (settings.uiScale() * 10.0) * 10), juce::dontSendNotification);
-        styleCombo (scaleBox);
-        scaleBox.onChange = [this] {
-            const double scale = scaleBox.getSelectedId() / 100.0;
-            settings.setUiScale (scale);
-            juce::Desktop::getInstance().setGlobalScaleFactor ((float) scale);
+            scale.addItem (juce::String (pct) + " %", pct);
+        scale.setSelectedId (juce::roundToInt (settings.uiScale () * 100), juce::dontSendNotification);
+        scale.onChange = [this]
+        {
+            settings.setUiScale (scale.getSelectedId () / 100.0);
+            juce::Desktop::getInstance ().setGlobalScaleFactor ((float)settings.uiScale ());
         };
-        addAndMakeVisible (scaleBox);
+        custom.setButtonText (Strings::appearance::custom);
+        gradient.setButtonText (Strings::appearance::gradient);
+        opaque.setButtonText (Strings::appearance::opaque);
         animations.setButtonText (Strings::settingsui::animations);
-        animations.setToggleState (settings.animations(), juce::dontSendNotification);
         animations.onClick = [this] { settings.setAnimations (animations.getToggleState()); };
-        addAndMakeVisible (animations);
-        // Each language is named in itself, so that it can be found whatever language the UI is in now.
-        languageLabel.setText (Strings::settingsui::language, juce::dontSendNotification);
+        reset.setButtonText (Strings::appearance::reset);
+        reset.onClick = [this]
+        {
+            commit (Appearance ());
+            refresh ();
+        };
+        for (auto* c : std::initializer_list<juce::Component*>{
+               &scale, &primary, &secondary, &custom, &gradient, &opaque, &animations, &angle, &glow, &depth, &reset })
+            addAndMakeVisible (c);
+        for (auto* e : { &primary, &secondary })
+        {
+            e->setInputRestrictions (7, "#0123456789abcdefABCDEF");
+            e->setHelpText (Strings::appearance::colourHelp);
+            e->onReturnKey = [this] { applyColours (); };
+            e->onFocusLost = [this] { applyColours (); };
+        }
+        for (auto* slider : { &angle, &glow, &depth })
+        {
+            slider->setSliderStyle (juce::Slider::LinearHorizontal);
+            slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 22);
+            slider->setRange (0, slider == &angle ? 360 : 100, 1);
+            slider->setTextValueSuffix (slider == &angle ? juce::String::fromUTF8 ("°") : " %");
+            slider->onValueChange = [this] { applyControls (); };
+        }
+        for (auto* b : { &custom, &gradient, &opaque })
+            b->onClick = [this] { applyControls (); };
+        for (int i = 0; i < 8; ++i)
+        {
+            auto& b = swatches[(size_t)i];
+            b.setButtonText (juce::String (i + 1));
+            b.setHelpText (Strings::appearance::primary);
+            b.onClick = [this, i]
+            {
+                auto a = ThemeManager::get ().appearance ();
+                a.customAccent = true;
+                a.primary = theme ().palette (i * 2);
+                commit (a);
+            };
+            addAndMakeVisible (b);
+        }
         languageBox.addItem ("English", 1);
         languageBox.addItem (juce::String::fromUTF8 ("Русский"), 2);
         languageBox.setSelectedId (settings.language() == "ru" ? 2 : 1, juce::dontSendNotification);
-        styleCombo (languageBox);
         languageBox.onChange = [this] {
             settings.setLanguage (languageBox.getSelectedId() == 2 ? "ru" : "en");
             languageNote.setVisible (Strings::languageFromCode (settings.language()) != Strings::language());
@@ -743,109 +771,179 @@ public:
         addAndMakeVisible (languageBox);
         languageNote.setText (Strings::settingsui::languageRestart, juce::dontSendNotification);
         languageNote.setFont (theme().uiFont (11.5f));
-        languageNote.setColour (juce::Label::textColourId, theme().dimText);
         languageNote.setVisible (Strings::languageFromCode (settings.language()) != Strings::language());
         addChildComponent (languageNote);
-        rebuildCards();
+        addAndMakeVisible (themeList);
+        themeList.onChange = [this]
+        {
+            const auto& themes = ThemeManager::get ().all ();
+            const int index = themeList.getSelectedId () - 1;
+            if (index >= 0 && index < (int)themes.size ())
+            {
+                settings.setTheme (themes[(size_t)index].id);
+                ThemeManager::get ().setCurrent (themes[(size_t)index].id);
+            }
+        };
+        refresh ();
     }
 
-    void refresh() override { rebuildCards(); }
-
-    void resized() override
+    void refresh () override
     {
-        auto r = getLocalBounds().reduced (20, 16);
-        themeLabel.setBounds (r.removeFromTop (24));
-        constexpr int cardW = 150, cardH = 96, gap = 12;
-        int x = r.getX(), y = r.getY() + 4;
-        for (auto& c : cards)
+        const auto& a = ThemeManager::get ().appearance ();
+        for (auto* editor : { &primary, &secondary })
         {
-            if (x + cardW > r.getRight())
-            {
-                x = r.getX();
-                y += cardH + gap;
-            }
-            c->setBounds (x, y, cardW, cardH);
-            x += cardW + gap;
+            editor->applyColourToAllText (theme ().text);
+            editor->setColour (juce::TextEditor::backgroundColourId, theme ().panel);
         }
-        r.removeFromTop (juce::jmax (0, y + cardH - r.getY()) + 20);
-        auto line = r.removeFromTop (kRowHeight);
-        scaleLabel.setBounds (line.removeFromLeft (200));
-        scaleBox.setBounds (line.removeFromLeft (120));
-        r.removeFromTop (10);
-        animations.setBounds (r.removeFromTop (kRowHeight).withWidth (240));
-        r.removeFromTop (10);
-        line = r.removeFromTop (kRowHeight);
-        languageLabel.setBounds (line.removeFromLeft (200));
-        languageBox.setBounds (line.removeFromLeft (120));
-        line.removeFromLeft (12);
-        languageNote.setBounds (line);
-    }
-
-private:
-    class Card final : public juce::Component
-    {
-    public:
-        Card (const Theme& t, bool selected, std::function<void()> pick) : themeCopy (t), isSelected (selected), onPick (std::move (pick))
+        custom.setToggleState (a.customAccent, juce::dontSendNotification);
+        gradient.setToggleState (a.gradient, juce::dontSendNotification);
+        opaque.setToggleState (a.reduceTransparency, juce::dontSendNotification);
+        animations.setToggleState (settings.animations (), juce::dontSendNotification);
+        if (!primary.hasKeyboardFocus (true))
+            primary.setText ("#" + a.primary.toDisplayString (false), false);
+        if (!secondary.hasKeyboardFocus (true))
+            secondary.setText ("#" + a.secondary.toDisplayString (false), false);
+        angle.setValue (a.angle, juce::dontSendNotification);
+        glow.setValue (a.glow * 100, juce::dontSendNotification);
+        depth.setValue (a.glass * 100, juce::dontSendNotification);
+        for (int i = 0; i < 8; ++i)
         {
-            setMouseCursor (juce::MouseCursor::PointingHandCursor);
+            const auto c = theme ().palette (i * 2);
+            swatches[(size_t)i].setColour (juce::TextButton::buttonColourId, c);
+            swatches[(size_t)i].setColour (juce::TextButton::textColourOffId, theme ().inkOn (c));
         }
-        void paint (juce::Graphics& g) override
+        languageNote.setColour (juce::Label::textColourId, theme ().dimText);
+        const bool optical = theme ().glass && !a.reduceTransparency;
+        angle.setEnabled (theme ().glass && a.gradient);
+        glow.setEnabled (optical);
+        depth.setEnabled (optical);
+        gradient.setEnabled (theme ().glass);
+        opaque.setEnabled (theme ().glass);
+        themeList.clear (juce::dontSendNotification);
+        int themeIndex = 0;
+        for (const auto& t : ThemeManager::get ().all ())
         {
-            auto r = getLocalBounds().toFloat().reduced (1.0f);
-            const auto& t = themeCopy;
-            g.setColour (t.background);
-            g.fillRoundedRectangle (r, 6.0f);
-            // a miniature window: chrome panel, three cells, an accent bar
-            auto inner = r.reduced (8.0f).withTrimmedBottom (22.0f);
-            g.setColour (t.chrome);
-            g.fillRoundedRectangle (inner, 4.0f);
-            for (int i = 0; i < 4; ++i)
-            {
-                g.setColour (t.palette (i * 4));
-                g.fillRoundedRectangle (inner.getX() + 6.0f + (float) i * 31.0f, inner.getY() + 6.0f, 26.0f, 9.0f, 2.0f);
-                g.setColour (t.panel);
-                g.fillRoundedRectangle (inner.getX() + 6.0f + (float) i * 31.0f, inner.getY() + 19.0f, 26.0f, 14.0f, 2.0f);
-            }
-            g.setColour (t.accent);
-            g.fillRect (inner.getX() + 6.0f, inner.getBottom() - 8.0f, 40.0f, 3.0f);
-            g.setColour (t.text);
-            g.setFont (t.uiFont (12.0f, 600));
-            g.drawText (t.name, getLocalBounds().withTrimmedTop (getHeight() - 24).withTrimmedLeft (10), juce::Justification::centredLeft, true);
-            g.setColour (isSelected ? theme().accent : theme().line);
-            g.drawRoundedRectangle (r, 6.0f, isSelected ? 2.5f : 1.0f);
+            themeList.addItem (t.name, ++themeIndex);
+            if (t.id == theme ().id)
+                themeList.setSelectedId (themeIndex, juce::dontSendNotification);
         }
-        void mouseUp (const juce::MouseEvent& e) override
-        {
-            if (getLocalBounds().contains (e.getPosition()) && onPick)
-                onPick();
-        }
-
-    private:
-        Theme themeCopy;
-        bool isSelected;
-        std::function<void()> onPick;
-    };
-
-    void rebuildCards()
-    {
+        themeList.setVisible (themeIndex > 6);
         cards.clear();
         for (const auto& t : ThemeManager::get().all())
         {
-            cards.push_back (std::make_unique<Card> (t, t.id == ThemeManager::get().current().id, [this, id = t.id] {
+            if (cards.size () >= 6)
+                break;
+            auto b = std::make_unique<juce::TextButton> (t.name);
+            b->setClickingTogglesState (true);
+            b->setToggleState (t.id == theme ().id, juce::dontSendNotification);
+            b->setColour (juce::TextButton::buttonColourId, t.panel);
+            b->setColour (juce::TextButton::textColourOffId, t.text);
+            b->onClick = [this, id = t.id]
+            {
                 settings.setTheme (id);
-                ThemeManager::get().setCurrent (id);
-            }));
-            addAndMakeVisible (*cards.back());
+                ThemeManager::get ().setCurrent (id);
+            };
+            addAndMakeVisible (*b);
+            cards.push_back (std::move (b));
         }
         resized();
         repaint();
     }
 
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme ();
+        g.setColour (t.text);
+        g.setFont (t.uiFont (13.0f, 600));
+        g.drawText (Strings::settingsui::themeHeading, 20, 14, getWidth () - 40, 24, juce::Justification::centredLeft);
+        g.setFont (t.uiFont (11.5f));
+        g.setColour (t.dimText);
+        g.drawText (Strings::appearance::primary, 20, 183, 180, 20, juce::Justification::centredLeft);
+        g.drawText (Strings::appearance::secondary, getWidth () / 2, 183, 180, 20, juce::Justification::centredLeft);
+        const juce::String labels[]{ Strings::appearance::angle,
+                                     Strings::appearance::glow,
+                                     Strings::appearance::glass };
+        for (int i = 0; i < 3; ++i)
+            g.drawText (labels[i], 20, 286 + i * 34, 160, 30, juce::Justification::centredLeft);
+        g.drawText (Strings::settingsui::scale, 20, 438, 170, 28, juce::Justification::centredLeft);
+        g.drawText (Strings::settingsui::language, 20, 519, 150, 28, juce::Justification::centredLeft);
+        g.setFont (t.uiFont (10.0f, 600));
+        g.drawText (
+          Strings::appearance::preview, 20, getHeight () - 27, getWidth () - 40, 20, juce::Justification::centredLeft);
+    }
+
+    void resized () override
+    {
+        const int columns = 3, gap = 8, width = (getWidth () - 40 - gap * 2) / columns;
+        for (size_t i = 0; i < cards.size (); ++i)
+            cards[i]->setBounds (20 + (int)(i % 3) * (width + gap), 46 + (int)(i / 3) * 39, width, 32);
+        custom.setBounds (20, 132, 290, 30);
+        themeList.setBounds (320, 132, getWidth () - 340, 30);
+        const int half = getWidth () / 2;
+        primary.setBounds (20, 206, half - 40, 29);
+        secondary.setBounds (half, 206, half - 20, 29);
+        for (int i = 0; i < 8; ++i)
+            swatches[(size_t)i].setBounds (20 + i * 38, 245, 30, 26);
+        angle.setBounds (180, 286, getWidth () - 205, 30);
+        glow.setBounds (180, 320, getWidth () - 205, 30);
+        depth.setBounds (180, 354, getWidth () - 205, 30);
+        gradient.setBounds (20, 399, 160, 28);
+        opaque.setBounds (180, 399, getWidth () - 200, 28);
+        scale.setBounds (180, 438, 100, 28);
+        animations.setBounds (300, 438, getWidth () - 320, 28);
+        reset.setBounds (20, 483, 220, 28);
+        languageBox.setBounds (180, 519, 110, 28);
+        languageNote.setBounds (300, 519, getWidth () - 320, 28);
+    }
+
+  private:
+    void commit (const Appearance& a)
+    {
+        ThemeManager::get ().setAppearance (a);
+        settings.setAppearance (ThemeManager::get ().appearance ().toJson ());
+    }
+    void applyColours ()
+    {
+        const auto valid = [] (juce::String s)
+        {
+            s = s.trimCharactersAtStart ("#");
+            return s.length () == 6 && s.containsOnly ("0123456789abcdefABCDEF");
+        };
+        primary.setColour (juce::TextEditor::outlineColourId,
+                           valid (primary.getText ()) ? theme ().line : theme ().record);
+        secondary.setColour (juce::TextEditor::outlineColourId,
+                             valid (secondary.getText ()) ? theme ().line : theme ().record);
+        if (!valid (primary.getText ()) || !valid (secondary.getText ()))
+            return;
+        auto a = ThemeManager::get ().appearance ();
+        const auto old = a;
+        a.primary = juce::Colour::fromString ("ff" + primary.getText ().trimCharactersAtStart ("#"));
+        a.secondary = juce::Colour::fromString ("ff" + secondary.getText ().trimCharactersAtStart ("#"));
+        if (a.primary == old.primary && a.secondary == old.secondary)
+            return;
+        a.customAccent = true;
+        commit (a);
+    }
+    void applyControls ()
+    {
+        auto a = ThemeManager::get ().appearance ();
+        a.customAccent = custom.getToggleState ();
+        a.gradient = gradient.getToggleState ();
+        a.reduceTransparency = opaque.getToggleState ();
+        a.angle = (float)angle.getValue ();
+        a.glow = (float)glow.getValue () / 100.0f;
+        a.glass = (float)depth.getValue () / 100.0f;
+        commit (a);
+    }
     Settings& settings;
-    juce::Label themeLabel, scaleLabel, languageLabel, languageNote;
-    juce::ComboBox scaleBox, languageBox;
-    juce::ToggleButton animations;
-    std::vector<std::unique_ptr<Card>> cards;
+    juce::ComboBox scale, themeList, languageBox;
+    juce::Label languageNote;
+    juce::TextEditor primary, secondary;
+    juce::ToggleButton custom, gradient, opaque, animations;
+    juce::Slider angle, glow, depth;
+    juce::TextButton reset;
+    std::array<juce::TextButton, 8> swatches;
+    std::vector<std::unique_ptr<juce::TextButton>> cards;
 };
 
 //==============================================================================

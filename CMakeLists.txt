@@ -53,7 +53,9 @@ if(DAW_BUILD_JUCE)
         app/Resources/themes/prism.json
         app/Resources/themes/neon.json
         app/Resources/themes/studio.json
-        app/Resources/themes/paper.json)
+        app/Resources/themes/paper.json
+        app/Resources/themes/glasslight.json
+        app/Resources/themes/glassdark.json)
 
     # Sources shared by the app and the engine tests: model, settings, engine, theme, built-in Prisma.
     set(DAW_APP_SHARED_SOURCES
@@ -75,6 +77,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/browser/BrowserSources.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/browser/BrowserActions.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Theme.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/GlassMaterial.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/UiCommon.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Controls.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Chrome.cpp

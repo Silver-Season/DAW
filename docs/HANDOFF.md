@@ -2,6 +2,16 @@
 
 This file is updated at every notable step. A new chat, Codex or a person continues from here: what is done, what is in progress, what the next step is. The state lives in the repository, not in a chat.
 
+## Glass appearance integration (2026-10-19)
+
+Branch `codex/glass-ui-current` starts from the verified GitHub main `5cf1c9d64a77164811909aa7444fae43678051d1`. The earlier local design checkpoint is preserved on `codex/glass-ui` (`de942b1`); it was based on an old project version and must not be merged over the current Arrangement/recording/warp/export implementations.
+
+The current branch transfers the common rendering layer and configurable light/dark glass themes onto the real current views. It keeps all current recording, transport, Arrangement, audio/warp, effects, drum, automation and export code. Original themes, custom user themes, UI scale and the English/Russian language switch are preserved. The app's built-in synth follows the host's theme. The native logo uses the approved prism, beam and six parallel spectrum tracks in two contrast variants.
+
+See [GLASS-UI.md](design/GLASS-UI.md) for settings, rendering boundaries and native capture instructions. The local-track CPU lens is intentionally documented separately from the HTML study's full canvas refraction. Full-window refraction, pointer-following glints and a complete one-for-one recreation of every conceptual screen are **not finished**. The prototype is a design reference, not evidence of a native feature. No DSP or project schema changes were made.
+
+Validation status and final capture location are recorded below when the branch is ready for review. Publishing/PR creation remains separate from the local implementation; do not merge an untested design branch into main.
+
 ## Now (2026-10-18)
 
 Order agreed with the owner: stage 5 → stage 6 (effects, mixing, automation) → stage 4 (export) → design and spectra → English UI. Goal: the app can be used on its own for a whole track (beat, vocals, processing, export).

@@ -93,6 +93,8 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar->onCaptureClicked = [this] { captureClicked(); };
     topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
+    topBar->onAppearanceClicked = [this] { showSettings (ui::SettingsWindow::appearance); };
+    topBar->onExportClicked = [this] { commandManager.invokeDirectly (ui::commands::exportAudio, false); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources);
     sources.onChanged = [this] { browser->sourcesChanged(); };
     browser->onActivate = [this] (const browser::DragItem& item) {
@@ -250,9 +252,10 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     doc.onWriteFailed = [this] (const juce::String& error) { infoBar->showMessage (error, 10000); };
     ThemeManager::get().addChangeListener (this);
     applyTheme();
+    topBar->setProjectName (windowTitle ());
 
     setWantsKeyboardFocus (true);
-    setSize (1440, 880);
+    setSize (1440, 940);
     startTimerHz (30);
     juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
         if (safe != nullptr)
@@ -305,7 +308,8 @@ void MainComponent::updateTitle()
     const auto title = windowTitle();
     if (title != lastTitle)
     {
-            lastTitle = title;
+        lastTitle = title;
+        topBar->setProjectName (title);
         if (onTitleChanged)
             onTitleChanged (title);
     }
@@ -343,6 +347,12 @@ void MainComponent::applyTheme()
         lnf->refresh();
     scanlines.setVisible (theme().scanlines);
     sendLookAndFeelChange();
+    topBar->resized ();
+    for (auto& entry : editorWindows)
+    {
+        entry.second->sendLookAndFeelChange ();
+        entry.second->repaint ();
+    }
     repaint();
 }
 
@@ -1277,6 +1287,8 @@ void MainComponent::openInstrumentEditor (int64_t deviceId)
     juce::AudioProcessorEditor* editor = processor->hasEditor() ? processor->createEditorIfNeeded() : nullptr;
     if (editor == nullptr)
         editor = new juce::GenericAudioProcessorEditor (*processor);
+    if (dynamic_cast<PrismaEditor*> (editor) != nullptr)
+        editor->setLookAndFeel (&juce::LookAndFeel::getDefaultLookAndFeel ());
     auto window = std::make_unique<PluginWindow> (editor, processor->getName(), [this, deviceId] {
         // Defer deletion: this runs from the window's own close button.
         juce::MessageManager::callAsync ([this, alive = juce::Component::SafePointer<MainComponent> (this), deviceId] {
