@@ -196,12 +196,12 @@ void ArrangementView::clampView()
     const double minPx = juce::jmax (kMinPxPerBeat, (double) lanesWidth() / total);
     v.pxPerBeat = juce::jlimit (minPx, kMaxPxPerBeat, v.pxPerBeat);
     v.scrollBeats = juce::jlimit (0.0, juce::jmax (0.0, total - visibleBeats()), v.scrollBeats);
-    v.scrollY = juce::jlimit (0, juce::jmax (0, rowsTotalHeight - lanesHeight()), v.scrollY);
+    v.scrollY = juce::jlimit (0, juce::jmax (0, rowsTotalHeight + kAddTrackArea - lanesHeight()), v.scrollY);
 }
 
 void ArrangementView::updateScrollBar()
 {
-    vbar.setRangeLimits (0.0, (double) juce::jmax (rowsTotalHeight, lanesHeight()));
+    vbar.setRangeLimits (0.0, (double) juce::jmax (rowsTotalHeight + kAddTrackArea, lanesHeight()));
     vbar.setCurrentRange ((double) v.scrollY, (double) lanesHeight(), juce::dontSendNotification);
 }
 

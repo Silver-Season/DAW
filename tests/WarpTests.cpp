@@ -239,7 +239,7 @@ void testOldProjectMigration()
 }
 } // namespace
 
-void runWarpTests()
+void tests::runWarpTests()
 {
     testImportAnalysis();
     testStretchedPlayback();

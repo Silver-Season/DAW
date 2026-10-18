@@ -76,9 +76,8 @@ ArrangementLanes::Hit ArrangementLanes::clipHit (juce::Point<int> p) const
 }
 
 //==============================================================================
-void ArrangementLanes::paintGrid (juce::Graphics& g, juce::Rectangle<int> area) const
+void ArrangementLanes::paintGrid (juce::Graphics& g, juce::Rectangle<int> area, juce::Colour colour, float strength) const
 {
-    const auto& t = theme();
     const double px = view.v.pxPerBeat, bar = view.beatsPerBar();
     const double from = view.xToBeat ((double) area.getX()), to = view.xToBeat ((double) area.getRight());
     const double step = view.gridStep();
@@ -103,7 +102,7 @@ void ArrangementLanes::paintGrid (juce::Graphics& g, juce::Rectangle<int> area) 
         else
             alpha = onBeat ? 0.5f : 0.22f;
         const int x = juce::roundToInt (view.beatToX (beat));
-        g.setColour (t.line.withAlpha (alpha));
+        g.setColour (colour.withAlpha (alpha * strength));
         g.fillRect (x, area.getY(), 1, area.getHeight());
     }
 }
@@ -216,6 +215,8 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
     {
         juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (r.toNearestInt());
+        // the grid goes on under the notes and the waveform, so they can be lined up by eye
+        paintGrid (g, r.toNearestInt(), t.clipInk, 0.3f * a);
         if (audio)
             paintAudio (g, c, r, clipLength, clipOffset, t.clipInk);
         else
@@ -272,7 +273,27 @@ void ArrangementLanes::paint (juce::Graphics& g)
         g.setColour (t.line);
         g.fillRect (0, y + row.height - 1, getWidth(), 1);
     }
-    paintGrid (g, bounds);
+    paintGrid (g, bounds, t.line);
+
+    // under the last track: the place for a new one (drops from the browser or Finder land here; the headers have the buttons)
+    if (! view.drop.valid)
+    {
+        const int top = view.contentHeight() - view.v.scrollY;
+        const juce::Rectangle<float> area (4.0f, (float) top + 8.0f, (float) getWidth() - 8.0f, (float) ArrangementView::kAddTrackArea - 16.0f);
+        if (area.getY() < (float) getHeight())
+        {
+            juce::Path outline;
+            outline.addRoundedRectangle (area, t.radius);
+            juce::Path dashed;
+            const float dashes[] = { 5.0f, 4.0f };
+            juce::PathStrokeType (1.0f).createDashedStroke (dashed, outline, dashes, 2);
+            g.setColour (t.line);
+            g.fillPath (dashed);
+            g.setColour (t.dimText.withAlpha (0.7f));
+            g.setFont (t.uiFont (12.0f));
+            g.drawText (Strings::arrangement::dropForNewTrack, area.toNearestInt(), juce::Justification::centred, true);
+        }
+    }
 
     // the loop of the arrangement tints the time under it
     {

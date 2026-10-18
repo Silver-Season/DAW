@@ -145,6 +145,18 @@ public:
         repaint();
     }
 
+    void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) override
+    {
+        const float dx = w.isReversed ? -w.deltaX : w.deltaX, dy = w.isReversed ? -w.deltaY : w.deltaY;
+        const double shown = owner.viewBeats() / owner.zoomFactor();
+        if (e.mods.isShiftDown() || std::abs (dx) > std::abs (dy))
+            owner.scrollBy (-(double) (std::abs (dx) > std::abs (dy) ? dx : dy) * shown * 0.5);
+        else if (std::abs (dy) > 0.0f)
+            owner.zoomAround (e.x, std::pow (2.0, (double) dy * 2.0));
+    }
+
+    void mouseMagnify (const juce::MouseEvent& e, float scale) override { owner.zoomAround (e.x, (double) scale); }
+
 private:
     void paintRuler (juce::Graphics& g, const ClipRef& c)
     {
@@ -705,6 +717,8 @@ void AudioClipEditor::setClip (int64_t id)
     currentClip = id;
     dirty = true;
     shownPeaks = -1;
+    zoom = 1.0;
+    scrollBeats = 0.0;
     tick();
 }
 
@@ -749,7 +763,7 @@ double AudioClipEditor::viewBeats() const
     double fileBeats = 0.0;
     if (const auto f = file(); f.isValid())
     {
-        const double framesPerBeat = f.sampleRate() * 60.0 / juce::jmax (1.0, model.tempo()) * c.pitchRatio();
+        const double framesPerBeat = f.sampleRate() * 60.0 / juce::jmax (1.0, c.contentTempo (model.tempo())) * c.pitchRatio();
         fileBeats = juce::jmax (0.0, (double) f.lengthSamples() - c.sampleStart()) / juce::jmax (1.0, framesPerBeat);
     }
     return juce::jmax (1.0, c.lengthBeats(), fileBeats);
@@ -758,13 +772,30 @@ double AudioClipEditor::viewBeats() const
 double AudioClipEditor::beatToX (double beat) const
 {
     const double usable = juce::jmax (1, waveView->getWidth() - 2 * kMargin);
-    return kMargin + beat / viewBeats() * usable;
+    return kMargin + (beat - scrollBeats) / (viewBeats() / zoom) * usable;
 }
 
 double AudioClipEditor::xToBeat (double x) const
 {
     const double usable = juce::jmax (1, waveView->getWidth() - 2 * kMargin);
-    return (x - kMargin) / usable * viewBeats();
+    return scrollBeats + (x - kMargin) / usable * (viewBeats() / zoom);
+}
+
+void AudioClipEditor::zoomAround (double x, double factor)
+{
+    const double anchor = xToBeat (x);
+    const double usable = juce::jmax (1, waveView->getWidth() - 2 * kMargin);
+    // From the whole content in down to single samples (a 4-bar loop at 20000x is a few pixels per sample).
+    zoom = juce::jlimit (1.0, 20000.0, zoom * factor);
+    scrollBeats = anchor - (x - kMargin) / usable * (viewBeats() / zoom);
+    scrollBy (0.0);
+}
+
+void AudioClipEditor::scrollBy (double beats)
+{
+    const double shown = viewBeats() / zoom;
+    scrollBeats = juce::jlimit (0.0, juce::jmax (0.0, viewBeats() - shown), scrollBeats + beats);
+    waveView->repaint();
 }
 
 //==============================================================================

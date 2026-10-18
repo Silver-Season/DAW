@@ -898,6 +898,9 @@ inline const juce::String menuSendToSession = tr ("Send to Session", "Отпра
 inline const juce::String menuNewClip = tr ("Create One-Bar Clip", "Создать клип на такт");
 inline const juce::String menuAddMidiTrack = tr ("Add MIDI Track", "Добавить MIDI-дорожку");
 inline const juce::String menuAddAudioTrack = tr ("Add Audio Track", "Добавить аудиодорожку");
+inline const juce::String addMidiTrackButton = tr ("+ MIDI", "+ MIDI");
+inline const juce::String addAudioTrackButton = tr ("+ Audio", "+ Аудио");
+inline const juce::String dropForNewTrack = tr ("Drop a sound, an instrument or a MIDI file here for a new track", "Перетащите сюда звук, инструмент или MIDI-файл, чтобы создать дорожку");
 inline const juce::String menuDeleteTrack = tr ("Delete Track", "Удалить дорожку");
 inline const juce::String menuPaste = tr ("Paste", "Вставить");
 inline const juce::String menuSelectAll = tr ("Select All Clips", "Выделить все клипы");
@@ -1203,6 +1206,8 @@ inline const juce::String arrRuler = make (tr ("Bar ruler", "Линейка та
 inline const juce::String arrBrace = make (tr ("Loop brace", "Скобка петли"), tr ("Click to turn the loop on and off. Drag the edges and middle; Cmd+L sets the loop to the selection.", "Щелчок включает и выключает петлю. Края и середину можно тянуть, Cmd+L ставит петлю по выделению."));
 inline const juce::String arrMarkerLane = make (tr ("Markers", "Маркеры"), tr ("Cmd+M adds a marker at the cursor. Click a marker to jump to it, double-click to rename, Delete removes it.", "Cmd+M ставит маркер в позиции курсора. Щелчок по маркеру переходит к нему, двойной щелчок переименовывает, Delete удаляет."));
 inline const juce::String arrMarker = make (tr ("Marker", "Маркер"), tr ("Click to jump to the marker, drag to move, double-click to rename, right-click for color and delete.", "Щелчок переходит к маркеру, перетаскивание двигает, двойной щелчок переименовывает, правая кнопка открывает цвет и удаление."));
+inline const juce::String arrAddMidiTrack = make (tr ("Add MIDI track", "Добавить MIDI-дорожку"), tr ("A new MIDI track with Prisma at the bottom of the song. Cmd+T does the same.", "Новая MIDI-дорожка с Prisma внизу песни. То же делает Cmd+T."));
+inline const juce::String arrAddAudioTrack = make (tr ("Add audio track", "Добавить аудиодорожку"), tr ("A new empty audio track at the bottom of the song, for recording or dropping sounds. Cmd+Shift+T does the same.", "Новая пустая аудиодорожка внизу песни, для записи или звуков из браузера. То же делает Cmd+Shift+T."));
 inline const juce::String arrLiveToSession = make (tr ("Play Session clips", "Играть клипы Session"), tr ("This track plays the timeline. Click to switch it to Session: its last played clip (or its first one) starts on the next bar, the other tracks keep playing the timeline.", "Дорожка играет шкалу. Щелчок переключает её на Session: последний игравший клип (или первый) стартует со следующего такта, остальные дорожки продолжают играть шкалу."));
 inline const juce::String arrLiveToArrangement = make (tr ("Back to timeline", "Вернуть на шкалу"), tr ("This track plays Session clips. Click to give it back to the timeline at the next launch boundary; the other tracks stay as they are.", "Дорожка играет клипы Session. Щелчок возвращает её на шкалу на ближайшей границе запуска; остальные дорожки остаются как есть."));
 inline const juce::String arrLiveNoClips = make (tr ("Play Session clips", "Играть клипы Session"), tr ("This track has no Session clips yet: put a clip into one of its slots in the Session View first.", "У дорожки ещё нет клипов Session: сначала положите клип в один из её слотов в Session View."));
@@ -1312,7 +1317,7 @@ inline const juce::String audioReverse = make (tr ("Reverse", "Обратное 
 inline const juce::String audioLoop = make (tr ("Loop", "Петля"), tr ("Repeats the part of the clip from the loop start to the end while the clip plays.", "Повторять часть клипа от начала петли до конца, пока клип звучит."));
 inline const juce::String audioFadeIn = make (tr ("Fade in", "Фейд-ин"), tr ("Volume rise at the start of the clip on the timeline, in beats. A short fade at the edges is always added.", "Нарастание громкости в начале клипа на шкале, в долях. Короткий фейд на краях добавляется всегда."));
 inline const juce::String audioFadeOut = make (tr ("Fade out", "Фейд-аут"), tr ("Volume fall at the end of the clip on the timeline, in beats.", "Затухание в конце клипа на шкале, в долях."));
-inline const juce::String audioWave = make (tr ("Clip audio", "Звук клипа"), tr ("Drag the start marker and the loop brace. Shift or Alt turn off snap.", "Тяните маркер старта и скобку петли. Shift или Alt отключают прилипание."));
+inline const juce::String audioWave = make (tr ("Clip audio", "Звук клипа"), tr ("Drag the start marker and the loop brace. Shift or Alt turn off snap. The wheel or a pinch zooms, Shift + wheel scrolls.", "Тяните маркер старта и скобку петли. Shift или Alt отключают прилипание. Колесо или щипок меняют масштаб, Shift + колесо прокручивает."));
 } // namespace help
 
 // Tooltips of the small tabs that hide and show panels: what a click will do.

@@ -513,6 +513,12 @@ private:
 ArrangementHeaders::ArrangementHeaders (ArrangementView& v) : view (v)
 {
     setOpaque (true);
+    addMidi = std::make_unique<MiniButton> (Strings::arrangement::addMidiTrackButton, Strings::help::arrAddMidiTrack);
+    addAudio = std::make_unique<MiniButton> (Strings::arrangement::addAudioTrackButton, Strings::help::arrAddAudioTrack);
+    addMidi->onClick = [this] (const juce::MouseEvent&) { view.actions.addMidiTrack(); };
+    addAudio->onClick = [this] (const juce::MouseEvent&) { view.actions.addAudioTrack(); };
+    addAndMakeVisible (*addMidi);
+    addAndMakeVisible (*addAudio);
 }
 
 ArrangementHeaders::~ArrangementHeaders() = default;
@@ -553,6 +559,10 @@ void ArrangementHeaders::refreshRows()
         r->setBounds (0, lane.y - view.view().scrollY, getWidth(), lane.height);
         r->refreshValues();
     }
+    auto add = juce::Rectangle<int> (kStripe + 8, view.contentHeight() - view.view().scrollY + 10, getWidth() - kStripe - 16, 24);
+    addMidi->setBounds (add.removeFromLeft (add.getWidth() / 2 - 3));
+    add.removeFromLeft (6);
+    addAudio->setBounds (add);
 }
 
 void ArrangementHeaders::refreshValues()
