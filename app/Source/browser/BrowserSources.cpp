@@ -1,5 +1,6 @@
 #include "BrowserSources.h"
 
+#include "daw/drums/DrumSynth.h"
 #include "daw/fx/Effect.h"
 
 #include "../Strings.h"
@@ -108,6 +109,19 @@ void BrowserSources::refreshBuiltIn()
     prisma.instrument = true;
     prisma.detail = Strings::browser::builtIn;
     instruments.push_back (prisma);
+    for (const auto& k : daw::drums::factoryKits())
+    {
+        Item kit;
+        kit.category = Category::instruments;
+        kit.name = juce::String (k.name);
+        kit.group = Strings::drums::group;
+        kit.key = "drums:" + kit.name;
+        kit.kind = kinds::drumKit;
+        kit.id = kit.name;
+        kit.instrument = true;
+        kit.detail = Strings::browser::builtIn;
+        instruments.push_back (kit);
+    }
     data.set (Category::instruments, instruments); // plugin instruments are appended by refreshPlugins()
 
     const auto& factory = daw::synth::factoryPresets();
@@ -136,7 +150,7 @@ void BrowserSources::refreshPlugins()
 
     // Prisma stays first in the instruments
     for (const auto& item : data.items (Category::instruments))
-        if (item.kind == kinds::prisma)
+        if (item.kind == kinds::prisma || item.kind == kinds::drumKit)
             instruments.push_back (item);
 
     auto types = plugins.getTypes();

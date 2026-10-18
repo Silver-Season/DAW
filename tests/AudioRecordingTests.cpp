@@ -6,6 +6,7 @@
 #include "../app/Source/engine/RtCheck.h"
 #include "../app/Source/engine/SessionRecorder.h"
 #include "../app/Source/model/ArrangementEdit.h"
+#include "../app/Source/engine/DrumKitProcessor.h"
 
 #include <functional>
 
@@ -414,7 +415,46 @@ void testBuiltInEffectDevice()
 }
 } // namespace
 
+namespace
+{
+void testDrumKitDevice()
+{
+    std::printf ("[drums] the drum machine on a MIDI track plays its factory kit from live notes and saves the kit\n");
+    SoundRig rig;
+    auto track = rig.f.model.addTrack ("midi");
+    auto device = rig.f.model.addDevice (track, "drums", "Drums");
+    device.setStateBase64 (DrumKitProcessor::factoryStateBase64 ("808 Classic"), nullptr);
+    rig.track.setArm (false, nullptr);
+    track.setArm (true, nullptr);
+    rig.f.engine.rebuildGraphIfNeeded();
+    auto* drums = dynamic_cast<DrumKitProcessor*> (rig.f.engine.findProcessor (device.id()));
+    check (drums != nullptr && drums->getKit().name == "808 Classic", "the engine made the drum machine with its kit");
+    rig.blocks_ (4);
+    const uint8_t kick[3] { 0x90, 36, 120 };
+    rig.f.engine.pushLiveMidi (kick, 3, true, juce::Time::getMillisecondCounterHiRes());
+    float peak = 0.0f;
+    for (int i = 0; i < 40; ++i)
+    {
+        rig.block();
+        peak = juce::jmax (peak, rig.out.getMagnitude (0, 0, kBlock));
+    }
+    check (peak > 0.1f, "the kick sounds: peak " + juce::String (peak));
+    if (drums != nullptr)
+    {
+        juce::MemoryBlock state;
+        drums->getStateInformation (state);
+        DrumKitProcessor copy;
+        copy.setStateInformation (state.getData(), (int) state.getSize());
+        check (copy.getKit() == drums->getKit(), "the kit survives a save and load");
+    }
+}
+} // namespace
+
 namespace tests
 {
-void runBuiltInEffectTests() { testBuiltInEffectDevice(); }
+void runBuiltInEffectTests()
+{
+    testBuiltInEffectDevice();
+    testDrumKitDevice();
+}
 } // namespace tests

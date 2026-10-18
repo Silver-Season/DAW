@@ -457,6 +457,21 @@ inline const juce::String float32 = utf8 ("32 (float)");
 inline const juce::String testNote = utf8 ("Записанный звук сдвигается раньше на задержку входа и выхода. Чтобы измерить её точно, соедините кабелем выход 1 карты с выбранным входом и нажмите «Измерить»: прозвучат 10 щелчков. Ползунок поправляет вручную.");
 } // namespace audioRec
 
+// The built-in drum machine
+namespace drums
+{
+inline const juce::String group = utf8 ("Барабаны");
+inline const juce::String deviceName = utf8 ("Драм-машина");
+inline const juce::String dropOnPad = utf8 ("Бросьте звук на пэд, щелчок играет пэд");
+inline const juce::String tune = utf8 ("Тон");
+inline const juce::String decay = utf8 ("Спад");
+inline const juce::String volume = utf8 ("Громк.");
+inline const juce::String cutoff = utf8 ("Срез");
+inline const juce::String pan = utf8 ("Панор.");
+inline const juce::String drive = utf8 ("Драйв");
+inline const juce::String help = utf8 ("Драм-машина\nЩелчок по пэду играет его и выбирает для ручек справа. Перетащите на пэд звуковой файл из браузера или Finder. Ноты C1–D#2.");
+} // namespace drums
+
 // Built-in effects (docs/spec/06-effects-mixing.md): names of the effects, their parameters and choices. Ids come from core;
 // whatever has no translation here shows the English name from core.
 namespace fx

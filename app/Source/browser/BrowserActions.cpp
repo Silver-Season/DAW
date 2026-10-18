@@ -1,5 +1,6 @@
 #include "BrowserActions.h"
 
+#include "../engine/DrumKitProcessor.h"
 #include "daw/fx/Effect.h"
 
 #include "../Strings.h"
@@ -107,6 +108,15 @@ BrowserActions::DeviceSpec BrowserActions::resolve (const DragItem& item) const
             }
         }
     }
+    else if (item.kind == kinds::drumKit)
+    {
+        s.valid = true;
+        s.kind = "drums";
+        s.deviceName = Strings::drums::deviceName;
+        s.presetName = item.id;
+        s.typeId = "drums";
+        s.state = DrumKitProcessor::factoryStateBase64 (item.id);
+    }
     else if (item.kind == kinds::builtinFx)
     {
         s.valid = daw::fx::createEffect (item.id.toStdString()) != nullptr;
@@ -153,6 +163,8 @@ bool BrowserActions::deviceHasType (const DeviceRef& d, const juce::String& type
 {
     if (typeId == "prisma")
         return d.kind() == "prisma";
+    if (typeId == "drums")
+        return d.kind() == "drums";
     if (typeId.startsWith ("fx:"))
         return d.kind() == "fx" && d.pluginDesc() == typeId.substring (3);
     if (d.kind() != "plugin" && d.kind() != "missing")
@@ -182,13 +194,15 @@ bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t t
 
     const bool isPreset = item.kind == kinds::prismaPreset || item.kind == kinds::userPreset;
     if (item.kind == kinds::prisma || item.kind == kinds::prismaPreset || item.kind == kinds::userPreset || item.kind == kinds::plugin
-        || item.kind == kinds::builtinFx)
+        || item.kind == kinds::builtinFx || item.kind == kinds::drumKit)
     {
         if (item.kind == kinds::userPreset && ! library::UserLibrary::readPreset (juce::File (item.path)).valid)
             return false;
         // An effect only makes sense on a track that exists: an empty MIDI track would have no sound.
         if (target == DropTarget::newTrack)
             return item.instrument || item.kind == kinds::prisma || item.kind == kinds::prismaPreset;
+        if (item.kind == kinds::drumKit && target == DropTarget::device) // a kit replaces the kit of a drum machine
+            return model.findDevice (deviceId).kind() == "drums";
         // An audio track has no instrument: only effects go on it (a preset only onto its own device, below).
         if (audioTrack && target != DropTarget::device && (item.instrument || item.kind == kinds::prisma || item.kind == kinds::prismaPreset))
             return false;

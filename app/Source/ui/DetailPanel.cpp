@@ -6,6 +6,8 @@
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
 #include "../engine/BuiltInEffectProcessor.h"
+#include "../engine/DrumKitProcessor.h"
+#include "DrumPads.h"
 #include "daw/dsp/Wavetable.h"
 #include "daw/synth/PrismaParams.h"
 
@@ -170,7 +172,12 @@ public:
         if (processor != nullptr && kind != "missing")
         {
             std::vector<std::pair<juce::AudioProcessorParameter*, juce::String>> bindings;
-            if (auto* prisma = dynamic_cast<PrismaProcessor*> (processor))
+            if (auto* drums = dynamic_cast<DrumKitProcessor*> (processor))
+            {
+                pads = std::make_unique<DrumPads> (owner.engine, *drums, trackColour);
+                addAndMakeVisible (*pads);
+            }
+            else if (auto* prisma = dynamic_cast<PrismaProcessor*> (processor))
             {
                 wavetable = std::make_unique<WavetableMini> (*prisma, trackColour);
                 addAndMakeVisible (*wavetable);
@@ -211,6 +218,8 @@ public:
             return kFoldedWidth;
         if (wavetable != nullptr)
             return 470;
+        if (pads != nullptr)
+            return DrumPads::kPreferredWidth;
         if (kind == "missing")
             return 230;
         return 4 * kKnobCellWidth + 24;
@@ -240,6 +249,8 @@ public:
         }
         if (wavetable != nullptr)
             wavetable->tick();
+        if (pads != nullptr)
+            pads->tick();
         updateTitle();
     }
 
@@ -352,8 +363,15 @@ public:
             k->knob.setVisible (show);
         if (wavetable != nullptr)
             wavetable->setVisible (show);
+        if (pads != nullptr)
+            pads->setVisible (show);
         if (folded)
             return;
+        if (pads != nullptr)
+        {
+            pads->setBounds (getLocalBounds().withTrimmedTop (kDeviceHeaderHeight).reduced (8, 6));
+            return;
+        }
 
         auto body = getLocalBounds().withTrimmedTop (kDeviceHeaderHeight).reduced (12, 10);
         const int rows = 2, cols = 4;
@@ -517,6 +535,7 @@ private:
     bool enabled = true, folded = false, isSelected = false, dragging = false;
     juce::AudioProcessor* processor = nullptr;
     std::unique_ptr<WavetableMini> wavetable;
+    std::unique_ptr<DrumPads> pads;
     std::vector<std::unique_ptr<BoundKnob>> knobs;
     Part hoverPart = Part::none, pressedPart = Part::none;
 };

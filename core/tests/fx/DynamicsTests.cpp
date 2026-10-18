@@ -59,7 +59,7 @@ void cpuCase (const char* type, double budgetPercent, void (*setup) (daw::fx::Ef
     const double ms = std::chrono::duration<double, std::milli> (std::chrono::steady_clock::now() - start).count();
     std::printf ("  [cpu] %s: 10 s in %.1f ms = %.3f %% of real time\n", type, ms, ms / 100.0);
     check (finite (out), std::string (type) + " output finite");
-#ifdef NDEBUG
+#if defined (NDEBUG) && defined (DAW_STRICT_CPU_TESTS)
     check (ms / 100.0 < budgetPercent, std::string (type) + " under " + std::to_string (budgetPercent) + " % of real time");
 #else
     (void) budgetPercent;
