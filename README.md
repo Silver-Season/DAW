@@ -147,6 +147,12 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 
 English is the default UI language. Settings → Appearance → Language switches to Russian (and back); the choice applies after a restart. Every UI text is a `tr ("English", "Русский")` pair in `app/Source/Strings.h`, and the engine tests run once in each language.
 
+## Demo song: "Mountain King"
+
+An electronic arrangement of Grieg's "In the Hall of the Mountain King" (public domain), made only with the app's own instruments and effects as an end-to-end check: [listen](media/demo-mountain-king.mp3), open [the project](docs/demo/Mountain%20King.prisma), and read what the check found in [docs/demo/README.md](docs/demo/README.md).
+
+![The demo song in the Arrangement](media/demo-mountain-king.png)
+
 ## The foundation (phase 0)
 
 - **DAW app**: Session View with 8 tracks × 8 scenes, quantized clip and scene launching, stopping a track or everything at once, transport with tempo, mixer (volume, pan, mute/solo/arm, level meters), master channel, on-screen keyboard with Oct −/+ buttons, playing from the Mac keyboard (A W S E D F T G Y H U J K O L P ; are notes, Z/X octave, C/V velocity), Space = play/stop.

@@ -119,6 +119,19 @@ if(DAW_BUILD_JUCE)
     add_subdirectory(plugins/prisma)
     add_subdirectory(app)
 
+    if(DAW_BUILD_TOOLS)
+        # The demo song (docs/demo/README.md): builds the project through the model and renders it with the export.
+        juce_add_console_app(daw_demo_song PRODUCT_NAME "daw_demo_song")
+        target_sources(daw_demo_song PRIVATE
+            tools/demo_song/MountainKing.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
+            ${DAW_APP_SHARED_SOURCES})
+        target_compile_definitions(daw_demo_song PRIVATE
+            JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1)
+        target_link_libraries(daw_demo_song PRIVATE daw_core DawResources juce::juce_audio_utils
+            juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+    endif()
+
     if(DAW_BUILD_TESTS)
         juce_add_console_app(daw_engine_tests PRODUCT_NAME "daw_engine_tests")
         target_sources(daw_engine_tests PRIVATE
