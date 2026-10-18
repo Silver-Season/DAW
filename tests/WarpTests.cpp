@@ -4,6 +4,8 @@
 // The analysis and the stretcher have their own tests in core/tests (daw_analysis_tests, daw_stretch_tests).
 #include "TestSupport.h"
 
+#include "../app/Source/Strings.h"
+#include "../app/Source/browser/BrowserActions.h"
 #include "../app/Source/engine/OfflineRenderer.h"
 #include "../app/Source/engine/RtCheck.h"
 #include "../app/Source/model/ArrangementEdit.h"
@@ -63,6 +65,49 @@ double frequency (const std::vector<float>& x, size_t from, size_t to)
             ++crossings;
         }
     return crossings > 1 ? (crossings - 1) * kRate / (double) (last - first) : 0.0;
+}
+
+// Clicks: a 3 ms decaying 2 kHz burst at each time (seconds), `seconds` long.
+std::vector<float> clicks (const std::vector<double>& at, double seconds)
+{
+    std::vector<float> s ((size_t) (seconds * kRate), 0.0f);
+    for (const double t : at)
+        for (size_t i = 0; i < 300; ++i)
+            if (const auto k = (size_t) (t * kRate) + i; k < s.size())
+                s[k] += 0.8f * (float) (std::exp (-(double) i / 50.0) * std::sin (2.0 * kPi * 2000.0 * (double) i / kRate));
+    return s;
+}
+
+// Where the bursts start: the first sample above a quarter of full scale after a quiet stretch.
+std::vector<double> clickTimes (const std::vector<float>& x)
+{
+    std::vector<double> out;
+    size_t last = 0;
+    bool any = false;
+    for (size_t i = 0; i < x.size(); ++i)
+        if (std::abs (x[i]) > 0.2f && (! any || i - last > (size_t) (0.1 * kRate)))
+        {
+            size_t start = i;
+            while (start > 0 && std::abs (x[start - 1]) > 0.01f && i - start < 30)
+                --start;
+            out.push_back ((double) start / kRate);
+            last = i;
+            any = true;
+        }
+        else if (std::abs (x[i]) > 0.2f)
+            last = i;
+    return out;
+}
+
+std::vector<float> readMono (const juce::File& file)
+{
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatReader> reader (wav.createReaderFor (file.createInputStream().release(), true));
+    if (reader == nullptr)
+        return {};
+    juce::AudioBuffer<float> buffer (1, (int) reader->lengthInSamples);
+    reader->read (&buffer, 0, buffer.getNumSamples(), 0, true, false);
+    return { buffer.getReadPointer (0), buffer.getReadPointer (0) + buffer.getNumSamples() };
 }
 
 // Lets the background jobs finish and their answers arrive on the message thread.
@@ -130,7 +175,11 @@ void testImportAnalysis()
     check (clip.warpMode() == "beats", "a four-bar loop is stretched as drums");
     check (std::abs (clip.lengthBeats() - 16.0) < 0.1, "and is as long as its four bars: " + juce::String (clip.lengthBeats(), 3));
     check (std::abs (clip.sampleStart() - 0.25 * kRate) < 0.015 * kRate, "and starts on the first beat");
-    check (r.f.model.undo.getNumActionsInCurrentTransaction() == undoSteps, "the analysis adds nothing to undo");
+    // The only clip of the project: the project takes the tempo of the sound, as an undo step of its own; the analysis
+    // itself (the file and clip properties) adds nothing to undo.
+    check (std::abs (r.f.model.tempo() - std::round (node.tempo() * 100.0) / 100.0) < 1.0e-9, "the first sound sets the project tempo: " + juce::String (r.f.model.tempo(), 2));
+    check (r.f.model.undo.getUndoDescription() == Strings::audioUi::undoTempoFromSound, "as an undo step of its own");
+    check (r.f.model.undo.getNumActionsInCurrentTransaction() == 1 && undoSteps > 0, "holding only the tempo");
 
     // A second clip of the same file, made after the answer, gets the tempo right away.
     auto second = r.f.model.createAudioClip (r.track, 1, imported.fileId, 16.0, imported.name);
@@ -238,6 +287,85 @@ void testOldProjectMigration()
     check (loaded.followTempo() && std::abs (loaded.originalTempo() - 120.0) < 1.0e-9, "its clip follows the project tempo at the tempo of its file");
     check (loaded.warpMode() == "beats", "and is stretched, a short loop as drums");
 }
+
+void testWarpMarkers()
+{
+    std::printf ("[7.3] warp markers: a marker moves its moment of the audio, the rest stretches around it, in every mode\n");
+    // Clicks on every beat of a 120 BPM file (0.5 s apart), played at 100 BPM. A marker takes the click of beat 4 to
+    // beat 5; beat 2 then plays at 2.5 and beat 6 at 7 (the segments on both sides stretch evenly).
+    for (const juce::String mode : { "repitch", "beats", "complex", "complexpro" })
+    {
+        WarpRig r;
+        r.f.model.setTempo (100.0);
+        const auto file = r.folder.getChildFile ("clicks_120bpm.wav");
+        std::vector<double> at;
+        for (int b = 0; b < 8; ++b)
+            at.push_back (b * 0.5 + 0.05); // a little after the beat: the very first frame of a clip fades in
+        writeWav (file, clicks (at, 4.0));
+        r.f.model.undo.beginNewTransaction ("import");
+        const auto imported = audioimport::importFile (r.f.model, r.f.engine, file, true);
+        auto node = r.f.model.makeAudioClipNode (r.track, imported.fileId, imported.lengthBeats, imported.name);
+        auto a = arrangement::addSlotClip (r.f.model, r.track, ClipRef (node), 0.0);
+        a.setLoop (false, nullptr);
+        a.setLength (10.0, nullptr);
+        auto clip = a.clip();
+        clip.setWarpMode (mode, nullptr);
+        clip.setLengthBeats (9.0, nullptr);
+        clip.setWarpMarkers ({ { 0.0, 0.0 }, { 2.0 * kRate, 5.0 }, { 4.0 * kRate, 9.0 } }, nullptr);
+        const auto map = clip.warpMap (kRate, 100.0);
+        check (std::abs (map.frameAt (2.5) - 1.0 * kRate) < 1.0e-6, mode + ": the map puts beat 2 of the file at 2.5");
+
+        OfflineRenderer::Options o;
+        o.startBeat = 0.0;
+        o.endBeat = 10.0;
+        o.file = r.folder.getChildFile ("markers.wav");
+        o.tail = false;
+        OfflineRenderer renderer (r.f.settings, r.f.model, r.f.engine, o);
+        const auto result = renderer.renderNow();
+        check (result.ok, mode + ": the file was written: " + result.error);
+        const auto times = clickTimes (readMono (o.file));
+        // where each click must be: its file time through the markers (2.5 beats a second up to 2 s, then 2), 0.6 s per
+        // beat at 100 BPM
+        const auto newBeat = [&at] (size_t i) { return at[i] < 2.0 ? at[i] * 2.5 : 5.0 + (at[i] - 2.0) * 2.0; };
+        // Beats and Re-Pitch are sample exact. The phase vocoder modes ring a little before a click, which reads as a
+        // few ms early (Complex Pro about 3 ms, Complex about 7): the reason drums default to Beats.
+        const double tolerance = mode == "complex" ? 0.008 : (mode == "complexpro" ? 0.004 : 0.001);
+        check (times.size() == 8, mode + ": 8 clicks: " + juce::String ((int) times.size()));
+        double worst = 0.0;
+        for (size_t i = 0; i < std::min<size_t> (8, times.size()); ++i)
+        {
+            worst = std::max (worst, std::abs (times[i] - newBeat (i) * 0.6));
+            if (std::getenv ("DAW_WARP_DEBUG") != nullptr)
+                std::printf ("    %s click %d: %.2f ms\n", mode.toRawUTF8(), (int) i, (times[i] - newBeat (i) * 0.6) * 1000.0);
+        }
+        check (worst <= tolerance, mode + ": every click on its new beat, worst " + juce::String (worst * 1000.0, 2) + " ms");
+    }
+}
+
+void testFirstSoundSetsTempo()
+{
+    std::printf ("[7] the first sound of an empty project sets the project tempo; later sounds follow the project\n");
+    WarpRig r;
+    auto libraryRoot = r.folder.getChildFile ("Library");
+    libraryRoot.createDirectory();
+    library::UserLibrary lib (libraryRoot);
+    browser::BrowserActions actions (r.f.model, r.f.engine, lib);
+    r.f.model.deleteTrack (r.track.id());
+    r.f.model.undo.clearUndoHistory();
+    const auto first = r.folder.getChildFile ("break_92bpm.wav");
+    writeWav (first, drumLoop (92.0, 2, 0.0));
+    const auto drop = actions.dropAudioOnTimeline ({ first }, -1, 0.0, false);
+    check (drop.ok, "the sound is on the timeline");
+    check (std::abs (r.f.model.tempo() - 92.0) < 1.0e-9, "the project takes its tempo: " + juce::String (r.f.model.tempo(), 2));
+    r.f.model.undo.undo();
+    check (std::abs (r.f.model.tempo() - 120.0) < 1.0e-9 && r.f.model.numTracks() == 0, "one undo takes back the sound and the tempo");
+    r.f.model.undo.redo();
+
+    const auto second = r.folder.getChildFile ("pad_120bpm.wav");
+    writeWav (second, sine ((int) (4 * kRate), 220.0));
+    actions.dropAudioOnTimeline ({ second }, -1, 0.0, false);
+    check (std::abs (r.f.model.tempo() - 92.0) < 1.0e-9, "a second sound follows the project instead");
+}
 } // namespace
 
 void tests::runWarpTests()
@@ -246,4 +374,6 @@ void tests::runWarpTests()
     testStretchedPlayback();
     testWarpedExport();
     testOldProjectMigration();
+    testWarpMarkers();
+    testFirstSoundSetsTempo();
 }

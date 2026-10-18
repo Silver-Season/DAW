@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 // Warping of audio clips (docs/spec/07-warp.md), the part that runs in the background:
 //  - analysis: the tempo and the first downbeat of a newly imported file (daw::dsp::estimateTempo);
@@ -19,21 +20,37 @@
 class WarpService
 {
 public:
+    // What the analysis found in a file (07-warp.md, task 7.2): times in seconds of the file.
     struct Analysis
     {
-        double bpm = 0.0, firstBeatSeconds = 0.0;
+        double bpm = 0.0, firstBeatSeconds = 0.0, confidence = 0.0;
+        std::vector<double> onsets, beats;
     };
 
     explicit WarpService (juce::AudioFormatManager&);
     ~WarpService();
 
-    // Message thread. `done` runs on the message thread with the result (bpm 0 when nothing was found).
-    void analyse (const juce::File&, std::function<void (const Analysis&)> done);
+    // Where analyses are kept between runs (one small XML per file content hash); empty keeps them in memory only.
+    void setCacheFolder (const juce::File& f) { cacheFolder = f; }
+
+    // Message thread. `done` runs on the message thread with the result (bpm 0 when nothing was found). A file with a
+    // content hash is read from the cache when it was analysed before.
+    void analyse (const juce::File&, const juce::String& hash, std::function<void (const Analysis&)> done);
+
+    // Message thread: the analysis of a file for the views (onsets and beats drawn on the waveform), null until it is
+    // ready; the first call starts it in the background and onAnalysisReady fires when it is done.
+    std::shared_ptr<const Analysis> analysisFor (const juce::File&, const juce::String& hash);
+    std::function<void()> onAnalysisReady;
 
     // Message thread. The stretched copy if it is ready; otherwise null, and the render starts (once). `timeRatio` is
     // output length / input length. `ready` is called on the message thread when a render finishes.
     std::shared_ptr<daw::engine::AudioSource> stretched (const std::shared_ptr<daw::engine::AudioSource>& original, double timeRatio,
                                                          const juce::String& mode);
+    // The same along warp markers: input frame -> output frame key frames (daw::dsp::stretchOfflineMapped), the copy
+    // exactly outFrames long. `beatsDecay` is the Beats mode setting.
+    std::shared_ptr<daw::engine::AudioSource> stretched (const std::shared_ptr<daw::engine::AudioSource>& original,
+                                                         std::vector<std::pair<int64_t, int64_t>> keyFrames, int64_t outFrames,
+                                                         const juce::String& mode, double beatsDecay);
     std::function<void()> onStretchReady;
 
     // Message thread, after a graph build: copies nobody asked for in that build are dropped.
@@ -49,7 +66,7 @@ private:
     struct Key
     {
         const daw::engine::AudioSource* source;
-        long ratioKey;
+        uint64_t ratioKey; // a hash of the key frames, the length and the decay
         juce::String mode;
         bool operator< (const Key& o) const
         {
@@ -67,9 +84,22 @@ private:
         bool used = true;
     };
 
-    static std::shared_ptr<daw::engine::AudioSource> render (const daw::engine::AudioSource& original, double timeRatio, const juce::String& mode);
+    struct Job
+    {
+        std::vector<std::pair<int64_t, int64_t>> keyFrames;
+        int64_t outFrames = 0;
+        juce::String mode;
+        double decay = 1.0;
+    };
+    static std::shared_ptr<daw::engine::AudioSource> render (const daw::engine::AudioSource& original, const Job&);
+
+    Analysis compute (const juce::File&) const;
+    bool readCache (const juce::String& hash, Analysis&) const;
+    void writeCache (const juce::String& hash, const Analysis&) const;
 
     juce::AudioFormatManager& formats;
+    juce::File cacheFolder;
+    std::map<juce::String, std::shared_ptr<const Analysis>> analyses; // by hash or path; null while running
     bool renderInline = false;
     juce::ThreadPool pool { 2 };
     std::map<Key, Entry> cache;

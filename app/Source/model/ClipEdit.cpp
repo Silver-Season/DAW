@@ -145,6 +145,13 @@ void scaleTime (const ClipRef& clip, double factor, juce::UndoManager* um)
             c.time *= factor;
         clip.setControllers (controllers, um);
     }
+    auto markers = clip.warpMarkers();
+    if (! markers.empty())
+    {
+        for (auto& m : markers)
+            m.beat *= factor;
+        clip.setWarpMarkers (markers, um);
+    }
 }
 
 Nodes splitNotes (const ClipRef& clip, const Nodes& nodes, double atBeat, juce::UndoManager* um)

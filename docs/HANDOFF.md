@@ -17,10 +17,18 @@ English UI and English repository (branch `claude/english-standalone-87c15d`):
 
 Demo song (branch `claude/project-thread-t76imp`): "Mountain King" after Grieg, built through the model by `tools/demo_song/MountainKing.cpp` (target `daw_demo_song`) and rendered with `OfflineRenderer`; the project is `docs/demo/Mountain King.prisma`. The problems the check found are listed in `docs/demo/README.md`; fixing them is the owner's call.
 
-Branch `claude/project-thread-0292na` (from `claude/funny-euler-1vls48` with main merged in), PR into main: warp part 1 and the owner's live-test list.
+Warp part 1 and the owner's live-test list: merged in PR #22 (branch `claude/project-thread-0292na`).
 - Warp (7.1, 7.2): `daw::dsp::estimateTempo/detectOnsets` (Onsets.h; the double-time decision and the beat tracking read the band below 2.5 kHz, so off-beat hats do not double the tempo), Rubber Band v3.3.0 in `third_party/rubberband`, `daw::dsp::Stretcher/stretchOffline`, `engine/WarpService` (tempo analysis of imported files, stretched copies rendered in the background, Re-Pitch until ready; `setRenderInline` for export), CLIP `originalTempo`, `warpMode`, `warp`; schema 4 migrates older warped clips. Tests: `tests/WarpTests.cpp` (`DAW_TEST_ONLY=warp`), `daw_analysis_tests`, `daw_stretch_tests`.
 - Live-test list: 1 per-track Session/timeline switch (`AudioEngine::launchClipOnBar`, `backToArrangement (trackId)`, button in `ArrangementHeaders`); 2 grid inside clips (`ArrangementLanes::paintGrid`); 3 "+ MIDI" / "+ Audio" and a drop area under the last track; 4 add-track menus in the Arrangement; 5 pan ignores the wheel (`Knob::setWheelChangesValue`, `PanDrag`); 6 warp above; 7 waveforms from samples when zoomed in (`Waveform.cpp`), zoom in the audio clip editor.
-- Not done in stage 7: warp markers and grid nudge (7.3), rendering ahead of the cursor in a ring buffer instead of whole copies, tempo changes over time.
+
+Warp part 2 (branch `claude/project-thread-aqlatg`, thread "warp"; the design direction is at the top of `docs/spec/07-warp.md`):
+- The first sound of an empty project sets the project tempo (`ProjectModel::adoptTempoOfFirstSound`, called by the drops and by `AudioEngine::analyseAudioFile`).
+- Warp markers: CLIP/WARP/MARKER (`sample`, `beat`), `daw::engine::WarpMap` (core), `ClipRef::warpMap`; the engine reads the original along the map (`AudioPart::warp`) and renders stretched copies along it (`WarpService::stretched` with key frames, `daw::dsp::stretchOfflineMapped`: Rubber Band offline key frames for Complex Pro and Tones, segment by segment for Complex and Texture, `stretchBeats` for Beats).
+- Beats mode of our own (`core/src/BeatsStretch.cpp`), CLIP `beatsDecay`.
+- Analyses (onsets, beats, confidence) cached in `<settings folder>/Analysis/<hash>.xml` (`WarpService::analysisFor`).
+- Clip editor: decision strip, warp lane (beats of the sound draggable, markers), onsets, tint where the grid misses the beats, right-click menu (Bar 1 Here, Tempo From Here, Add Markers at Onsets, Quantize Markers, Slice at Onsets / on Grid), Decay.
+- Tests: `daw_warp_tests` (core), `[7.3]` in `tests/WarpTests.cpp` and `tests/AudioUiTests.cpp`.
+- Next (part 3): tempo and time signature track (7.5), the project following a performance played without a click, rendering ahead of the cursor (7.1), tap tempo, audio quantize with strength across tracks.
 - `claude/fx-ui-wip`: new views for the built-in effects (compact views per type, expanding a card in place, its own window instead of GenericAudioProcessorEditor). The last commit is unfinished. Owner feedback: effect windows look cheap, the bottom panel shows 8 random knobs; it needs priority parameters, dropdowns (delay division) and in-place expansion. When merging it after the English UI, turn every new `utf8 ("…")` in `Strings.h` into `tr ("English", "…")`.
 
 README screenshots were retaken with the English UI in the Prism theme (one theme per screen; the old Russian ones in other themes were removed). How: `DAW_LANG=en DAW_THEME=prism` under Xvfb, sounds dropped from a Places folder (settings key `placeFolders`) with xdotool drags.
@@ -34,7 +42,7 @@ Owner's live-test list after the demo song (2026-10-18), all seven done on `clau
 6. **Tempo detection of dropped audio is often wrong, and there is still no warp.** Critical (stage 7, branch `claude/funny-euler-1vls48`).
 7. **Waveforms in the Arrangement look bad when zoomed in, and the audio clip editor at the bottom cannot zoom.**
 
-Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), warp markers (7.3), a design pass.
+Not done yet (by importance): PDC, MP3 and LUFS in export, snapshots and morph, MIDI Learn, groups, always-on audio capture (5.7), comping with the mouse (5.5), the tempo track (7.5), a design pass.
 
 ## How to continue
 

@@ -12,6 +12,20 @@ In: a time-stretching library, warp modes, tempo and onset detection, warp marke
 
 Out: editing the pitch of individual notes inside audio (stage 12), polyphonic MIDI extraction from audio.
 
+## Design direction (2026-10-18)
+
+A review of how warp and tempo detection usually work found the same pain points everywhere: an automatic warp that places markers off the beat and has to be redone by hand, a tempo read at half or double speed, the first downbeat in the wrong place, settings for "keep the project tempo or adapt it" buried in project settings, and markers that the user has to create before anything can be dragged. The design below aims at fixing those, in this order of importance.
+
+1. **The first sound sets the tempo.** A sound dropped into a project with no other clips gives the project its tempo, and its first downbeat lands on bar 1. Every later sound follows the project tempo. Nothing has to be configured (`ProjectModel::adoptTempoOfFirstSound`).
+2. **One decision strip, not a settings page.** Right after the analysis, the clip editor shows what was found in one line: the tempo with its confidence, and the choices that fix the common errors at once: x2, /2, "Bar 1 here", "Project follows this clip" (Match Project Tempo), "Clip follows project".
+3. **Direct manipulation of the beat grid.** The detected beats are drawn on the waveform as the grid of the sound itself (bars numbered). Any beat line can be grabbed and dragged; it becomes a warp marker at that moment. There is no separate step to create markers first. Double-click still adds one anywhere, and Delete removes it.
+4. **Show where the analysis is unsure.** Stretches where the beats drift away from a steady tempo are tinted, so the user knows where to look instead of checking the whole file.
+5. **Check by ear in place.** A click of the sound's own grid can play along in the editor, to hear at once whether the grid is right.
+6. **Played without a click: the project follows the performance** (with the tempo track, task 7.5): the recording is not stretched; the project gets a tempo map from its beats, and everything else follows it.
+7. **Audio quantize with strength**, and several tracks locked together (drums recorded with several microphones move as one, so their phase stays intact).
+
+Items 1–5 and the warp markers (7.3) are the first part; the tempo track (7.5), item 6 and rendering ahead of the cursor (7.1) the second; item 7 the third.
+
 ---
 
 ## Task 7.1. Time stretching

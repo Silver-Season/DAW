@@ -16,6 +16,8 @@ add_library(daw_core STATIC
     src/AudioAnalysis.cpp
     src/TimeStretch.cpp
     src/Onsets.cpp
+    src/WarpMap.cpp
+    src/BeatsStretch.cpp
     src/gen/Patterns.cpp
     src/gen/Patches.cpp
     src/drums/DrumKit.cpp
@@ -68,6 +70,13 @@ if(DAW_BUILD_TESTS)
     add_test(NAME daw_stretch_tests COMMAND daw_stretch_tests)
     if(NOT MSVC)
         target_compile_options(daw_stretch_tests PRIVATE -Wall -Wextra)
+    endif()
+
+    add_executable(daw_warp_tests tests/warp_tests.cpp)
+    target_link_libraries(daw_warp_tests PRIVATE daw_core)
+    add_test(NAME daw_warp_tests COMMAND daw_warp_tests)
+    if(NOT MSVC)
+        target_compile_options(daw_warp_tests PRIVATE -Wall -Wextra)
     endif()
 
     add_executable(daw_analysis_tests tests/analysis_tests.cpp)

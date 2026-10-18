@@ -222,6 +222,10 @@ public:
     ClipRef createAudioClip (const TrackRef&, int scene, int64_t fileId, double lengthBeats, const juce::String& name);
     // The CLIP node of a new audio clip, not yet in the tree (for arrangement clips and recordings).
     juce::ValueTree makeAudioClipNode (const TrackRef&, int64_t fileId, double lengthBeats, const juce::String& name);
+    // The first sound sets the tempo (07-warp.md): when every clip of the project plays this file and the file's tempo
+    // is known, the project takes that tempo (undoable, in the caller's transaction) and returns true. A sound dropped
+    // into an empty project lands on the grid at its own tempo; every later one follows the project.
+    bool adoptTempoOfFirstSound (int64_t fileId);
 
     //==========================================================================
     // Devices. The first device of a track is its instrument, the rest are effects.

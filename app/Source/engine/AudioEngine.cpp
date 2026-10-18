@@ -1,5 +1,7 @@
 #include "AudioEngine.h"
 
+#include "../Strings.h"
+
 #include "BuiltInEffectProcessor.h"
 #include "RtCheck.h"
 
@@ -48,6 +50,7 @@ AudioEngine::AudioEngine (Settings& s, bool openDevices) : settings (s), clock (
 
     playHead = std::make_unique<PlayHead> (*this);
     warp.onStretchReady = [this] { graphDirty = true; };
+    warp.setCacheFolder (settings.getPropertiesFile().getFile().getSiblingFile ("Analysis"));
     correctionMs = settings.recordCorrectionMs();
     audioCorrectionMs = settings.audioLatencyCorrectionMs();
     for (int i = 0; i < kMaxInputChannels; ++i)
@@ -1699,7 +1702,7 @@ void AudioEngine::analyseAudioFile (int64_t fileId)
     const auto file = resolveAudioFile (fileNode);
     if (! fileNode.isValid() || ! file.existsAsFile() || fileNode.tempo() > 0.0)
         return;
-    warp.analyse (file, [this, fileId] (const WarpService::Analysis& a) {
+    warp.analyse (file, fileNode.hash(), [this, fileId] (const WarpService::Analysis& a) {
         if (model == nullptr)
             return;
         auto node = model->findAudioFile (fileId);
@@ -1710,6 +1713,7 @@ void AudioEngine::analyseAudioFile (int64_t fileId)
             return;
         node.state.setProperty (ids::tempo, a.bpm, nullptr);
         node.state.setProperty (ids::firstBeat, a.firstBeatSeconds, nullptr);
+        node.state.setProperty (ids::confidence, a.confidence, nullptr);
         // The clips made before the answer came: they start on the first downbeat and follow the project tempo, and
         // their length becomes the file's length in its own beats (an arrangement clip that showed all of it too).
         const auto mode = ProjectModel::warpModeFor (node);
@@ -1737,5 +1741,8 @@ void AudioEngine::analyseAudioFile (int64_t fileId)
             for (const auto& c : t.arrangementClips())
                 update (c.clip());
         }
+        // The first sound of an empty project sets its tempo, so it plays on the grid without being stretched.
+        model->undo.beginNewTransaction (Strings::audioUi::undoTempoFromSound);
+        model->adoptTempoOfFirstSound (fileId);
     });
 }

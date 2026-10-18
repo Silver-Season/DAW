@@ -486,6 +486,107 @@ void testDeviceFold()
     check (! r.f.model.findDevice (device.id()).folded(), "a click on the strip unfolds it");
     check (findView (chain)->getWidth() == wide, "back to its full width");
 }
+
+//==============================================================================
+void testWarpEditor()
+{
+    std::printf ("[7.3] audio clip editor: warp markers by dragging the beats of the sound, the decision strip, the menu edits\n");
+    EditorRig e;
+    auto& r = e.r;
+    // a 120 BPM sound of 8 beats, a short hit on every beat
+    std::vector<float> hits (4 * 48000);
+    for (int b = 0; b < 8; ++b)
+        for (int n = 0; n < 2400; ++n)
+            hits[(size_t) (b * 24000 + n)] = 0.8f * std::exp (-n / 400.0f) * (float) std::sin (2.0 * juce::MathConstants<double>::pi * 180.0 * n / 48000.0);
+    const auto file = r.folder.getChildFile ("groove_120bpm.wav");
+    writeWav (file, hits);
+    r.f.model.setTempo (100.0);
+    const auto drop = r.browserActions.dropAudioOnTimeline ({ file }, r.audioB.id(), 0.0, false);
+    check (drop.ok, "the sound is on the timeline");
+    check (std::abs (r.f.model.tempo() - 100.0) < 1.0e-9, "a project that has clips keeps its tempo");
+    ClipRef content;
+    for (const auto& a : r.audioB.arrangementClips())
+        content = a.clip();
+    check (content.isValid() && content.followTempo(), "the clip follows the project tempo");
+    r.f.engine.rebuildGraphIfNeeded();
+    r.f.engine.getAudioPool().waitForLoads();
+    auto& ed = *e.editor;
+    ed.setBounds (0, 0, 1400, 300);
+    ed.setClip (content.id());
+    ed.tick();
+    r.f.model.undo.clearUndoHistory();
+
+    auto& wave = ed.wave();
+    const int laneY = ui::AudioClipEditor::kRulerHeight + 5;
+    // drag the second beat of the sound to 2.5: it becomes a marker, the ends of the file are pinned
+    e.drag ({ (int) std::lround (ed.beatToX (2.0)), laneY }, 2.5);
+    auto markers = content.warpMarkers();
+    check (markers.size() == 3, "a dragged beat makes a marker, with the two ends: " + juce::String ((int) markers.size()));
+    if (markers.size() == 3)
+    {
+        check (std::abs (markers[1].beat - 2.5) < 1.0e-9, "at the beat it was dropped on");
+        check (std::abs (markers[1].frame - 48000.0) < 1.0, "holding the audio of beat 2 (1 s into the file)");
+        check (std::abs (markers[2].beat - 8.0) < 1.0e-6 && std::abs (markers[0].beat) < 1.0e-6, "the ends stay");
+    }
+    check (r.undoDepth() == 1, "one gesture, one undo step");
+    check (r.f.model.undo.getUndoDescription() == Strings::audioUi::undoWarpMarker, "named after the marker");
+    r.f.model.undo.undo();
+    check (content.warpMarkers().empty(), "undo takes the markers away");
+    r.f.model.undo.redo();
+
+    // the marker itself drags further
+    e.drag ({ (int) std::lround (ed.beatToX (2.5)), laneY }, 2.75);
+    check (content.warpMarkers().size() == 3 && std::abs (content.warpMarkers()[1].beat - 2.75) < 1.0e-9, "a marker drags");
+    // double-click pins another one; Delete removes the selected marker
+    wave.mouseDoubleClick (e.mouse ({ (int) std::lround (ed.beatToX (5.0)), laneY }, wave));
+    check (content.warpMarkers().size() == 4, "double-click pins a marker");
+    check (ed.selectedMarker() == 2, "and selects it");
+    wave.keyPressed (juce::KeyPress (juce::KeyPress::deleteKey));
+    check (content.warpMarkers().size() == 3, "Delete removes it");
+
+    // the engine plays the clip along the markers (resampled until the stretched copy is ready)
+    r.f.engine.rebuildGraphIfNeeded();
+
+    // the decision strip: tempo of the clip, and the project follows it
+    check (std::abs (ed.clipTempo() - 120.0) < 1.0e-6, "the clip tempo between its ends: " + juce::String (ed.clipTempo(), 3));
+    r.f.model.undo.clearUndoHistory();
+    ed.matchProjectTempo();
+    check (std::abs (r.f.model.tempo() - 120.0) < 1.0e-9, "Project Follows Clip sets the project tempo");
+    check (r.f.model.undo.getUndoDescription() == Strings::audioUi::undoMatchProject, "as one undo step");
+
+    // Bar 1 Here moves the grid of the sound by less than half a bar
+    const double before = content.warpMarkers()[1].beat;
+    ed.setBarOneAt (0.5);
+    check (std::abs (content.warpMarkers()[1].beat - (before - 0.5)) < 1.0e-9, "Bar 1 Here shifts every marker");
+
+    // quantize: the inner marker goes to the grid line
+    ed.view().step = 1.0;
+    ed.quantizeMarkers();
+    check (std::abs (content.warpMarkers()[1].beat - std::round (before - 0.5)) < 1.0e-9, "Quantize Markers to Grid");
+
+    // slicing on the grid: the arrangement clip is cut every beat (8 beats of sound in a clip of about 8 beats)
+    const int clipsBefore = r.audioB.numArrangementClips();
+    const int cuts = ed.sliceOnGrid();
+    check (cuts > 4 && r.audioB.numArrangementClips() == clipsBefore + cuts, "Slice on Grid cuts the clip: " + juce::String (cuts));
+    r.f.model.undo.undo();
+    check (r.audioB.numArrangementClips() == clipsBefore, "in one undo step");
+
+    // paints, with the strip and the lane (and a screenshot for the README when asked)
+    ed.tick();
+    juce::Image img (juce::Image::ARGB, 1400, 300, true);
+    {
+        juce::Graphics g (img);
+        ed.paintEntireComponent (g, true);
+    }
+    check (img.isValid(), "the editor paints");
+    if (const char* dir = std::getenv ("DAW_SNAPSHOT_DIR"); dir != nullptr && dir[0] != 0)
+    {
+        juce::FileOutputStream out (juce::File (dir).getChildFile ("warp-editor.png"));
+        out.setPosition (0);
+        out.truncate();
+        juce::PNGImageFormat().writeImageToStream (img, out);
+    }
+}
 } // namespace
 
 namespace tests
@@ -498,6 +599,7 @@ void runAudioUiTests()
     testDeviceFold();
     testEditorProperties();
     testEditorGestures();
+    testWarpEditor();
     testEditorMissingFile();
 }
 } // namespace tests

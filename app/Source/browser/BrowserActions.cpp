@@ -513,6 +513,7 @@ DropResult BrowserActions::dropAudioFiles (const juce::Array<juce::File>& files,
         model.createAudioClip (track, slot, s.fileId, s.lengthBeats, s.name);
         r.trackId = track.id();
     }
+    model.adoptTempoOfFirstSound (sounds.front().fileId); // a tempo known from the name; else the analysis does it
     r.ok = true;
     return r;
 }
@@ -547,6 +548,7 @@ DropResult BrowserActions::dropAudioOnTimeline (const juce::Array<juce::File>& f
         at += s.lengthBeats;
         r.trackId = track.id();
     }
+    model.adoptTempoOfFirstSound (sounds.front().fileId); // a tempo known from the name; else the analysis does it
     r.ok = true;
     return r;
 }

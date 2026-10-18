@@ -354,6 +354,36 @@ juce::String ProjectModel::warpModeFor (const AudioFileRef& file)
     return bars > 0.0 && bars <= 8.5 ? "beats" : "complex";
 }
 
+bool ProjectModel::adoptTempoOfFirstSound (int64_t fileId)
+{
+    const auto file = findAudioFile (fileId);
+    if (! file.isValid() || file.tempo() <= 0.0)
+        return false;
+    bool any = false;
+    const auto ofThisFile = [&] (const ClipRef& c) {
+        if (! c.isValid())
+            return true;
+        any = true;
+        return c.isAudio() && c.fileId() == fileId;
+    };
+    for (const auto& t : tracks())
+    {
+        for (int s = 0; s < t.numSlots(); ++s)
+            if (! ofThisFile (t.clipAt (s)))
+                return false;
+        for (const auto& a : t.arrangementClips())
+            if (! ofThisFile (a.clip()))
+                return false;
+    }
+    if (! any)
+        return false;
+    const double bpm = std::round (file.tempo() * 100.0) / 100.0;
+    if (std::abs (bpm - tempo()) < 1.0e-6)
+        return false;
+    setTempo (bpm);
+    return true;
+}
+
 ClipRef ProjectModel::createAudioClip (const TrackRef& track, int scene, int64_t fileId, double lengthBeats, const juce::String& name)
 {
     auto slot = track.slotsNode().getChild (scene);

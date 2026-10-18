@@ -1257,6 +1257,7 @@ inline const juce::String warp = tr ("Warp", "Варп");
 inline const juce::String analysing = tr ("Finding tempo…", "Ищу темп…");
 inline const juce::String undoClipTempo = tr ("Clip Tempo", "Темп клипа");
 inline const juce::String undoWarpMode = tr ("Warp Mode", "Режим варпа");
+inline const juce::String undoTempoFromSound = tr ("Tempo From Sound", "Темп по звуку");
 inline juce::String warpModeName (const juce::String& m)
 {
     if (m == "beats") return "Beats";
@@ -1304,6 +1305,37 @@ inline juce::String rateWarning (double rate)
            + " kHz: resampled during playback";
 }
 inline const juce::String dropNewTracks = tr ("New audio tracks", "Новые аудиодорожки");
+// Warp markers and the decision strip (07-warp.md)
+inline const juce::String undoWarpMarker = tr ("Move Warp Marker", "Сдвиг варп-маркера");
+inline const juce::String undoAddWarpMarker = tr ("Add Warp Marker", "Новый варп-маркер");
+inline const juce::String undoRemoveWarpMarker = tr ("Delete Warp Marker", "Удаление варп-маркера");
+inline const juce::String clearWarpMarkers = tr ("Clear Warp Markers", "Убрать варп-маркеры");
+inline const juce::String barOneHere = tr ("Bar 1 Here", "Такт 1 здесь");
+inline const juce::String tempoFromHere = tr ("Tempo From Here…", "Темп отсюда…");
+inline const juce::String tempoFromHereTitle = tr ("Tempo of this section, up to the next marker (BPM)", "Темп участка до следующего маркера (BPM)");
+inline const juce::String quantizeMarkers = tr ("Quantize Markers to Grid", "Квантовать маркеры по сетке");
+inline const juce::String markersAtOnsets = tr ("Add Markers at Onsets", "Маркеры на всех транзиентах");
+inline const juce::String deleteMarker = tr ("Delete Marker", "Удалить маркер");
+inline const juce::String matchProject = tr ("Project Follows Clip", "Проект под клип");
+inline const juce::String undoMatchProject = tr ("Match Project Tempo", "Темп проекта по клипу");
+inline const juce::String sliceAtOnsets = tr ("Slice at Onsets", "Нарезать по транзиентам");
+inline const juce::String sliceOnGrid = tr ("Slice on Grid", "Нарезать по сетке");
+inline const juce::String undoSlice = tr ("Slice Clip", "Нарезка клипа");
+inline const juce::String ok = tr ("OK", "OK");
+inline const juce::String cancel = tr ("Cancel", "Отмена");
+inline const juce::String click = tr ("Click", "Щелчок");
+inline const juce::String decay = tr ("Decay (Beats)", "Затухание (Beats)");
+inline const juce::String undoDecay = tr ("Beats Decay", "Затухание Beats");
+inline const juce::String warpOff = tr ("Warp is off: the audio plays at its own speed.", "Варп выключен: звук играет со своей скоростью.");
+inline const juce::String stripHint = tr ("Drag any beat to move it · double-click pins a marker · right-click for more",
+                                          "Тяните любую долю · двойной щелчок ставит маркер · правый щелчок: ещё");
+inline juce::String tempoFound (double bpm, double confidence)
+{
+    const int percent = juce::roundToInt (juce::jlimit (0.0, 1.0, confidence) * 100.0);
+    if (isRussian())
+        return juce::String (bpm, 2).replace (".", ",") + utf8 (" BPM · уверенность ") + juce::String (percent) + utf8 (" %");
+    return juce::String (bpm, 2) + " BPM · confidence " + juce::String (percent) + "%";
+}
 } // namespace audioUi
 
 namespace help
@@ -1316,6 +1348,10 @@ inline const juce::String audioReverse = make (tr ("Reverse", "Обратное 
 inline const juce::String audioLoop = make (tr ("Loop", "Петля"), tr ("Repeats the part of the clip from the loop start to the end while the clip plays.", "Повторять часть клипа от начала петли до конца, пока клип звучит."));
 inline const juce::String audioFadeIn = make (tr ("Fade in", "Фейд-ин"), tr ("Volume rise at the start of the clip on the timeline, in beats. A short fade at the edges is always added.", "Нарастание громкости в начале клипа на шкале, в долях. Короткий фейд на краях добавляется всегда."));
 inline const juce::String audioFadeOut = make (tr ("Fade out", "Фейд-аут"), tr ("Volume fall at the end of the clip on the timeline, in beats.", "Затухание в конце клипа на шкале, в долях."));
+inline const juce::String audioWarpStrip = make (tr ("Tempo of the sound", "Темп звука"), tr ("What the analysis found and how sure it is. x2 and /2 fix a tempo read at double or half speed; Project Follows Clip sets the project tempo to the clip's.", "Что нашёл анализ и насколько он уверен. x2 и /2 исправляют темп, прочитанный вдвое быстрее или медленнее; «Проект под клип» ставит темп проекта по клипу."));
+inline const juce::String audioClick = make (tr ("Click", "Щелчок"), tr ("The metronome: with warp on, it plays on the beats of the sound, so you hear at once whether the grid is right.", "Метроном: при включённом варпе он щёлкает по долям звука, и сразу слышно, верна ли сетка."));
+inline const juce::String audioDecay = make (tr ("Decay", "Затухание"), tr ("Beats mode: how long a hit played slower keeps sounding before the next one. 100% holds it, 0% leaves a gap.", "Режим Beats: сколько удар, сыгранный медленнее, звучит до следующего. 100 % держит его, 0 % оставляет паузу."));
+inline const juce::String audioWarpLane = make (tr ("Warp markers", "Варп-маркеры"), tr ("Faint marks are the beats of the sound. Drag any of them, or any marker, to move that moment of the audio; Cmd-drag moves the audio under a marker. Double-click pins a marker, Delete removes the selected one.", "Бледные метки: доли самого звука. Тяните любую из них или маркер, чтобы сдвинуть этот момент звука; с Cmd сдвигается звук под маркером. Двойной щелчок ставит маркер, Delete удаляет выбранный."));
 inline const juce::String audioWave = make (tr ("Clip audio", "Звук клипа"), tr ("Drag the start marker and the loop brace. Shift or Alt turn off snap. The wheel or a pinch zooms, Shift + wheel scrolls.", "Тяните маркер старта и скобку петли. Shift или Alt отключают прилипание. Колесо или щипок меняют масштаб, Shift + колесо прокручивает."));
 } // namespace help
 
