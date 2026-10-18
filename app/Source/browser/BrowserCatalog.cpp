@@ -91,8 +91,13 @@ std::vector<Item> Catalog::search (const juce::String& text) const
 
 juce::String factoryPresetFolder (const juce::String& name)
 {
-    for (const char* folder : { "Bass", "Lead", "Pad", "Pluck", "Init" })
-        if (name.containsIgnoreCase (folder))
+    // A word of the name decides the folder; the first match wins.
+    static const std::pair<const char*, const char*> words[] { { "Bass", "Bass" },    { "Lead", "Lead" },       { "Pad", "Pad" },
+                                                               { "Pluck", "Pluck" },  { "Keys", "Keys" },       { "Organ", "Keys" },
+                                                               { "Bell", "Bells" },   { "Music Box", "Bells" }, { "String", "Strings" },
+                                                               { "Brass", "Brass" },  { "Init", "Init" } };
+    for (const auto& [word, folder] : words)
+        if (name.containsIgnoreCase (word))
             return folder;
     return "FX";
 }

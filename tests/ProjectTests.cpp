@@ -601,6 +601,24 @@ void testSession()
     }
     root.deleteRecursively();
 }
+void testOpenFromCommandLine()
+{
+    std::printf ("[test] Opening a project handed over on the command line (Finder, terminal)\n");
+    const auto dir = makeTempFolder ("open cmd");
+    const auto file = dir.getChildFile ("My Song.prisma");
+    file.replaceWithText ("<PROJECT/>");
+    const auto other = dir.getChildFile ("notes.txt");
+    other.replaceWithText ("x");
+    using project::projectFileFromCommandLine;
+    check (projectFileFromCommandLine (file.getFullPathName().quoted()) == file, "a quoted path with spaces");
+    check (projectFileFromCommandLine ("-psn_0_12345 " + file.getFullPathName().quoted()) == file, "system flags are skipped");
+    check (projectFileFromCommandLine ("-NSDocumentRevisionsDebugMode YES " + file.getFullPathName().quoted()) == file, "flag values are not paths");
+    check (projectFileFromCommandLine (dir.getFullPathName().quoted()) == file, "a project folder opens its .prisma");
+    check (projectFileFromCommandLine (other.getFullPathName().quoted()) == juce::File(), "other files are ignored");
+    check (projectFileFromCommandLine ({}) == juce::File(), "nothing on the command line");
+    check (projectFileFromCommandLine (dir.getChildFile ("Gone.prisma").getFullPathName().quoted()) == juce::File(), "a missing file is ignored");
+    dir.deleteRecursively();
+}
 } // namespace
 
 void tests::runProjectTests()
@@ -614,4 +632,5 @@ void tests::runProjectTests()
     testMidiImport();
     testUserLibrary();
     testSession();
+    testOpenFromCommandLine();
 }

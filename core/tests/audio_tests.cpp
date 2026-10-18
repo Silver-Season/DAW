@@ -1,4 +1,5 @@
-// Tests for the sinc interpolator and the audio analysis helpers (loopback latency, phrase detection, peaks).
+// Tests for the sinc interpolator, the audio analysis helpers (loopback latency, phrase detection, peaks) and loudness.
+#include "daw/dsp/Loudness.h"
 #include "daw/dsp/SincInterpolator.h"
 #include "daw/engine/AudioAnalysis.h"
 #include "daw/engine/AudioClip.h"
@@ -338,6 +339,53 @@ int main()
         check (engine::tempoFromFileName ("bass-128-bpm-Am.wav") == 128.0, "-128-bpm");
         check (engine::tempoFromFileName ("kick.wav") == 0.0, "none");
         check (engine::tempoFromFileName ("take2bpm.wav") == 0.0, "not part of a word / out of range");
+    });
+
+    test ("loudness: EBU reference signals, gating, loudness range and true peak (spec 04, test 5)", [] {
+        for (const double rate : { 44100.0, 48000.0, 96000.0 })
+        {
+            // a stereo 1 kHz sine at -23 dBFS reads -23.0 LUFS at any rate
+            const size_t n = (size_t) (20.0 * rate);
+            std::vector<float> s (n);
+            for (size_t i = 0; i < n; ++i)
+                s[i] = dbToLin (-23.0) * (float) std::sin (2.0 * std::numbers::pi * 1000.0 * (double) i / rate);
+            const auto r = dsp::measureLoudness (s.data(), s.data(), n, rate);
+            check (std::abs (r.integratedLufs + 23.0) < 0.1, "sine -23 dBFS at " + std::to_string ((int) rate) + " Hz: " + std::to_string (r.integratedLufs));
+            check (r.rangeLu < 0.5, "a steady sine has no loudness range: " + std::to_string (r.rangeLu));
+        }
+        {
+            // EBU Tech 3341 case 3 in spirit: 10 s at -36, 60 s at -23, 10 s at -36 dBFS: the quiet parts are gated out
+            const double rate = 48000.0;
+            std::vector<float> s ((size_t) (80.0 * rate));
+            for (size_t i = 0; i < s.size(); ++i)
+            {
+                const double t = (double) i / rate;
+                const double db = (t >= 10.0 && t < 70.0) ? -23.0 : -36.0;
+                s[i] = dbToLin (db) * (float) std::sin (2.0 * std::numbers::pi * 1000.0 * t);
+            }
+            const auto r = dsp::measureLoudness (s.data(), s.data(), s.size(), rate);
+            check (std::abs (r.integratedLufs + 23.0) < 0.1, "the relative gate keeps -23: " + std::to_string (r.integratedLufs));
+            // EBU Tech 3342 case 1: 20 s at -20 and 20 s at -30 LUFS give an LRA of 10 LU
+            std::vector<float> t ((size_t) (40.0 * rate));
+            for (size_t i = 0; i < t.size(); ++i)
+            {
+                const double sec = (double) i / rate;
+                t[i] = dbToLin (sec < 20.0 ? -20.0 : -30.0) * (float) std::sin (2.0 * std::numbers::pi * 1000.0 * sec);
+            }
+            const auto lra = dsp::measureLoudness (t.data(), t.data(), t.size(), rate);
+            check (std::abs (lra.rangeLu - 10.0) < 1.0, "LRA of -20 then -30: " + std::to_string (lra.rangeLu));
+        }
+        {
+            // a sine at a quarter of the rate, 45 degrees off: the samples miss the crests by 3 dB
+            std::vector<float> s (48000);
+            for (size_t i = 0; i < s.size(); ++i)
+                s[i] = 0.5f * (float) std::sin (std::numbers::pi / 2.0 * (double) i + std::numbers::pi / 4.0);
+            const double sample = 20.0 * std::log10 (0.5 * std::sqrt (0.5));
+            const double tp = dsp::truePeakDb (s.data(), s.size());
+            check (std::abs (tp - sample - 3.01) < 0.1, "true peak 3 dB over the samples: " + std::to_string (tp - sample));
+        }
+        std::vector<float> silence (48000, 0.0f);
+        check (dsp::measureLoudness (silence.data(), silence.data(), silence.size(), 48000.0).integratedLufs <= -70.0, "silence is -70 LUFS");
     });
 
     std::printf ("\n%d checks, %d failures\n", checks, failures);

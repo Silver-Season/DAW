@@ -480,6 +480,8 @@ std::vector<PlaybackGraph::Track::Lane> AudioEngine::automationOf (const TrackRe
             l.kind = PlaybackGraph::Track::Lane::volume;
         else if (target == automation::panTarget)
             l.kind = PlaybackGraph::Track::Lane::pan;
+        else if (target == automation::tempoTarget && track.isMaster())
+            l.kind = PlaybackGraph::Track::Lane::tempo;
         else if (automation::parseDeviceTarget (target, deviceId, paramIndex))
         {
             l.kind = PlaybackGraph::Track::Lane::parameter;

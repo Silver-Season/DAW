@@ -298,6 +298,129 @@ const std::vector<Preset>& factoryPresets()
               setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.5f);
               setMod (p, 1, ModSource::ModWheel, ModDest::OscAPos, 0.5f);
           }) },
+
+        // Added after the first seven; programs are stored by index, so new presets only ever go at the end.
+
+        { "Electric Keys", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.0f, 0, 0, 0, 0.85f, 0, 1, 0, 0, 0, 0, 0 };          // sine body
+              p.osc[1] = { 1, 0, 0.2f, 2, 0, 3, 0.22f, 0, 1, 0, 0, 0, 0, 0 };          // bright tine two octaves up
+              p.filterType = 0;
+              p.cutoff = 2200;
+              p.keyTrack = 0.5f;
+              p.filterEnvAmount = 0.3f;
+              p.env[0] = { 0.002f, 2.2f, 0.2f, 0.45f };
+              p.env[1] = { 0.001f, 0.35f, 0.0f, 0.3f };
+              p.lfo[0] = { 0, 4.8f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.25f);
+              setMod (p, 1, ModSource::Velocity, ModDest::OscBLevel, 0.3f);
+              setMod (p, 2, ModSource::Lfo1, ModDest::Pan, 0.25f);                     // gentle stereo tremolo
+              p.velocitySens = 0.85f;
+              p.masterGain = -8;
+          }) },
+
+        { "Drawbar Organ", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.0f, 0, 0, 0, 0.7f, 0, 1, 0, 0, 0, 0, 0 };
+              p.osc[1] = { 1, 0, 0.0f, 1, 7, 0, 0.45f, 0, 1, 0, 0, 0, 0, 0 };          // the fifth above the octave
+              p.subOn = 1;
+              p.subLevel = 0.5f;
+              p.filterOn = 0;
+              p.env[0] = { 0.004f, 0.1f, 1.0f, 0.06f };
+              p.lfo[0] = { 0, 6.2f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPitch, 0.004f);              // a little vibrato
+              setMod (p, 1, ModSource::Lfo1, ModDest::Pan, 0.35f);                     // rotating speaker, roughly
+              setMod (p, 2, ModSource::ModWheel, ModDest::Lfo1Rate, -0.4f);
+              p.velocitySens = 0.0f;
+              p.masterGain = -13;
+          }) },
+
+        { "Glass Bell", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.0f, 0, 0, 0, 0.75f, 0, 1, 0, 0, 0, 0, 0 };
+              p.osc[1] = { 1, 0, 0.0f, 1, 11, 38, 0.45f, 0, 2, 6, 0.6f, 0.5f, 0, 0 }; // inharmonic partial: the bell
+              p.filterType = 0;
+              p.cutoff = 9000;
+              p.env[0] = { 0.001f, 3.0f, 0.0f, 3.0f };
+              p.env[2] = { 0.001f, 0.8f, 0.0f, 0.8f };
+              setMod (p, 0, ModSource::Env3, ModDest::OscBLevel, 0.4f);                // bright strike that fades first
+              setMod (p, 1, ModSource::Velocity, ModDest::OscBLevel, 0.2f);
+              p.masterGain = -11;
+          }) },
+
+        { "Music Box", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.25f, 1, 0, 0, 0.7f, 0, 1, 0, 0, 0, 0, 0 };
+              p.osc[1] = { 1, 0, 0.0f, 3, 0, 0, 0.25f, 0, 1, 0, 0, 0, 0, 0 };
+              p.filterType = 0;
+              p.cutoff = 7000;
+              p.env[0] = { 0.001f, 1.2f, 0.0f, 1.2f };
+              p.masterGain = -5;
+          }) },
+
+        { "String Ensemble", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.66f, 0, 0, 0, 0.7f, 0, 7, 16, 1.0f, 0.8f, 0, 1 };
+              p.osc[1] = { 1, 0, 0.66f, 1, 0, 0, 0.3f, 0, 5, 12, 1.0f, 0.8f, 0, 1 };
+              p.filterType = 1;
+              p.cutoff = 2600;
+              p.resonance = 0.05f;
+              p.keyTrack = 0.3f;
+              p.env[0] = { 0.35f, 1.0f, 0.9f, 1.1f };
+              p.lfo[0] = { 1, 5.2f, 0, 4, 0 };
+              p.lfo[1] = { 0, 0.2f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPitch, 0.003f);
+              setMod (p, 1, ModSource::Lfo2, ModDest::FilterCutoff, 0.05f);
+              setMod (p, 2, ModSource::ModWheel, ModDest::FilterCutoff, 0.3f);
+              setMod (p, 3, ModSource::Velocity, ModDest::FilterCutoff, 0.1f);
+              p.masterGain = -9;
+          }) },
+
+        { "Brass Section", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.66f, 0, 0, 0, 0.8f, 0, 3, 10, 0.7f, 0.7f, 0, 1 };
+              p.osc[1] = { 1, 0, 0.66f, 0, 0, 7, 0.55f, 0, 2, 8, 0.6f, 0.7f, 0, 1 };
+              p.filterType = 1;
+              p.cutoff = 700;
+              p.resonance = 0.12f;
+              p.keyTrack = 0.4f;
+              p.filterEnvAmount = 0.45f;
+              p.env[0] = { 0.03f, 0.3f, 0.85f, 0.25f };
+              p.env[1] = { 0.06f, 0.4f, 0.45f, 0.3f };                               // the swell of the attack
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.25f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::FilterCutoff, 0.3f);
+              p.velocitySens = 0.8f;
+              p.masterGain = -8;
+          }) },
+
+        { "Sub Bass", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.1f, -1, 0, 0, 0.9f, 0, 1, 0, 0, 0, 0, 0 };
+              p.filterType = 1;
+              p.cutoff = 500;
+              p.env[0] = { 0.003f, 0.3f, 1.0f, 0.1f };
+              p.mono = 1;
+              p.glide = 0.02f;
+          }) },
+
+        { "Noise Riser", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 4, 0.0f, 0, 0, 0, 0.35f, 0, 5, 30, 1.0f, 0.6f, 0, 1 };
+              p.noiseLevel = 0.6f;
+              p.filterType = 4;                                                       // band pass sweeping up
+              p.cutoff = 150;
+              p.resonance = 0.45f;
+              p.filterEnvAmount = 1.0f;
+              p.env[0] = { 4.0f, 1.0f, 1.0f, 1.5f };
+              p.env[1] = { 8.0f, 0.1f, 1.0f, 1.5f };
+              p.env[2] = { 8.0f, 0.1f, 1.0f, 1.5f };
+              setMod (p, 0, ModSource::Env3, ModDest::OscAPos, 1.0f);
+              setMod (p, 1, ModSource::Env3, ModDest::OscAPitch, 0.5f);               // rises an octave over 8 s
+              p.masterGain = -10;
+          }) },
+
+        { "Laser Zap", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 0, 0.66f, 2, 0, 0, 0.8f, 0, 1, 0, 0, 0, 0, 0 };
+              p.filterType = 0;
+              p.cutoff = 8000;
+              p.resonance = 0.3f;
+              p.env[0] = { 0.001f, 0.35f, 0.0f, 0.2f };
+              p.env[1] = { 0.001f, 0.25f, 0.0f, 0.2f };
+              setMod (p, 0, ModSource::Env2, ModDest::OscAPitch, 1.0f);              // falls two octaves fast
+              p.masterGain = -4;
+          }) },
     };
     return presets;
 }

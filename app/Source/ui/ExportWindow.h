@@ -7,8 +7,9 @@
 
 namespace ui
 {
-// "Export…" (Cmd+Shift+R, docs/spec/04-export.md, task 4.2 in part): what range, which format and bit depth, peak
-// normalisation, the tail; then a progress bar and the result (length, peak, "Show in Finder").
+// "Export…" (Cmd+Shift+R, docs/spec/04-export.md, tasks 4.2–4.5): master, stems or both; range; WAV, AIFF, FLAC or MP3;
+// bit depth or MP3 quality; peak or loudness (LUFS) normalisation; the tail. Then a progress bar and the result
+// (length, peak, loudness, true peak, the stems, "Show in Finder").
 class ExportWindow final : public juce::DocumentWindow
 {
 public:

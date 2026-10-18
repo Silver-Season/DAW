@@ -2,6 +2,7 @@ juce_add_gui_app(DAW
     PRODUCT_NAME "DAW"
     COMPANY_NAME "DAW Project"
     BUNDLE_ID "com.dawproject.daw"
+    DOCUMENT_EXTENSIONS prisma
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "DAW needs audio input access to record.")
 
@@ -38,6 +39,7 @@ target_compile_definitions(DAW PRIVATE
 target_link_libraries(DAW
     PRIVATE
         daw_core
+        mp3lame
         DawResources
         juce::juce_audio_utils
         juce::juce_audio_processors

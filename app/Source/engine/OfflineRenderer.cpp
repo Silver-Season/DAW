@@ -1,6 +1,11 @@
 #include "OfflineRenderer.h"
 
 #include "AudioEngine.h"
+#include "Mp3Writer.h"
+
+#include "daw/dsp/Loudness.h"
+
+#include <random>
 
 namespace
 {
@@ -34,7 +39,21 @@ public:
 private:
     double sampleRate;
 };
+
+juce::String safeFileName (const juce::String& name)
+{
+    auto s = juce::File::createLegalFileName (name.trim());
+    return s.isEmpty() ? juce::String ("Track") : s;
+}
 } // namespace
+
+// A stem while the song renders: its track and the float file its blocks go to.
+struct OfflineRenderer::Stem
+{
+    int64_t trackId = -1;
+    juce::File temp, target;
+    std::unique_ptr<juce::AudioFormatWriter> writer;
+};
 
 OfflineRenderer::OfflineRenderer (Settings& s, const ProjectModel& source, AudioEngine& live, const Options& o)
     : juce::Thread ("Export"), settings (s), options (o)
@@ -94,10 +113,56 @@ OfflineRenderer::Result OfflineRenderer::renderNow()
     engine->audioDeviceAboutToStart (&device);
     engine->getAudioPool().waitForLoads();
     engine->rebuildGraph(); // with every file loaded, warped clips get their stretched copies (rendered here, see WarpService)
-    for (int i = 0; i < model->numTracks(); ++i)
-        for (const auto& d : model->trackAt (i).devices())
+    const auto nonRealtime = [this] (const juce::ValueTree& devicesNode) {
+        for (const auto& d : DeviceRef::childrenOf (devicesNode))
             if (auto* p = engine->findProcessor (d.id()))
                 p->setNonRealtime (true);
+    };
+    for (int i = 0; i < model->numTracks(); ++i)
+        nonRealtime (model->trackAt (i).devicesNode());
+    nonRealtime (model->masterDevicesNode());
+
+    // Stems: a float file per track, written block by block (a whole song per track would not fit in memory).
+    std::vector<Stem> stems;
+    if (options.stems)
+    {
+        engine->setStemCapture (true);
+        juce::WavAudioFormat wav;
+        int number = 0;
+        for (const auto& track : model->tracks())
+        {
+            ++number;
+            if (track.mute() && ! options.stemsIncludeMuted)
+                continue;
+            Stem stem;
+            stem.trackId = track.id();
+            stem.target = options.stemsFolder.getChildFile (juce::String (number).paddedLeft ('0', 2) + " " + safeFileName (track.name()) + "."
+                                                            + (options.format == "aiff" ? "aif" : options.format));
+            stem.temp = stem.target.getSiblingFile (stem.target.getFileNameWithoutExtension() + ".render.part");
+            options.stemsFolder.createDirectory();
+            stem.temp.deleteFile();
+            if (auto out = stem.temp.createOutputStream())
+                if (auto* w = wav.createWriterFor (out.get(), sampleRate, 2, 32, {}, 0))
+                {
+                    out.release();
+                    stem.writer.reset (w);
+                }
+            if (stem.writer == nullptr)
+            {
+                r.error = "cannot write " + stem.temp.getFullPathName();
+                engine->audioDeviceStopped();
+                return r;
+            }
+            stems.push_back (std::move (stem));
+        }
+    }
+    const auto dropStemTemps = [&stems] {
+        for (auto& stem : stems)
+        {
+            stem.writer.reset();
+            stem.temp.deleteFile();
+        }
+    };
 
     const double tempo = juce::jmax (1.0, model->tempo());
     const double lengthBeats = juce::jmax (0.0, options.endBeat - options.startBeat);
@@ -119,8 +184,11 @@ OfflineRenderer::Result OfflineRenderer::renderNow()
             break;
         out.copyFrom (0, (int) written, block, 0, 0, n);
         out.copyFrom (1, (int) written, block, 1, 0, n);
+        for (auto& stem : stems)
+            if (auto* rt = engine->findRuntime (stem.trackId))
+                stem.writer->writeFromAudioSampleBuffer (rt->stemBuffer, 0, n);
         written += n;
-        progress = juce::jlimit (0.0, 1.0, (double) written / (double) juce::jmax<int64_t> (1, songSamples));
+        progress = juce::jlimit (0.0, stems.empty() ? 1.0 : 0.8, (double) written / (double) juce::jmax<int64_t> (1, songSamples) * (stems.empty() ? 1.0 : 0.8));
         if (written < songSamples)
             continue;
         if (! options.tail)
@@ -136,8 +204,12 @@ OfflineRenderer::Result OfflineRenderer::renderNow()
     }
     engine->stop();
     engine->audioDeviceStopped();
+    engine->setStemCapture (false);
+    for (auto& stem : stems)
+        stem.writer.reset(); // flushes the float file
     if (threadShouldExit())
     {
+        dropStemTemps();
         r.error = "cancelled";
         return r;
     }
@@ -147,19 +219,91 @@ OfflineRenderer::Result OfflineRenderer::renderNow()
     length = juce::jmax<int64_t> (1, juce::jmin (length, written));
     out.setSize (2, (int) length, true);
 
+    // One gain for the master and every stem: from the peak, or from the loudness held under -1 dBTP.
     const float peak = out.getMagnitude (0, (int) length);
     r.sourcePeakDb = juce::Decibels::gainToDecibels (peak, -120.0f);
-    if (options.normalisePeakDb <= 0.0 && peak > 0.0f)
-        out.applyGain (juce::Decibels::decibelsToGain ((float) options.normalisePeakDb) / peak);
+    float gain = 1.0f;
+    if (options.normaliseLufs)
+    {
+        const auto loud = daw::dsp::measureLoudness (out.getReadPointer (0), out.getReadPointer (1), (size_t) length, sampleRate);
+        if (loud.integratedLufs > -70.0)
+        {
+            double gainDb = options.lufsTarget - loud.integratedLufs;
+            if (loud.truePeakDb + gainDb > -1.0)
+            {
+                gainDb = -1.0 - loud.truePeakDb;
+                r.limitedByPeak = true;
+            }
+            gain = (float) juce::Decibels::decibelsToGain (gainDb);
+        }
+    }
+    else if (options.normalisePeakDb <= 0.0 && peak > 0.0f)
+        gain = juce::Decibels::decibelsToGain ((float) options.normalisePeakDb) / peak;
+    if (std::abs (gain - 1.0f) > 1.0e-7f)
+        out.applyGain (gain);
+
+    const auto report = daw::dsp::measureLoudness (out.getReadPointer (0), out.getReadPointer (1), (size_t) length, sampleRate);
+    r.lufs = report.integratedLufs;
+    r.rangeLu = report.rangeLu;
+    r.truePeakDb = report.truePeakDb;
     r.peakDb = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) length), -120.0f);
     r.seconds = (double) length / sampleRate;
-    r.ok = writeFile (out, r);
+
+    r.ok = ! options.stems || options.stemsIncludeMaster ? writeFile (out, options.file, r.error) : true;
+    // The stems: read back, the common gain, the final format, the same length as the master.
+    for (size_t i = 0; i < stems.size() && r.ok; ++i)
+    {
+        auto& stem = stems[i];
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::AudioFormatReader> reader (wav.createReaderFor (stem.temp.createInputStream().release(), true));
+        juce::AudioBuffer<float> audio (2, (int) length);
+        audio.clear();
+        if (reader != nullptr)
+            reader->read (&audio, 0, (int) juce::jmin<juce::int64> (length, reader->lengthInSamples), 0, true, true);
+        reader.reset();
+        audio.applyGain (gain);
+        r.ok = writeFile (audio, stem.target, r.error);
+        if (r.ok)
+            r.stemFiles.add (stem.target.getFullPathName());
+        progress = 0.8 + 0.2 * (double) (i + 1) / (double) stems.size();
+    }
+    dropStemTemps();
     progress = 1.0;
     return r;
 }
 
-bool OfflineRenderer::writeFile (const juce::AudioBuffer<float>& audio, Result& r) const
+bool OfflineRenderer::writeFile (const juce::AudioBuffer<float>& source, const juce::File& file, juce::String& error) const
 {
+    file.getParentDirectory().createDirectory();
+    const auto temp = file.getSiblingFile (file.getFileName() + ".part");
+    temp.deleteFile();
+
+    if (options.format == "mp3")
+    {
+        Mp3Writer::Settings s;
+        s.kbps = options.mp3Kbps;
+        s.vbrQuality = options.mp3Vbr;
+        s.title = model->name().isNotEmpty() ? model->name() : file.getFileNameWithoutExtension();
+        s.artist = model->author();
+        s.tempo = model->tempo();
+        Mp3Writer mp3;
+        bool ok = mp3.open (temp, sampleRate, s, error);
+        for (int at = 0; ok && at < source.getNumSamples(); at += kBlock)
+        {
+            const int n = juce::jmin (kBlock, source.getNumSamples() - at);
+            ok = mp3.write (source.getReadPointer (0, at), source.getReadPointer (1, at), n);
+        }
+        ok = mp3.close() && ok;
+        if (! ok || ! temp.moveFileTo (file))
+        {
+            if (error.isEmpty())
+                error = "cannot write " + file.getFullPathName();
+            temp.deleteFile();
+            return false;
+        }
+        return true;
+    }
+
     std::unique_ptr<juce::AudioFormat> format;
     if (options.format == "aiff")
         format = std::make_unique<juce::AiffAudioFormat>();
@@ -171,28 +315,43 @@ bool OfflineRenderer::writeFile (const juce::AudioBuffer<float>& audio, Result& 
     if (options.format == "flac" && bits > 24)
         bits = 24;
 
-    options.file.getParentDirectory().createDirectory();
-    const auto temp = options.file.getSiblingFile (options.file.getFileName() + ".part");
-    temp.deleteFile();
+    // 16 bits: TPDF dither of one step, the same noise on every export (fixed seed).
+    const juce::AudioBuffer<float>* audio = &source;
+    juce::AudioBuffer<float> dithered;
+    if (bits == 16)
+    {
+        dithered.makeCopyOf (source);
+        std::mt19937 rng (16);
+        std::uniform_real_distribution<float> uniform (-0.5f, 0.5f);
+        const float lsb = 1.0f / 32768.0f;
+        for (int c = 0; c < dithered.getNumChannels(); ++c)
+        {
+            auto* d = dithered.getWritePointer (c);
+            for (int i = 0; i < dithered.getNumSamples(); ++i)
+                d[i] += (uniform (rng) + uniform (rng)) * lsb;
+        }
+        audio = &dithered;
+    }
+
     std::unique_ptr<juce::OutputStream> stream (temp.createOutputStream().release());
     if (stream == nullptr)
     {
-        r.error = "cannot write " + temp.getFullPathName();
+        error = "cannot write " + temp.getFullPathName();
         return false;
     }
     std::unique_ptr<juce::AudioFormatWriter> writer (format->createWriterFor (stream.get(), sampleRate, 2, bits, {}, 0));
     if (writer == nullptr)
     {
-        r.error = "format";
+        error = "format";
         temp.deleteFile();
         return false;
     }
     stream.release();
-    const bool ok = writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+    const bool ok = writer->writeFromAudioSampleBuffer (*audio, 0, audio->getNumSamples());
     writer.reset();
-    if (! ok || ! temp.moveFileTo (options.file))
+    if (! ok || ! temp.moveFileTo (file))
     {
-        r.error = "cannot write " + options.file.getFullPathName();
+        error = "cannot write " + file.getFullPathName();
         temp.deleteFile();
         return false;
     }

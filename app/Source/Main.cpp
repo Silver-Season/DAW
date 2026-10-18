@@ -3,6 +3,7 @@
 #include "engine/AudioEngine.h"
 #include "engine/NullAudioDriver.h"
 #include "library/UserLibrary.h"
+#include "project/ProjectFile.h"
 #include "ui/ThemeLookAndFeel.h"
 
 class DawApplication final : public juce::JUCEApplication
@@ -12,7 +13,7 @@ public:
     const juce::String getApplicationVersion() override { return "0.1.0"; }
     bool moreThanOneInstanceAllowed() override { return false; }
 
-    void initialise (const juce::String&) override
+    void initialise (const juce::String& commandLine) override
     {
         settings = std::make_unique<Settings>();
 
@@ -35,7 +36,14 @@ public:
         if (nullAudio)
             nullDriver = std::make_unique<NullAudioDriver> (*engine); // no sound card: tick the engine from a timer thread
         mainWindow = std::make_unique<MainWindow> (*engine, *model, *settings);
-        mainWindow->startup();
+        mainWindow->startup (project::projectFileFromCommandLine (commandLine));
+    }
+
+    // A second launch with a file, or a .prisma opened in Finder while the app runs (macOS hands documents over this way).
+    void anotherInstanceStarted (const juce::String& commandLine) override
+    {
+        if (mainWindow != nullptr)
+            mainWindow->openFromSystem (project::projectFileFromCommandLine (commandLine));
     }
 
     void shutdown() override
@@ -89,7 +97,8 @@ private:
             if (isActiveWindow() && content != nullptr && ! content->hasKeyboardFocus (true))
                 content->grabKeyboardFocus();
         }
-        void startup() { content->startup(); }
+        void startup (const juce::File& file) { content->startup (file); }
+        void openFromSystem (const juce::File& file) { content->openFromSystem (file); }
         void requestQuit (std::function<void()> quitNow) { content->requestQuit (std::move (quitNow)); }
 
     private:

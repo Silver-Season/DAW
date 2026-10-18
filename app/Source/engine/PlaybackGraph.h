@@ -46,6 +46,7 @@ struct TrackRuntime
         inputBuffer.setSize (2, maxBlock, false, true, false);
         returnBus.setSize (2, maxBlock, false, true, false);
         keyBuffer.setSize (2, maxBlock, false, true, false);
+        stemBuffer.setSize (2, maxBlock, false, true, false);
     }
 
     const int64_t trackId;
@@ -107,6 +108,7 @@ struct TrackRuntime
     juce::AudioBuffer<float> inputBuffer; // the sound input of this block (audio tracks)
     juce::AudioBuffer<float> returnBus;   // a return track: what the sends gave it in this block
     juce::AudioBuffer<float> keyBuffer;   // the track's sound after its chain, before the fader: the key of a sidechain
+    juce::AudioBuffer<float> stemBuffer;  // with stem capture on (export): what the track gave the master in this block
     float lastSendGain[2] {};
     juce::MidiBuffer midi, fxMidi;
     std::vector<daw::MidiEvent> events;
@@ -163,7 +165,8 @@ struct PlaybackGraph
             {
                 volume,
                 pan,
-                parameter
+                parameter,
+                tempo // the master only: the song tempo (automation::tempoFromNormalised)
             } kind = volume;
             juce::AudioProcessorParameter* param = nullptr;
             std::vector<daw::engine::AutomationPoint> points;

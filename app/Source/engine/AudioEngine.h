@@ -113,6 +113,8 @@ public:
     // Message thread only; the pointers stay valid until the next graph rebuild that drops them.
     juce::AudioProcessor* findProcessor (int64_t deviceId) const;
     TrackRuntime* findRuntime (int64_t trackId) const;
+    // Export of stems: every track also leaves its share of the master in TrackRuntime::stemBuffer. Set while stopped.
+    void setStemCapture (bool on) { stemCapture = on; }
 
     //==========================================================================
     // Graph publication. The timer calls rebuildGraphIfNeeded() and collectGarbage() at 60 Hz; tests call
@@ -134,6 +136,8 @@ public:
     void stop();
     bool isPlaying() const { return playing.load(); }
     double getTempo() const { return tempo.load(); }
+    // The tempo the transport runs at now: the project tempo, or the master's tempo envelope while it plays.
+    double getCurrentTempo() const { return currentTempo.load (std::memory_order_relaxed); }
     // The monotonic clock of Session View: 0 at every start of the transport, never jumps (negative while a count-in
     // plays, -4 .. 0 for one bar of 4/4). Clip launches, clip progress and session recording are measured on it.
     double getPositionBeats() const { return positionBeats.load(); }
@@ -439,6 +443,7 @@ private:
     Metronome metronome; // audio thread
 
     std::atomic<bool> playing { false }, stopRequested { false };
+    std::atomic<double> currentTempo { 120.0 };
     std::atomic<double> tempo { 120.0 }, positionBeats { 0.0 }, songPositionBeats { 0.0 }, quantise { 4.0 };
     // The arrangement properties of the model, copied by applyProjectProperties
     std::atomic<double> arrLoopStart { 0.0 }, arrLoopEnd { 16.0 }, arrPlayStart { 0.0 };
@@ -458,6 +463,7 @@ private:
     bool continueSong = false; // audio thread: the next start of the transport continues where the song stopped
     std::atomic<float> masterGain { 1.0f };
     float lastMasterGainL = 1.0f, lastMasterGainR = 1.0f; // audio thread: the master gain at the end of the last block
+    bool stemCapture = false; // set before an offline render starts: every track also writes its share into stemBuffer
     std::atomic<float> tuneA4 { 440.0f }; // project tuning, given to every Prisma
     std::atomic<int64_t> selectedTrackId { -1 };
     std::atomic<uint32_t> hardwareMidiCount { 0 };

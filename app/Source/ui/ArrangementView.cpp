@@ -723,6 +723,8 @@ juce::String ArrangementView::automationTargetName (const TrackRef& track, const
         return Strings::arrangement::autoVolume;
     if (target == automation::panTarget)
         return Strings::arrangement::autoPan;
+    if (target == automation::tempoTarget)
+        return Strings::arrangement::autoTempo;
     int64_t deviceId = -1;
     int index = -1;
     if (automation::parseDeviceTarget (target, deviceId, index))
@@ -742,6 +744,8 @@ float ArrangementView::automationCurrentValue (const TrackRef& track, const juce
         return automation::normalisedVolume (track.volumeDb());
     if (target == automation::panTarget)
         return juce::jlimit (0.0f, 1.0f, (track.pan() + 1.0f) * 0.5f);
+    if (target == automation::tempoTarget)
+        return automation::normalisedTempo (model.tempo());
     if (auto* p = automationParameter (target))
         return p->getValue();
     return 0.5f;
@@ -756,6 +760,8 @@ juce::String ArrangementView::automationValueText (const TrackRef&, const juce::
         const int p = juce::roundToInt ((normalised * 2.0f - 1.0f) * 50.0f);
         return p == 0 ? juce::String ("C") : juce::String (std::abs (p)) + (p < 0 ? "L" : "R");
     }
+    if (target == automation::tempoTarget)
+        return juce::String (automation::tempoFromNormalised (normalised), 1) + " BPM";
     if (auto* p = automationParameter (target))
         return p->getText (normalised, 24);
     return juce::String (normalised, 2);
@@ -782,6 +788,8 @@ juce::PopupMenu ArrangementView::automationMenu (int64_t trackId)
         });
         into.addItem (it);
     };
+    if (track.isMaster())
+        item (menu, Strings::arrangement::autoTempo, automation::tempoTarget);
     item (menu, Strings::arrangement::autoVolume, automation::volumeTarget);
     item (menu, Strings::arrangement::autoPan, automation::panTarget);
     menu.addSeparator();

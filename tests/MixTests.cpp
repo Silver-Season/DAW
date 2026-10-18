@@ -6,6 +6,9 @@
 #include "../app/Source/library/UserLibrary.h"
 #include "../app/Source/model/Automation.h"
 #include "../app/Source/engine/DrumKitProcessor.h"
+#include "../app/Source/engine/OfflineRenderer.h"
+#include "../app/Source/model/ArrangementEdit.h"
+#include "daw/dsp/Loudness.h"
 #include "daw/drums/DrumSynth.h"
 #include "daw/synth/PrismaParams.h"
 #include <cmath>
@@ -201,6 +204,192 @@ void testMasterAutomation()
     rig.f.engine.stop();
     rig.blocks (2);
 }
+
+void testTempoEnvelope()
+{
+    std::printf ("[mix] the tempo envelope of the master drives the song clock: steps and ramps land where the integral says\n");
+    MixRig rig;
+    auto& model = rig.f.model;
+    model.setTempo (120.0);
+    auto lane = automation::getOrAddLane (model, model.masterTrack(), automation::tempoTarget);
+    check (std::abs (automation::tempoFromNormalised (automation::normalisedTempo (97.5)) - 97.5) < 1.0e-3, "BPM survives the 0..1 mapping");
+    // 120 BPM up to beat 8, then a step to 60.
+    automation::addPoint (model, lane, { 0.0, automation::normalisedTempo (120.0), 0.0f });
+    automation::addPoint (model, lane, { 8.0, automation::normalisedTempo (120.0), 0.0f });
+    automation::addPoint (model, lane, { 8.0, automation::normalisedTempo (60.0), 0.0f });
+    rig.f.engine.rebuildGraphIfNeeded();
+    rig.f.engine.play();
+    const auto runSeconds = [&] (double seconds) { rig.blocks ((int) std::lround (seconds * kRate / kBlock)); };
+    runSeconds (2.0);
+    check (std::abs (rig.f.engine.getSongPositionBeats() - 4.0) < 0.02, "2 s at 120 BPM: beat 4 (" + juce::String (rig.f.engine.getSongPositionBeats(), 3) + ")");
+    check (std::abs (rig.f.engine.getCurrentTempo() - 120.0) < 0.01, "the current tempo is 120");
+    runSeconds (4.0);
+    check (std::abs (rig.f.engine.getSongPositionBeats() - 10.0) < 0.05, "then 2 s more to beat 8 and 2 s at 60 BPM: beat 10 (" + juce::String (rig.f.engine.getSongPositionBeats(), 3) + ")");
+    check (std::abs (rig.f.engine.getCurrentTempo() - 60.0) < 0.01, "the current tempo is 60 after the step");
+    rig.f.engine.stop();
+    rig.blocks (2);
+
+    // A ramp 120 -> 180 over 16 beats takes 60 * ln (180 / 120) / k seconds, k = 60 / 16 BPM per beat.
+    automation::removePointsIn (model, lane, 0.0, 100.0);
+    automation::addPoint (model, lane, { 0.0, automation::normalisedTempo (120.0), 0.0f });
+    automation::addPoint (model, lane, { 16.0, automation::normalisedTempo (180.0), 0.0f });
+    rig.f.engine.rebuildGraphIfNeeded();
+    rig.f.engine.play();
+    const double rampSeconds = 60.0 * std::log (1.5) / (60.0 / 16.0);
+    runSeconds (rampSeconds);
+    check (std::abs (rig.f.engine.getSongPositionBeats() - 16.0) < 0.03, "the ramp reaches beat 16 after " + juce::String (rampSeconds, 3) + " s (" + juce::String (rig.f.engine.getSongPositionBeats(), 3) + ")");
+    check (std::abs (rig.f.engine.getCurrentTempo() - 180.0) < 0.5, "at 180 BPM (" + juce::String (rig.f.engine.getCurrentTempo(), 2) + ")");
+    rig.f.engine.stop();
+    rig.blocks (2);
+
+    // Without the envelope the project tempo is back.
+    automation::removePointsIn (model, lane, 0.0, 100.0);
+    rig.f.engine.rebuildGraphIfNeeded();
+    rig.f.engine.play();
+    rig.blocks (2);
+    check (std::abs (rig.f.engine.getCurrentTempo() - 120.0) < 0.01, "an empty envelope leaves the project tempo");
+    rig.f.engine.stop();
+    rig.blocks (2);
+}
+} // namespace
+
+namespace
+{
+juce::AudioBuffer<float> readFile (const juce::File& file)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+    juce::AudioBuffer<float> b;
+    if (reader == nullptr)
+        return b;
+    b.setSize ((int) reader->numChannels, (int) reader->lengthInSamples);
+    reader->read (&b, 0, (int) reader->lengthInSamples, 0, true, true);
+    return b;
+}
+
+void testExportStemsMp3Lufs()
+{
+    std::printf ("[4.3-4.5] export: stems add up to the master, LUFS normalisation, MP3 decodes back, 16-bit dither\n");
+    Fixture f;
+    FakeDevice dev (512, 48000.0);
+    f.engine.audioDeviceAboutToStart (&dev);
+    f.model.setTempo (120.0);
+    f.model.setName ("Mix Test");
+    auto a = addPrismaTrack (f.model, 0);
+    auto b = addPrismaTrack (f.model, 1);
+    auto muted = addPrismaTrack (f.model, 2);
+    muted.setMute (true, nullptr);
+    b.setPan (-0.5f, nullptr);
+    for (auto* t : { &a, &b, &muted })
+    {
+        auto clip = arrangement::addEmptyClip (f.model, *t, 0.0, 8.0);
+        for (int i = 0; i < 8; ++i)
+            clip.clip().addNote ({ (double) i, 0.9, 48 + 7 * (int) (t == &b) + (i % 4) * 2, 100 }, nullptr);
+    }
+    // a master effect that must not reach the stems
+    auto comp = f.model.addDevice (f.model.masterDevicesNode(), "fx", "Comp");
+    comp.setPluginDesc ("comp", nullptr);
+    comp.setEnabled (false, nullptr); // test 7 compares with the master chain off
+    f.engine.rebuildGraphIfNeeded();
+
+    const auto folder = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("daw-mix-export");
+    folder.deleteRecursively();
+    OfflineRenderer::Options o;
+    o.startBeat = 0.0;
+    o.endBeat = 8.0;
+    o.tail = false;
+    o.format = "wav";
+    o.bitDepth = 32;
+    o.file = folder.getChildFile ("song.wav");
+    o.stems = true;
+    o.stemsFolder = folder.getChildFile ("stems");
+    {
+        OfflineRenderer renderer (f.settings, f.model, f.engine, o);
+        const auto r = renderer.renderNow();
+        check (r.ok && r.stemFiles.size() == 2, "two stems: the muted track is skipped by default (" + juce::String (r.stemFiles.size()) + ") " + r.error);
+        check (o.stemsFolder.getChildFile ("01 " + a.name() + ".wav").existsAsFile() && o.stemsFolder.getChildFile ("02 " + b.name() + ".wav").existsAsFile(),
+               "named by their place and track name");
+        check (o.stemsFolder.findChildFiles (juce::File::findFiles, false, "*.part").isEmpty(), "no unfinished files left");
+        const auto master = readFile (o.file);
+        const auto s1 = readFile (o.stemsFolder.getChildFile ("01 " + a.name() + ".wav"));
+        const auto s2 = readFile (o.stemsFolder.getChildFile ("02 " + b.name() + ".wav"));
+        double worst = 0.0;
+        bool sameLength = master.getNumSamples() == s1.getNumSamples() && master.getNumSamples() == s2.getNumSamples() && master.getNumSamples() > 0;
+        for (int c = 0; sameLength && c < 2; ++c)
+            for (int i = 0; i < master.getNumSamples(); ++i)
+                worst = std::max (worst, (double) std::abs (master.getSample (c, i) - s1.getSample (c, i) - s2.getSample (c, i)));
+        check (sameLength, "every stem is as long as the master");
+        check (worst < 1.0e-6, "test 7: the stems add up to the master (master chain off): " + juce::String (worst));
+        check (s2.getMagnitude (0, 0, s2.getNumSamples()) > s2.getMagnitude (1, 0, s2.getNumSamples()) * 1.2f, "a stem is after its pan");
+    }
+
+    // LUFS: -14 integrated, true peak under -1 dBTP
+    o.stems = false;
+    o.normaliseLufs = true;
+    o.lufsTarget = -14.0;
+    o.file = folder.getChildFile ("loud.wav");
+    {
+        OfflineRenderer renderer (f.settings, f.model, f.engine, o);
+        const auto r = renderer.renderNow();
+        const auto audio = readFile (o.file);
+        const auto m = daw::dsp::measureLoudness (audio.getReadPointer (0), audio.getReadPointer (1), (size_t) audio.getNumSamples(), 48000.0);
+        check (r.ok && (std::abs (m.integratedLufs + 14.0) < 0.2 || (r.limitedByPeak && m.integratedLufs < -14.0)),
+               "test 6: the file measures -14 LUFS (" + juce::String (m.integratedLufs, 2) + ", limited " + juce::String ((int) r.limitedByPeak) + ")");
+        check (m.truePeakDb <= -0.95 && std::abs (r.lufs - m.integratedLufs) < 0.05, "true peak at or under -1 dBTP, and the report says what the file has");
+    }
+
+    // MP3 320: decodes back with the length of the song (the LAME tag drops the encoder delay)
+    o.normaliseLufs = false;
+    o.format = "mp3";
+    o.file = folder.getChildFile ("song.mp3");
+    {
+        OfflineRenderer renderer (f.settings, f.model, f.engine, o);
+        const auto r = renderer.renderNow();
+        check (r.ok && o.file.getSize() > 100000, "an MP3 of 4 s at 320 kbps: " + juce::String (o.file.getSize()) + " bytes " + r.error);
+        juce::MP3AudioFormat mp3;
+        std::unique_ptr<juce::AudioFormatReader> reader (mp3.createReaderFor (o.file.createInputStream().release(), true));
+        check (reader != nullptr && juce::exactlyEqual (reader->sampleRate, 48000.0) && reader->numChannels == 2, "it decodes as 48 kHz stereo");
+        if (reader != nullptr)
+            check (std::abs ((double) reader->lengthInSamples - 4.0 * 48000.0) <= 2.0 * 1152.0 + 576.0,
+                   "test 3: about the length of the song: " + juce::String (reader->lengthInSamples));
+    }
+
+    // 16 bits: silence comes out as dither noise near -96 dBFS (spec test 8)
+    for (auto t : f.model.tracks())
+        t.setMute (true, nullptr);
+    f.engine.rebuildGraphIfNeeded();
+    o.format = "wav";
+    o.bitDepth = 16;
+    o.file = folder.getChildFile ("quiet16.wav");
+    {
+        OfflineRenderer renderer (f.settings, f.model, f.engine, o);
+        renderer.renderNow();
+        const auto audio = readFile (o.file);
+        const float rms = audio.getRMSLevel (0, 0, audio.getNumSamples());
+        const double db = juce::Decibels::gainToDecibels (rms, -200.0f);
+        check (db > -103.0 && db < -92.0, "TPDF dither of silence: " + juce::String (db, 1) + " dBFS RMS");
+    }
+    f.engine.audioDeviceStopped();
+    folder.deleteRecursively();
+}
+void testFactoryPresetLevels()
+{
+    std::printf ("[mix] every factory preset sounds, does not clip and sits near the others\n");
+    const auto& presets = daw::synth::factoryPresets();
+    check (presets.size() >= 16, "keys, bells, strings, brass and effects joined the first seven presets");
+    for (int i = 0; i < (int) presets.size(); ++i)
+    {
+        PrismaProcessor p;
+        p.setCurrentProgram (i);
+        const juce::String name (presets[(size_t) i].name);
+        const bool bass = name.containsIgnoreCase ("bass");
+        const auto l = bass ? renderProc (p, { { 0, 36 }, { 48000, 43 } }, 3.0, 40000) : renderProc (p, { { 0, 60 }, { 0, 64 }, { 0, 67 } }, 6.0, 240000);
+        std::printf ("    %-16s peak %6.1f dBFS, RMS %6.1f dB\n", name.toRawUTF8(), l.peak, l.rms);
+        check (l.peak < -0.5, name + " does not clip (" + juce::String (l.peak, 1) + " dBFS)");
+        check (l.peak > -24.0 && l.rms > -50.0, name + " is not too quiet");
+    }
+}
 } // namespace
 
 namespace tests
@@ -208,8 +397,11 @@ namespace tests
 void runMixTests()
 {
     testDrumLevels();
+    testFactoryPresetLevels();
     testMasterAsTrack();
     testMasterEffectDrop();
     testMasterAutomation();
+    testTempoEnvelope();
+    testExportStemsMp3Lufs();
 }
 } // namespace tests

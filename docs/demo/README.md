@@ -3,7 +3,7 @@
 An electronic arrangement of Edvard Grieg's "In the Hall of the Mountain King" (Peer Gynt, 1875, public domain), made as an end-to-end check of the app: one whole track built only with what the DAW has, then exported.
 
 - Project: [Mountain King.prisma](Mountain%20King.prisma) (open it with File → Open).
-- Listen: [media/demo-mountain-king.mp3](../../media/demo-mountain-king.mp3) (the export is a 24-bit WAV; the MP3 is a preview made outside the app, which has no MP3 export yet).
+- Listen: [media/demo-mountain-king.mp3](../../media/demo-mountain-king.mp3) (the export is a 24-bit WAV; this MP3 preview was made before the app could export MP3).
 - Rebuild it: `daw_demo_song <folder> [--stems]` (built with the tools, source in [tools/demo_song/MountainKing.cpp](../../tools/demo_song/MountainKing.cpp)). It builds the project through the same model calls the UI makes, saves it, loads it back and renders it with `OfflineRenderer`, the engine of File → Export. `--stems` also renders every track soloed.
 
 ![The song in the Arrangement](../../media/demo-mountain-king.png)
@@ -38,5 +38,7 @@ Things that were missing or awkward while making the track (none of them stopped
 7. **No stem export.** Checking the balance meant rendering each track soloed (the `--stems` switch of the tool).
 8. **No way to open a project from outside the app**: no command-line argument, no `.prisma` document type for the Finder; only File → Open.
 9. **Return tracks have clip slots** in the Session View, though they can never hold clips.
+
+All nine were fixed afterwards: the master is a track in the detail panel and in automation mode (1, 6), the master has a Tempo envelope (2), drum kits came down 10 dB (3), nine more presets (4), automation opens the drawn envelope (5), File → Export writes stems, MP3 and loudness-normalised files (7), `.prisma` files open from the Finder and the command line (8), return tracks have no slots (9). Time signature changes are still to come.
 
 What worked without trouble: building scenes in the Session View and laying them on the Arrangement with markers, Prisma presets with knobs turned, both drum kits, sidechain from another track, sends to two returns, device-parameter and volume automation with curves, the saved project reopening in the app as it was, and the export (no NaN, the theme comes out on the right notes when checked by pitch detection).

@@ -1047,10 +1047,34 @@ void MainComponent::doOpen (const juce::File& file)
     }
 }
 
-void MainComponent::startup()
+void MainComponent::openFromSystem (const juce::File& file)
 {
+    if (! file.existsAsFile())
+        return;
+    if (! started)
+    {
+        pendingOpen = file;
+        return;
+    }
+    if (doc.hasFile() && doc.mainFile() == file)
+        return; // already open
+    confirmDiscard ([this, file] { doOpen (file); });
+}
+
+void MainComponent::startup (const juce::File& fileToOpen)
+{
+    started = true;
+    if (fileToOpen.existsAsFile())
+        pendingOpen = fileToOpen;
     const auto check = project::RecoveryCheck::check (project::ProjectSession::lockFileFor (settings));
     auto openFresh = [this] {
+        if (const auto file = std::exchange (pendingOpen, juce::File()); file.existsAsFile())
+        {
+            settings.setFirstRunDone();
+            doOpen (file);
+            if (doc.hasFile())
+                return;
+        }
         if (! settings.firstRunDone())
         {
             // The first launch shows the demo project once.

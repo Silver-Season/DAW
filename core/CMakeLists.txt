@@ -18,6 +18,7 @@ add_library(daw_core STATIC
     src/Onsets.cpp
     src/WarpMap.cpp
     src/BeatsStretch.cpp
+    src/Loudness.cpp
     src/gen/Patterns.cpp
     src/gen/Patches.cpp
     src/drums/DrumKit.cpp

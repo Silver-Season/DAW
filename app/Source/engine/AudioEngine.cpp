@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "../model/Automation.h"
 
 #include "../Strings.h"
 
@@ -18,7 +19,7 @@ public:
     {
         PositionInfo info;
         const double beats = engine.songPositionBeats.load();
-        const double bpm = engine.tempo.load();
+        const double bpm = engine.currentTempo.load (std::memory_order_relaxed);
         info.setBpm (bpm);
         info.setTimeSignature (juce::AudioPlayHead::TimeSignature { engine.sigNum.load(), engine.sigDen.load() });
         info.setPpqPosition (beats);
@@ -1235,6 +1236,11 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
                                bool killNotes, bool anySolo, bool anyArmed)
 {
     auto& rt = *t.runtime;
+    if (stemCapture)
+    {
+        rt.stemBuffer.clear (0, 0, numSamples);
+        rt.stemBuffer.clear (1, 0, numSamples);
+    }
 
     rt.events.clear();
     const int slotBefore = rt.player.playingSlot();
@@ -1410,6 +1416,7 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
                     break;
                 }
                 case PlaybackGraph::Track::Lane::pan: autoPan = v * 2.0f - 1.0f; break;
+                case PlaybackGraph::Track::Lane::tempo: break;
                 case PlaybackGraph::Track::Lane::parameter:
                     if (std::abs (lane.param->getValue() - v) > 1.0e-5f)
                         lane.param->setValue (v);
@@ -1471,6 +1478,11 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
             }
     master.addFromWithRamp (0, 0, srcL, numSamples, rt.lastGainL, gainL);
     master.addFromWithRamp (1, 0, srcR, numSamples, rt.lastGainR, gainR);
+    if (stemCapture)
+    {
+        rt.stemBuffer.copyFromWithRamp (0, 0, srcL, numSamples, rt.lastGainL, gainL);
+        rt.stemBuffer.copyFromWithRamp (1, 0, srcR, numSamples, rt.lastGainR, gainR);
+    }
     rt.lastGainL = gainL;
     rt.lastGainR = gainR;
 
@@ -1560,13 +1572,27 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
         (e.source == MidiInputQueue::keyboard ? keyboardMidi : hardwareMidi).addEvent (e.bytes, e.size, offset);
     }
 
-    if (! juce::exactlyEqual (transport.getTempo(), tempo.load()))
-        transport.setTempo (tempo.load());
     if (playing.load() && ! transport.isPlaying())
     {
         transport.play (continueSong);
         continueSong = false;
     }
+    // The tempo of this block: the project's, or the master's tempo envelope while the transport plays. The envelope is
+    // read in the middle of the block, so a ramp advances by its average tempo and the song lands where the integral says.
+    double blockTempo = tempo.load();
+    if (transport.isPlaying())
+        for (const auto& lane : graph->masterAutomation)
+            if (lane.kind == PlaybackGraph::Track::Lane::tempo)
+            {
+                const double start = transport.getSongPositionBeats();
+                const double first = automation::tempoFromNormalised (daw::engine::automationValueAt (lane.points, start));
+                const double half = numSamples * 0.5 / rate * first / 60.0;
+                blockTempo = automation::tempoFromNormalised (daw::engine::automationValueAt (lane.points, start + half));
+                break;
+            }
+    if (! juce::exactlyEqual (transport.getTempo(), blockTempo))
+        transport.setTempo (blockTempo);
+    currentTempo.store (transport.getTempo(), std::memory_order_relaxed);
 
     const auto block = transport.advance (numSamples);
     const double spb = transport.samplesPerBeat();
@@ -1617,6 +1643,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputs, 
                     break;
                 }
                 case PlaybackGraph::Track::Lane::pan: masterPan = juce::jlimit (-1.0f, 1.0f, v * 2.0f - 1.0f); break;
+                case PlaybackGraph::Track::Lane::tempo: break; // applied before the transport advanced
                 case PlaybackGraph::Track::Lane::parameter:
                     if (std::abs (lane.param->getValue() - v) > 1.0e-5f)
                         lane.param->setValue (v);

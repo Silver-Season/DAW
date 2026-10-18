@@ -529,6 +529,33 @@ inline const juce::String none = tr ("None", "Нет");
 inline const juce::String peak01 = tr ("Peak −0.1 dBFS", "По пику −0,1 dBFS");
 inline const juce::String peak1 = tr ("Peak −1 dBFS", "По пику −1 dBFS");
 inline const juce::String tail = tr ("Add tail (reverb, delay)", "Добавлять хвост (ревер, дилей)");
+inline const juce::String what = tr ("What", "Что");
+inline const juce::String master = tr ("Master", "Мастер");
+inline const juce::String masterAndStems = tr ("Master and stems", "Мастер и стемы");
+inline const juce::String stemsOnly = tr ("Stems only", "Только стемы");
+inline const juce::String mp3Quality = tr ("Quality", "Качество");
+inline const juce::String vbrBest = tr ("VBR best (V0)", "VBR лучшее (V0)");
+inline const juce::String vbrGood = tr ("VBR good (V2)", "VBR хорошее (V2)");
+inline const juce::String lufs14 = tr ("Loudness −14 LUFS", "Громкость −14 LUFS");
+inline const juce::String lufs16 = tr ("Loudness −16 LUFS", "Громкость −16 LUFS");
+inline const juce::String lufs9 = tr ("Loudness −9 LUFS (loud)", "Громкость −9 LUFS (громко)");
+inline const juce::String stemsMuted = tr ("Include muted tracks in stems", "Стемы и для заглушённых дорожек");
+inline const juce::String stemsFolderSuffix = tr (" Stems", " Стемы");
+inline juce::String loudness (double lufs, double rangeLu, double truePeakDb)
+{
+    const auto n = [] (double v) { return isRussian() ? juce::String (v, 1).replace (".", ",") : juce::String (v, 1); };
+    if (isRussian())
+        return utf8 ("Громкость ") + n (lufs) + utf8 (" LUFS, диапазон ") + n (rangeLu) + utf8 (" LU, истинный пик ") + n (truePeakDb) + " dBTP";
+    return "Loudness " + n (lufs) + " LUFS, range " + n (rangeLu) + " LU, true peak " + n (truePeakDb) + " dBTP";
+}
+inline const juce::String limitedByPeak = tr ("Stopped short of the loudness target so the true peak stays at −1 dBTP. Put a limiter on the master to get louder.",
+                                              "Не дотянули до цели по громкости, чтобы истинный пик остался −1 dBTP. Чтобы было громче, поставьте лимитер на мастер.");
+inline juce::String stemsWritten (int n, const juce::String& folder)
+{
+    if (isRussian())
+        return utf8 ("Стемов: ") + juce::String (n) + utf8 (", папка «") + folder + utf8 ("»");
+    return juce::String (n) + (n == 1 ? " stem" : " stems") + juce::String::fromUTF8 (" in \xe2\x80\x9c") + folder + juce::String::fromUTF8 ("\xe2\x80\x9d");
+}
 inline const juce::String exportButton = tr ("Export…", "Экспорт…");
 inline const juce::String close = tr ("Close", "Закрыть");
 inline const juce::String cancel = tr ("Cancel", "Отмена");
@@ -949,6 +976,7 @@ inline const juce::String backToArrangement = tr ("Back to Arrangement", "Вер
 inline const juce::String automationMode = tr ("Automation (A)", "Автоматизация (A)");
 inline const juce::String autoVolume = tr ("Volume", "Громкость");
 inline const juce::String autoPan = tr ("Pan", "Панорама");
+inline const juce::String autoTempo = tr ("Tempo", "Темп");
 inline const juce::String autoParameter = tr ("Parameter", "Параметр");
 inline const juce::String autoNoDevices = tr ("No devices", "Устройств нет");
 inline const juce::String autoCurve = tr ("Curve", "Изгиб");
@@ -1120,6 +1148,7 @@ inline const juce::String soon3 = tr ("Arrives in stage 3", "Появится н
 inline const juce::String soon6 = tr ("Arrives in stage 6", "Появится на этапе 6");
 
 inline const juce::String logo = make (tr ("Prisma", "Призма"), tr ("The main DAW window. Track colors follow the spectrum from left to right.", "Главное окно DAW. Цвета дорожек идут по спектру слева направо."));
+inline const juce::String tempoMapped = make (tr ("Tempo", "Темп"), tr ("The song follows the Tempo envelope of the master (Arrangement, automation mode, master row); this shows the tempo at the cursor. Changing it here speeds up or slows down the whole envelope.", "Песня идёт по огибающей «Темп» на мастере (Аранжировка, режим автоматизации, строка мастера); здесь темп под курсором. Изменение здесь ускоряет или замедляет всю огибающую."));
 inline const juce::String tempo = make (tr ("Tempo", "Темп"), tr ("Beats per minute. Drag or scroll to change, double-click to type a number. Shift: finer.", "Ударов в минуту. Тяните мышью, колесо меняет, двойной щелчок вводит число. Shift: точнее."));
 inline const juce::String signature = make (tr ("Time signature", "Размер"), tr ("The project time signature. Change it in the “Project Properties” window (Cmd+Alt+P).", "Размер такта проекта. Меняется в окне «Свойства проекта» (Cmd+Alt+P)."));
 inline const juce::String metronome = make (tr ("Metronome", "Метроном"), tr ("Click to turn on the project metronome. Right-click: volume, “Only While Recording”, count-in, click sound.", "Щелчок включает метроном проекта. Правая кнопка: громкость, «Только во время записи», отсчёт, звук клика."));
