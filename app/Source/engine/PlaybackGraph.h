@@ -7,6 +7,7 @@
 #include "RecordStream.h"
 
 #include "daw/engine/Arrangement.h"
+#include "daw/engine/Automation.h"
 #include "daw/engine/Clip.h"
 
 #include <array>
@@ -155,6 +156,19 @@ struct PlaybackGraph
         std::shared_ptr<RecordStream> stream;
         bool recordsOutput = false;
         bool isReturn = false;
+        // Automation of the arrangement (task 6.7), applied while the track plays its arrangement.
+        struct Lane
+        {
+            enum Kind : int
+            {
+                volume,
+                pan,
+                parameter
+            } kind = volume;
+            juce::AudioProcessorParameter* param = nullptr;
+            std::vector<daw::engine::AutomationPoint> points;
+        };
+        std::vector<Lane> automation;
         // Per device of `chain`: the track whose keyBuffer feeds its sidechain (null = none). A source later in the
         // order is heard one block late, which is inaudible for ducking and needs no ordering of the graph.
         std::vector<TrackRuntime*> sidechains;

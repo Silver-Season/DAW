@@ -60,6 +60,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectActions.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ClipEdit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ArrangementEdit.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/Automation.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/TrackTransfer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/ProjectFile.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/project/RecoveryCheck.cpp

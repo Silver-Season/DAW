@@ -8,6 +8,7 @@
 #include "../app/Source/model/ArrangementEdit.h"
 #include "../app/Source/engine/DrumKitProcessor.h"
 #include "../app/Source/engine/OfflineRenderer.h"
+#include "../app/Source/model/Automation.h"
 
 #include <functional>
 
@@ -546,10 +547,58 @@ void testExport()
 }
 } // namespace
 
+namespace
+{
+void testAutomation()
+{
+    std::printf ("[6.7] spec test 10: a volume line from -inf to 0 dB over a bar rises smoothly; a device parameter follows its lane\n");
+    SoundRig rig;
+    rig.track.setMonitor ("in", nullptr);
+    rig.track.setInput ("audio:0", nullptr);
+    rig.signal = [] (int ch, int64_t) { return ch == 0 ? 0.5f : 0.0f; };
+    auto lane = automation::getOrAddLane (rig.f.model, rig.track, automation::volumeTarget);
+    automation::addPoint (rig.f.model, lane, { 0.0, 0.0f, 0.0f });
+    automation::addPoint (rig.f.model, lane, { 4.0, automation::normalisedVolume (0.0f), 0.0f });
+    auto fx = rig.f.model.addDevice (rig.track, "fx", "Comp");
+    fx.setPluginDesc ("comp", nullptr);
+    rig.f.engine.rebuildGraphIfNeeded();
+    auto* p = rig.f.engine.findProcessor (fx.id());
+    const int outputIndex = p != nullptr ? p->getParameters().size() - 1 : 0; // Output is the last parameter
+    auto plane = automation::getOrAddLane (rig.f.model, rig.track, automation::deviceTarget (fx.id(), outputIndex));
+    automation::addPoint (rig.f.model, plane, { 0.0, 0.5f, 0.0f });
+    automation::addPoint (rig.f.model, plane, { 4.0, 0.75f, 0.0f });
+    rig.f.engine.rebuildGraphIfNeeded();
+    rig.f.engine.play();
+    rig.blocks_ (2); // before the start the track played at its fader level; from here the lane rules
+
+    std::vector<float> levels;
+    while (rig.f.engine.getSongPositionBeats() < 4.0 && levels.size() < 2000)
+    {
+        rig.block();
+        levels.push_back (rig.out.getSample (0, kBlock - 1));
+    }
+    bool monotonic = true;
+    double worstStep = 0.0;
+    for (size_t i = 1; i < levels.size(); ++i)
+    {
+        if (levels[i - 1] > 0.001f) // audible: from -60 dB on
+            monotonic = monotonic && levels[i] >= levels[i - 1] - 1.0e-6f;
+        if (levels[i - 1] > 0.002f) // from -48 dB on
+            worstStep = std::max (worstStep, 20.0 * std::log10 (levels[i] / levels[i - 1]));
+    }
+    check (monotonic, "the level only rises (from -60 dB on)");
+    check (worstStep < 0.5, "no step larger than 0.5 dB: " + juce::String (worstStep, 3));
+    check (p != nullptr && std::abs (p->getParameters()[outputIndex]->getValue() - 0.75f) < 0.02f, "the compressor's output knob followed its lane");
+    rig.f.engine.stop();
+    rig.blocks_ (2);
+}
+} // namespace
+
 namespace tests
 {
 void runBuiltInEffectTests()
 {
+    testAutomation();
     testExport();
     testSendsAndSidechain();
     testBuiltInEffectDevice();

@@ -1373,6 +1373,32 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
     if (acceptsLiveMidi (rt, true, anyArmed))
         addLive (keyboardMidi);
 
+    // Automation: the value at the start of the block (volume and pan ramp across the block, parameters smooth inside
+    // the devices). Only while the track plays its arrangement.
+    float autoVolume = -1.0f, autoPan = -2.0f;
+    if (! t.automation.empty() && transport.isPlaying() && block.numWindows > 0 && ! rt.inSession.load (std::memory_order_relaxed))
+    {
+        const double songBeat = block.windows[0].startBeat;
+        for (const auto& lane : t.automation)
+        {
+            const float v = daw::engine::automationValueAt (lane.points, songBeat);
+            switch (lane.kind)
+            {
+                case PlaybackGraph::Track::Lane::volume:
+                {
+                    const float db = v * 66.0f - 60.0f;
+                    autoVolume = db <= -60.0f ? 0.0f : juce::Decibels::decibelsToGain (db);
+                    break;
+                }
+                case PlaybackGraph::Track::Lane::pan: autoPan = v * 2.0f - 1.0f; break;
+                case PlaybackGraph::Track::Lane::parameter:
+                    if (std::abs (lane.param->getValue() - v) > 1.0e-5f)
+                        lane.param->setValue (v);
+                    break;
+            }
+        }
+    }
+
     if (t.isReturn)
     {
         // A return track plays what the sends of this block gave it, through its effects.
@@ -1398,8 +1424,8 @@ void AudioEngine::renderTrack (const PlaybackGraph::Track& t, const daw::engine:
 
     // Solo leaves the return tracks on, like in Live: a soloed track keeps its reverb.
     const bool audible = ! rt.mute.load() && (! anySolo || rt.solo.load() || t.isReturn);
-    const float vol = audible ? rt.volumeGain.load() : 0.0f;
-    const float pan = juce::jlimit (-1.0f, 1.0f, rt.pan.load());
+    const float vol = audible ? (autoVolume >= 0.0f ? autoVolume : rt.volumeGain.load()) : 0.0f;
+    const float pan = juce::jlimit (-1.0f, 1.0f, autoPan > -1.5f ? autoPan : rt.pan.load());
     const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f; // equal-power pan law
     const float gainL = vol * std::cos (angle) * juce::MathConstants<float>::sqrt2;
     const float gainR = vol * std::sin (angle) * juce::MathConstants<float>::sqrt2;

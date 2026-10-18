@@ -4,6 +4,7 @@
 
 #include "../../../plugins/prisma/Source/PrismaProcessor.h"
 #include "../Strings.h"
+#include "../model/Automation.h"
 #include "BuiltInEffectProcessor.h"
 #include "DrumKitProcessor.h"
 
@@ -274,6 +275,8 @@ void AudioEngine::valueTreePropertyChanged (juce::ValueTree& tree, const juce::I
     }
     else if (type == ids::FILE)
         graphDirty = true; // a lost file was found again: its clips get the new source
+    else if (type == ids::POINT || type == ids::LANE)
+        graphDirty = true;
     else if (type == ids::ACLIP || type == ids::CLIP || type == ids::NOTE || type == ids::CC || type == ids::BEND || type == ids::PRESSURE)
         graphDirty = true;
 }
@@ -625,6 +628,31 @@ void AudioEngine::rebuildGraph()
         }
         gt.arrangementSignature = gt.arrangement.empty() ? 0 : signature.h;
         gt.isReturn = track.isReturn();
+        for (const auto& lane : automation::lanes (track))
+        {
+            PlaybackGraph::Track::Lane l;
+            const auto target = lane.getProperty (ids::target).toString();
+            int64_t deviceId = -1;
+            int paramIndex = -1;
+            if (target == automation::volumeTarget)
+                l.kind = PlaybackGraph::Track::Lane::volume;
+            else if (target == automation::panTarget)
+                l.kind = PlaybackGraph::Track::Lane::pan;
+            else if (automation::parseDeviceTarget (target, deviceId, paramIndex))
+            {
+                l.kind = PlaybackGraph::Track::Lane::parameter;
+                if (const auto it = devices.find (deviceId); it != devices.end() && it->second->processor != nullptr)
+                    if (const auto& params = it->second->processor->getParameters(); paramIndex >= 0 && paramIndex < params.size())
+                        l.param = params[paramIndex];
+                if (l.param == nullptr)
+                    continue;
+            }
+            else
+                continue;
+            l.points = automation::points (lane);
+            if (! l.points.empty())
+                gt.automation.push_back (std::move (l));
+        }
         graph->tracks.push_back (std::move (gt));
     }
     // Sidechain sources, once every track has its runtime.
