@@ -90,6 +90,11 @@ juce::PopupMenu AppMenuModel::getMenuForIndex (int index, const juce::String&)
             add (commands::captureMidi);
             add (commands::recordArrangement);
             add (commands::addMarker);
+            if (inspirationMenu)
+            {
+                menu.addSeparator();
+                menu.addSubMenu (Strings::inspiration::menu, inspirationMenu());
+            }
             break;
         case 3:
         {

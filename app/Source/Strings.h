@@ -457,6 +457,40 @@ inline const juce::String float32 = utf8 ("32 (float)");
 inline const juce::String testNote = utf8 ("Записанный звук сдвигается раньше на задержку входа и выхода. Чтобы измерить её точно, соедините кабелем выход 1 карты с выбранным входом и нажмите «Измерить»: прозвучат 10 щелчков. Ползунок поправляет вручную.");
 } // namespace audioRec
 
+// Inspiration: generated parts and sounds
+namespace inspiration
+{
+inline const juce::String menu = utf8 ("Вдохновение");
+inline const juce::String idea = utf8 ("Идея целиком");
+inline const juce::String drums = utf8 ("Барабаны");
+inline const juce::String chords = utf8 ("Аккорды");
+inline const juce::String bass = utf8 ("Бас");
+inline const juce::String melody = utf8 ("Мелодия");
+inline const juce::String arp = utf8 ("Арпеджио");
+inline const juce::String sound = utf8 ("Новый звук");
+inline const juce::String undo = utf8 ("Вдохновение: партия");
+inline const juce::String undoSound = utf8 ("Вдохновение: звук");
+inline const juce::String undoIdea = utf8 ("Вдохновение: идея");
+inline juce::String ideaScene (const juce::String& style) { return utf8 ("Идея · ") + style; }
+inline juce::String made (const juce::String& part, const juce::String& track) { return utf8 ("Готово: ") + part.toLowerCase() + utf8 (" на дорожке ") + track + utf8 (". Не нравится: Cmd+Z и ещё раз."); }
+inline juce::String newSound (const juce::String& name, const juce::String& track) { return utf8 ("Новый звук «") + name + utf8 ("» на дорожке ") + track; }
+inline juce::String styleName (const juce::String& s)
+{
+    static const std::map<juce::String, const char*> names { { "pop", "Поп" }, { "house", "Хаус" }, { "techno", "Техно" }, { "hiphop", "Хип-хоп" },
+                                                             { "trap", "Трэп" }, { "dnb", "Драм-н-бейс" }, { "ambient", "Эмбиент" } };
+    const auto it = names.find (s);
+    return it != names.end() ? utf8 (it->second) : s;
+}
+inline juce::String soundKind (const juce::String& k)
+{
+    static const std::map<juce::String, const char*> names { { "bass", "Бас" }, { "sub", "Саб-бас" }, { "lead", "Лид" }, { "pad", "Пэд" },
+                                                             { "pluck", "Плак" }, { "keys", "Клавиши" }, { "bell", "Колокольчик" }, { "fx", "Эффект" },
+                                                             { "arp", "Арп" } };
+    const auto it = names.find (k);
+    return it != names.end() ? utf8 (it->second) : k;
+}
+} // namespace inspiration
+
 // The built-in drum machine
 namespace drums
 {

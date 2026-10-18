@@ -1,5 +1,7 @@
 #include "MainComponent.h"
 
+#include "Inspiration.h"
+
 #include "DemoProject.h"
 #include "Strings.h"
 #include "project/AudioImport.h"
@@ -210,6 +212,15 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
         return names;
     };
     menuModel.currentThemeId = [] { return ThemeManager::get().current().id; };
+    menuModel.inspirationMenu = [this] {
+        return inspiration::menu (
+            model, engine, [this] { return selection.get().trackId; }, [this] { return juce::jmax (0, selection.get().scene); },
+            [this] (const inspiration::Result& r) {
+                if (r.ok && r.scene >= 0)
+                    selection.selectSlot (r.trackId, r.scene);
+                infoBar->showMessage (r.message, 4000);
+            });
+    };
     menuModel.onThemeChosen = [this] (const juce::String& id) {
         settings.setTheme (id);
         ThemeManager::get().setCurrent (id);

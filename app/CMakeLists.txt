@@ -8,6 +8,7 @@ juce_add_gui_app(DAW
 target_sources(DAW PRIVATE
     Source/Main.cpp
     Source/DemoProject.cpp
+    Source/Inspiration.cpp
     Source/MainComponent.cpp
     Source/ui/AppMenu.cpp
     Source/ui/KeyboardStrip.cpp
