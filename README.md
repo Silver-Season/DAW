@@ -155,6 +155,17 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 
 ![The audio clip editor with warp, zoomed in, Prism theme](media/stage7-warp-editor-prism.png)
 
+## Warp markers and the tempo of the first sound (stage 7, part 2)
+
+- **The first sound sets the tempo.** A sound dropped into an empty project gives the project its tempo (from its name or the analysis), and its first downbeat lands on bar 1. Every later sound follows the project tempo. One undo takes back the sound and the tempo.
+- **Warp markers.** The beats of the sound are drawn as faint marks above its waveform. Drag any of them, or a marker, to move that moment of the audio; the audio on both sides stretches. Cmd-drag slides the audio under a marker, double-click pins a marker, Delete removes the selected one. Markers are exact to the sample in Beats, Complex Pro, Tones and Re-Pitch.
+- **A decision strip above the waveform**: the tempo found and how sure the analysis is, ×2 and ÷2, "Project Follows Clip" (the project takes the clip's tempo), and Click (the metronome, to check the grid by ear). Stretches where the grid misses the beats the analysis heard are tinted.
+- **Right-click on the waveform**: Bar 1 Here, Tempo From Here, Add Markers at Onsets, Quantize Markers to Grid, Delete Marker, Clear Warp Markers; on the timeline also Slice at Onsets and Slice on Grid. Onsets show as short ticks on the wave.
+- **Beats mode of its own**: the audio is cut at its onsets and every slice plays unchanged from its new place, so hits keep their attack; Decay sets how long a slice played slower keeps sounding.
+- Analyses are kept on disk next to the settings (one small file per sound), so a sound is analysed once.
+
+![The audio clip editor with warp markers and the decision strip, Prism theme](media/stage7-markers-prism.png)
+
 ## English interface
 
 English is the default UI language. Settings → Appearance → Language switches to Russian (and back); the choice applies after a restart. Every UI text is a `tr ("English", "Русский")` pair in `app/Source/Strings.h`, and the engine tests run once in each language.

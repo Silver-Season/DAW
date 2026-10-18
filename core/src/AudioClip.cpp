@@ -84,6 +84,12 @@ namespace
 
         double frameOf (double contentBeat) const noexcept
         {
+            if (! part.warp.isLinear())
+            {
+                const double origin = part.warp.frameAt (0.0);
+                const double f = part.warp.frameAt (part.reverse ? end - contentBeat : contentBeat);
+                return origin + (f - origin) * std::max (1.0e-3, part.pitchRatio);
+            }
             const double f = part.reverse ? part.sampleStart + (end - contentBeat) * fpb : part.sampleStart + contentBeat * fpb;
             return exact ? std::round (f) : f;
         }
@@ -118,7 +124,7 @@ void renderAudioClip (const MidiClip& clip, double entry, bool loop, double elap
     const auto& src = *part.source;
     const double end = clip.endBeat(), braceStart = clip.braceStart(), brace = clip.braceBeats();
     const double fpb = framesPerBeat (part, spb, engineRate);
-    const bool exact = std::abs (fpb / spb - 1.0) < 1.0e-12;
+    const bool exact = part.warp.isLinear() && std::abs (fpb / spb - 1.0) < 1.0e-12;
     const Reader reader { part, src, dsp::sharedSincInterpolator(), end, fpb, src.available.load (std::memory_order_acquire), exact, stats };
 
     const double seam = std::min (kSeamSeconds * engineRate / spb, brace * 0.5); // in beats

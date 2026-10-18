@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace daw::dsp
@@ -83,4 +85,27 @@ private:
 // per channel, aligned with the input (latency compensated). For rendering and tests; runs on the calling thread.
 std::vector<std::vector<float>> stretchOffline (const std::vector<std::vector<float>>& in, double sampleRate,
                                                 double timeRatio, StretchMode mode);
+// A key frame of a variable stretch: this input frame lands on this output frame.
+using KeyFrame = std::pair<int64_t, int64_t>;
+
+// Stretches a whole buffer along key frames (warp markers): between adjacent key frames the input is stretched
+// evenly, before the first and after the last with the slope of the edge segment. Returns exactly outFrames frames per
+// channel. Offline (two-pass) processing, which keeps the key frames exact; for the Beats mode it calls stretchBeats.
+// Runs on the calling thread (a background render job), allocates.
+std::vector<std::vector<float>> stretchOfflineMapped (const std::vector<std::vector<float>>& in, double sampleRate,
+                                                      const std::vector<KeyFrame>& keyFrames, int64_t outFrames,
+                                                      StretchMode mode, const std::vector<int64_t>& onsets = {},
+                                                      double beatsDecay = 1.0);
+
+// The Beats mode (task 7.1), without Rubber Band: the input is cut at its onsets (and at the key frames) and every
+// slice plays at its original speed and pitch from its new place, so hits stay exactly as sharp as they were. A slice
+// that has to last longer than it did is continued by its own tail, played back and forth, which fades out the faster
+// the lower `decay` is (1 holds it, 0 leaves a gap); a slice that has to be shorter is cut with a 3 ms fade.
+std::vector<std::vector<float>> stretchBeats (const std::vector<std::vector<float>>& in, double sampleRate,
+                                              const std::vector<KeyFrame>& keyFrames, int64_t outFrames,
+                                              const std::vector<int64_t>& onsets, double decay);
+
+// Where an input frame lands under a list of key frames (sorted, at least two), extrapolating at both ends.
+double mapThroughKeyFrames (const std::vector<KeyFrame>& keyFrames, double inputFrame) noexcept;
+
 } // namespace daw::dsp

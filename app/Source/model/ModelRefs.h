@@ -3,6 +3,7 @@
 #include "Ids.h"
 
 #include "daw/engine/Clip.h"
+#include "daw/engine/WarpMap.h"
 
 #include <cmath>
 #include <cstdint>
@@ -141,12 +142,24 @@ public:
     void setFadeIn (double v, juce::UndoManager* um) const { set (ids::fadeIn, juce::jmax (0.0, v), um); }
     void setFadeOut (double v, juce::UndoManager* um) const { set (ids::fadeOut, juce::jmax (0.0, v), um); }
 
+    // Warp markers (docs/spec/07-warp.md, task 7.3): WARP/MARKER children, `sample` the file frame and `beat` the
+    // content beat it plays at. Without markers the clip maps beats to frames by a straight line from sampleStart at its
+    // original tempo. warpMap() is that mapping for a file at `fileRate`, the one the engine and the views use.
+    std::vector<daw::engine::WarpMarker> warpMarkers() const;
+    void setWarpMarkers (const std::vector<daw::engine::WarpMarker>&, juce::UndoManager*) const; // empty removes WARP
+    daw::engine::WarpMap warpMap (double fileRate, double projectTempo) const;
+    // Beats mode: how long a slice played slower keeps sounding into the gap, 0..1 (1 holds it).
+    double beatsDecay() const { return juce::jlimit (0.0, 1.0, get<double> (ids::beatsDecay, 1.0)); }
+    void setBeatsDecay (double v, juce::UndoManager* um) const { set (ids::beatsDecay, juce::jlimit (0.0, 1.0, v), um); }
+
     // Notes are kept sorted by start, then pitch. Callers never sort. They are the NOTE children, which come first;
-    // the optional CONTROLLERS node is always the last child (so `state.getChild (i)` is a note for i < numNotes()).
+    // the optional WARP and CONTROLLERS nodes follow them (so `state.getChild (i)` is a note for i < numNotes()).
     int numNotes() const
     {
-        const int n = state.getNumChildren();
-        return n > 0 && state.getChild (n - 1).hasType (ids::CONTROLLERS) ? n - 1 : n;
+        int n = state.getNumChildren();
+        while (n > 0 && ! state.getChild (n - 1).hasType (ids::NOTE))
+            --n;
+        return n;
     }
     daw::engine::Note note (int index) const;
     std::vector<daw::engine::Note> notes() const;
@@ -230,6 +243,8 @@ public:
     double tempo() const { return get<double> (ids::tempo, 0.0); } // known tempo of a loop, 0 = unknown
     double firstBeatSeconds() const { return get<double> (ids::firstBeat, 0.0); } // where the first downbeat is
     bool analysed() const { return get<bool> (ids::analysed, false); }
+    // How sure the analysis was of the tempo, 0..1 (1: the tempo came from the name or the length in bars).
+    double tempoConfidence() const { return get<double> (ids::confidence, 1.0); }
     juce::String name() const { return get<juce::String> (ids::name, {}); }
 
     void setPath (const juce::String& v, juce::UndoManager* um) const { set (ids::path, v, um); }

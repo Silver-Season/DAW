@@ -66,6 +66,14 @@ uint64_t hashClip (const ClipRef& clip)
         h.add (clip.fadeIn());
         h.add (clip.fadeOut());
         h.add (clip.followTempo());
+        h.add (clip.beatsDecay());
+        const auto mode = clip.warpMode();
+        h.add (mode.toRawUTF8(), mode.getNumBytesAsUTF8());
+        for (const auto& m : clip.warpMarkers())
+        {
+            h.add (m.frame);
+            h.add (m.beat);
+        }
     }
     return h.h;
 }
@@ -512,21 +520,37 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
     used.insert (id);
     auto hash = hashClip (clip);
     std::shared_ptr<daw::engine::AudioSource> source;
-    double stretchRatio = 1.0;
+    daw::engine::WarpMap map;
+    bool stretched = false;
+    double copyStart = 0.0, copyFramesPerBeat = 0.0;
     if (clip.isAudio())
     {
         source = audioSourceFor (clip.fileId());
-        // Warp: a clip that follows the project tempo plays a stretched copy of its file once one is rendered, and the
-        // original resampled meanwhile (Re-Pitch, the same timing).
-        if (clip.followTempo() && clip.warpMode() != "repitch")
+        map = clip.warpMap (source != nullptr ? source->sampleRate : sampleRate.load(), model->tempo());
+        // Warp: a clip that follows the project tempo plays a copy of its file stretched along its warp map to the
+        // project tempo, once one is rendered, and the original resampled along the same map meanwhile (Re-Pitch, the
+        // same timing). The copy starts at the content beat of file frame 0 (b0), one project beat every fpb frames.
+        if (clip.followTempo() && clip.warpMode() != "repitch" && source != nullptr && source->length > 0)
         {
-            const double ratio = clip.originalTempo() / juce::jmax (1.0, model->tempo());
-            if (std::abs (ratio - 1.0) > 1.0e-4)
-                if (auto copy = warp.stretched (source, ratio, clip.warpMode()))
+            const double fpb = source->sampleRate * 60.0 / juce::jmax (1.0, model->tempo());
+            const double b0 = map.beatAt (0.0), bN = map.beatAt ((double) source->length);
+            const bool unchanged = map.isLinear() && std::abs (map.defaultFramesPerBeat() / fpb - 1.0) < 1.0e-4;
+            if (! unchanged && bN > b0)
+            {
+                const auto outFrames = (int64_t) std::llround ((bN - b0) * fpb);
+                std::vector<std::pair<int64_t, int64_t>> keys { { 0, 0 } };
+                for (const auto& m : map.markers())
+                    if (m.frame > 0.0 && m.frame < (double) source->length)
+                        keys.push_back ({ (int64_t) std::llround (m.frame), (int64_t) std::llround ((m.beat - b0) * fpb) });
+                keys.push_back ({ source->length, outFrames });
+                if (auto copy = warp.stretched (source, std::move (keys), outFrames, clip.warpMode(), clip.beatsDecay()))
                 {
-                    stretchRatio = ratio;
+                    stretched = true;
+                    copyStart = -b0 * fpb;
+                    copyFramesPerBeat = fpb;
                     source = std::move (copy);
                 }
+            }
         }
         const auto p = reinterpret_cast<uintptr_t> (source.get());
         hash ^= (uint64_t) p * 0x9E3779B97F4A7C15ULL; // a relinked or reloaded file is another clip
@@ -559,9 +583,17 @@ std::shared_ptr<const daw::engine::MidiClip> AudioEngine::acquireClip (const Cli
             part->fadeOut = clip.fadeOut();
             if (clip.followTempo() && source != nullptr)
             {
-                // A stretched copy already runs at the project tempo; the original is read at its own.
-                part->sampleStart = clip.sampleStart() * stretchRatio;
-                part->fileFramesPerBeat = source->sampleRate * 60.0 / (std::abs (stretchRatio - 1.0) > 1.0e-9 ? model->tempo() : clip.originalTempo());
+                // A stretched copy already runs at the project tempo; the original is read along its warp map.
+                if (stretched)
+                {
+                    part->sampleStart = copyStart;
+                    part->fileFramesPerBeat = copyFramesPerBeat;
+                }
+                else
+                {
+                    part->fileFramesPerBeat = map.defaultFramesPerBeat();
+                    part->warp = map;
+                }
             }
             c->audio = std::move (part);
             c->notes.clear(); // an audio clip has no notes, whatever a hand-edited file says

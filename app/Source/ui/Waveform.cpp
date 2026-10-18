@@ -13,8 +13,10 @@ void drawAudioWaveform (juce::Graphics& g, juce::Rectangle<float> area, const da
     const double end = std::max (daw::engine::MidiClip::kMinLength, clip.lengthBeats());
     const double braceStart = juce::jlimit (0.0, end - daw::engine::MidiClip::kMinLength, clip.loopStart());
     const double brace = end - braceStart;
-    const double fpb = src.sampleRate * 60.0 / juce::jmax (1.0, bpm) * clip.pitchRatio();
-    const double sampleStart = clip.sampleStart();
+    // The engine's mapping: content beats to file frames along the warp map, transposition by resampling.
+    const auto map = clip.warpMap (src.sampleRate, bpm);
+    const double pitch = clip.pitchRatio(), origin = map.frameAt (0.0);
+    const double fpb = map.defaultFramesPerBeat() * pitch;
     const bool reverse = clip.reverse();
     const float gain = juce::jlimit (0.0f, 4.0f, std::pow (10.0f, (float) clip.gainDb() / 20.0f));
 
@@ -48,7 +50,18 @@ void drawAudioWaveform (juce::Graphics& g, juce::Rectangle<float> area, const da
             const double into = c - end;
             c = braceStart + (into - std::floor (into / brace) * brace);
         }
-        return reverse ? sampleStart + (end - c) * fpb - framesPerPixel : sampleStart + c * fpb;
+        return origin + (map.frameAt (reverse ? end - c : c) - origin) * pitch;
+    };
+    // The frames under one pixel, [first, last): the map can run faster or slower than its average.
+    const auto spanAt = [&] (int x, double& first, double& last) {
+        first = frameAt (x);
+        const double next = frameAt (x + 1);
+        if (first < -1.0e17)
+            return false;
+        last = next < -1.0e17 ? first + framesPerPixel : next;
+        if (last < first)
+            std::swap (first, last);
+        return true;
     };
 
     g.setColour (ink);
@@ -61,7 +74,7 @@ void drawAudioWaveform (juce::Graphics& g, juce::Rectangle<float> area, const da
             const double frame = frameAt (x);
             if (frame < -1.0e17)
                 break;
-            const float y = mid - juce::jlimit (-1.0f, 1.0f, sampleAt (reverse ? frame + framesPerPixel : frame) * gain) * half;
+            const float y = mid - juce::jlimit (-1.0f, 1.0f, sampleAt (frame) * gain) * half;
             if (! started)
                 line.startNewSubPath ((float) x, y);
             else
@@ -73,16 +86,16 @@ void drawAudioWaveform (juce::Graphics& g, juce::Rectangle<float> area, const da
     }
     for (int x = x0; x < x1; ++x)
     {
-        const double frame = frameAt (x);
-        if (frame < -1.0e17)
+        double frame = 0.0, last = 0.0;
+        if (! spanAt (x, frame, last))
             break;
-        if (frame + framesPerPixel < 0.0)
+        if (last < 0.0)
             continue;
         float lo = 0.0f, hi = 0.0f;
         if (fromSamples)
         {
             const auto f0 = (int64_t) std::floor (juce::jmax (0.0, frame));
-            const auto f1 = std::min (framesReady, (int64_t) std::ceil (frame + framesPerPixel) + 1);
+            const auto f1 = std::min (framesReady, (int64_t) std::ceil (last) + 1);
             if (f0 >= framesReady)
                 continue;
             for (int64_t f = f0; f < f1; ++f)
@@ -94,7 +107,7 @@ void drawAudioWaveform (juce::Graphics& g, juce::Rectangle<float> area, const da
         else
         {
             const int64_t p0 = (int64_t) std::floor (juce::jmax (0.0, frame) / daw::engine::AudioSource::kPeakFrames);
-            const int64_t p1 = (int64_t) std::floor (juce::jmax (0.0, frame + framesPerPixel) / daw::engine::AudioSource::kPeakFrames);
+            const int64_t p1 = (int64_t) std::floor (juce::jmax (0.0, last) / daw::engine::AudioSource::kPeakFrames);
             if (p0 >= peaksReady)
                 continue;
             for (int64_t p = p0; p <= std::min (p1, peaksReady - 1); ++p)

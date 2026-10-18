@@ -185,6 +185,52 @@ std::vector<daw::engine::ControllerEvent> ClipRef::controllers() const
     return out;
 }
 
+std::vector<daw::engine::WarpMarker> ClipRef::warpMarkers() const
+{
+    std::vector<daw::engine::WarpMarker> out;
+    for (const auto& m : state.getChildWithName (ids::WARP))
+        out.push_back ({ (double) m.getProperty (ids::sample, 0.0), (double) m.getProperty (ids::beat, 0.0) });
+    std::sort (out.begin(), out.end(), [] (const auto& a, const auto& b) { return a.beat < b.beat; });
+    return out;
+}
+
+void ClipRef::setWarpMarkers (const std::vector<daw::engine::WarpMarker>& list, juce::UndoManager* um) const
+{
+    auto node = state.getChildWithName (ids::WARP);
+    if (list.empty())
+    {
+        if (node.isValid())
+            state.removeChild (node, um);
+        return;
+    }
+    if (! node.isValid())
+    {
+        node = juce::ValueTree (ids::WARP);
+        state.addChild (node, numNotes(), um); // after the notes, before CONTROLLERS
+    }
+    // Rewrite in place: a marker being dragged keeps its node, so the undo step holds only what changed.
+    while (node.getNumChildren() > (int) list.size())
+        node.removeChild (node.getNumChildren() - 1, um);
+    while (node.getNumChildren() < (int) list.size())
+        node.appendChild (juce::ValueTree (ids::MARKER), um);
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        auto m = node.getChild ((int) i);
+        if (! juce::exactlyEqual ((double) m.getProperty (ids::sample, -1.0), list[i].frame))
+            m.setProperty (ids::sample, list[i].frame, um);
+        if (! juce::exactlyEqual ((double) m.getProperty (ids::beat, -1.0e9), list[i].beat))
+            m.setProperty (ids::beat, list[i].beat, um);
+    }
+}
+
+daw::engine::WarpMap ClipRef::warpMap (double fileRate, double projectTempo) const
+{
+    const double fpb = juce::jmax (1.0, fileRate) * 60.0 / juce::jmax (1.0, contentTempo (projectTempo));
+    if (! followTempo())
+        return { sampleStart(), fpb };
+    return { warpMarkers(), sampleStart(), fpb };
+}
+
 void ClipRef::setControllers (const std::vector<daw::engine::ControllerEvent>& list, juce::UndoManager* um) const
 {
     const auto old = state.getChildWithName (ids::CONTROLLERS);

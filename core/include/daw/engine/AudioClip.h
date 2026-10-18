@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "daw/engine/WarpMap.h"
+
 namespace daw::engine
 {
 
@@ -58,6 +60,10 @@ struct AudioPart
     // > 0: the clip follows the project tempo. A content beat is this many file frames (one beat at the file's own
     // tempo), so the loop stays in time at any project tempo and its pitch moves with the speed, like Re-Pitch.
     double fileFramesPerBeat = 0.0;
+    // Warp markers (07-warp.md, task 7.3): when the map is not linear, content beats turn into file frames through it
+    // (resampled, the Re-Pitch timing of a warped clip whose stretched copy is not ready yet). sampleStart and
+    // fileFramesPerBeat then only describe its average.
+    WarpMap warp;
 };
 
 // Per-sample fades of one stretch of playback, measured in beats since the stretch began (`elapsed`). The equal-power

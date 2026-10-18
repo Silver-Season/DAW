@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <map>
 
 namespace daw::dsp
 {
@@ -234,6 +235,158 @@ std::vector<std::vector<float>> stretchOffline (const std::vector<std::vector<fl
     // Drain the tail; anything the engine does not deliver (it rounds lengths slightly) stays silent.
     for (int idle = 0; written < target && ! s.finished() && idle < 4;)
         idle = run (0, false) == 0 ? idle + 1 : 0;
+    return result;
+}
+
+double mapThroughKeyFrames (const std::vector<KeyFrame>& k, double x) noexcept
+{
+    if (k.size() < 2)
+        return x;
+    size_t i = 0;
+    while (i + 2 < k.size() && (double) k[i + 1].first <= x)
+        ++i;
+    const double x0 = (double) k[i].first, x1 = (double) k[i + 1].first;
+    const double y0 = (double) k[i].second, y1 = (double) k[i + 1].second;
+    return x1 > x0 ? y0 + (x - x0) * (y1 - y0) / (x1 - x0) : y0;
+}
+
+namespace
+{
+// The faster engine follows a key-frame map only loosely (markers drift by up to ~12 ms), so for its modes every
+// segment between key frames is stretched on its own at its own ratio, with some audio before it for context, and the
+// segments are joined by a short crossfade that ends exactly on the key frame: what was marked plays where it was put.
+std::vector<std::vector<float>> stretchPiecewise (const std::vector<std::vector<float>>& in, double sampleRate,
+                                                  std::vector<KeyFrame> keys, int64_t outFrames, StretchMode mode)
+{
+    const int channels = (int) in.size();
+    std::vector<std::vector<float>> result ((size_t) channels, std::vector<float> ((size_t) outFrames, 0.0f));
+    const int64_t n = channels > 0 ? (int64_t) in[0].size() : 0;
+    if (n == 0 || outFrames == 0)
+        return result;
+
+    // The key frames inside the file and both of its ends.
+    std::sort (keys.begin(), keys.end());
+    std::vector<KeyFrame> k { { 0, (int64_t) std::llround (mapThroughKeyFrames (keys, 0.0)) } };
+    for (const auto& key : keys)
+        if (key.first > k.back().first && key.first < n && key.second > k.back().second)
+            k.push_back (key);
+    k.push_back ({ n, outFrames });
+    if (k.size() == 2 && k[0].second == 0)
+        return { stretchOffline (in, sampleRate, (double) outFrames / (double) n, mode) };
+
+    const auto context = (int64_t) std::llround (0.1 * sampleRate);
+    // The crossfade at each inner key frame ends exactly on it, so the marked moment is never faded.
+    std::vector<int64_t> fade (k.size(), 0);
+    for (size_t i = 1; i + 1 < k.size(); ++i)
+        fade[i] = std::min<int64_t> ({ (int64_t) std::llround (0.010 * sampleRate), (k[i].second - k[i - 1].second) / 4,
+                                       (k[i + 1].second - k[i].second) / 4 });
+    for (size_t i = 0; i + 1 < k.size(); ++i)
+    {
+        const int64_t a = k[i].first, b = k[i + 1].first, from = k[i].second, to = k[i + 1].second;
+        if (b <= a || to <= from)
+            continue;
+        const double ratio = (double) (to - from) / (double) (b - a);
+        const int64_t pre = std::min (a, context); // audio before the segment: context for the stretcher and the fade in
+        std::vector<std::vector<float>> chunk ((size_t) channels);
+        for (int c = 0; c < channels; ++c)
+            chunk[(size_t) c].assign (in[(size_t) c].begin() + (a - pre), in[(size_t) c].begin() + b);
+        const auto out = stretchOffline (chunk, sampleRate, ratio, mode);
+        const int64_t origin = from - (int64_t) std::llround ((double) pre * ratio); // output frame of the chunk's start
+        const int64_t fadeIn = fade[i], fadeOut = fade[i + 1];
+        for (int c = 0; c < channels; ++c)
+        {
+            const auto& o = out[(size_t) c];
+            auto& r = result[(size_t) c];
+            for (int64_t f = std::max<int64_t> (0, from - fadeIn); f < std::min (to, outFrames); ++f)
+            {
+                const int64_t j = f - origin;
+                if (j < 0 || j >= (int64_t) o.size())
+                    continue;
+                float g = 1.0f;
+                if (f < from)
+                    g = (float) (f - (from - fadeIn)) / (float) std::max<int64_t> (1, fadeIn);
+                else if (f >= to - fadeOut)
+                    g = (float) (to - f) / (float) std::max<int64_t> (1, fadeOut);
+                r[(size_t) f] += o[(size_t) j] * g;
+            }
+        }
+    }
+    return result;
+}
+} // namespace
+
+std::vector<std::vector<float>> stretchOfflineMapped (const std::vector<std::vector<float>>& in, double sampleRate,
+                                                      const std::vector<KeyFrame>& keyFrames, int64_t outFrames,
+                                                      StretchMode mode, const std::vector<int64_t>& onsets, double beatsDecay)
+{
+    if (mode == StretchMode::beats)
+        return stretchBeats (in, sampleRate, keyFrames, outFrames, onsets, beatsDecay);
+    if (mode == StretchMode::complex || mode == StretchMode::texture)
+        return stretchPiecewise (in, sampleRate, keyFrames, outFrames, mode);
+
+    const int channels = (int) in.size();
+    outFrames = std::max<int64_t> (0, outFrames);
+    std::vector<std::vector<float>> result ((size_t) channels, std::vector<float> ((size_t) outFrames, 0.0f));
+    const int64_t n = channels > 0 ? (int64_t) in[0].size() : 0;
+    if (n == 0 || outFrames == 0)
+        return result;
+
+    // The key frames inside the input, in Rubber Band's terms: a map of input frame to output frame. The overall ratio
+    // comes from the whole output length; the map bends the stretch along the way.
+    const double ratio = (double) outFrames / (double) n;
+    std::map<size_t, size_t> map;
+    for (const auto& [from, to] : keyFrames)
+        if (from > 0 && from < n && to > 0 && to < outFrames)
+            map[(size_t) from] = (size_t) to;
+
+    RB::Options o = optionsFor (mode) & ~(RB::Options) RB::OptionProcessRealTime;
+    RB rb ((size_t) std::lround (sampleRate), (size_t) channels, o, ratio, 1.0);
+    constexpr int kBlock = 4096;
+    rb.setMaxProcessSize (kBlock);
+    rb.setExpectedInputDuration ((size_t) n);
+
+    std::vector<const float*> inPtrs ((size_t) channels);
+    const auto at = [&] (int64_t from) {
+        for (int c = 0; c < channels; ++c)
+            inPtrs[(size_t) c] = in[(size_t) c].data() + from;
+        return inPtrs.data();
+    };
+    for (int64_t read = 0; read < n;)
+    {
+        const int64_t count = std::min<int64_t> (kBlock, n - read);
+        rb.study (at (read), (size_t) count, read + count == n);
+        read += count;
+    }
+    if (! map.empty())
+        rb.setKeyFrameMap (map);
+
+    std::vector<std::vector<float>> scratch ((size_t) channels, std::vector<float> (kBlock));
+    std::vector<float*> outPtrs ((size_t) channels);
+    int64_t written = 0;
+    const auto drain = [&] {
+        for (int avail = rb.available(); avail > 0; avail = rb.available())
+        {
+            const int count = std::min (avail, kBlock);
+            for (int c = 0; c < channels; ++c)
+                outPtrs[(size_t) c] = scratch[(size_t) c].data();
+            const auto got = (int64_t) rb.retrieve (outPtrs.data(), (size_t) count);
+            const int64_t keep = std::min<int64_t> (got, outFrames - written);
+            for (int c = 0; c < channels && keep > 0; ++c)
+                std::copy (scratch[(size_t) c].begin(), scratch[(size_t) c].begin() + keep, result[(size_t) c].begin() + written);
+            written += std::max<int64_t> (0, keep);
+            if (got <= 0)
+                break;
+        }
+    };
+    for (int64_t read = 0; read < n;)
+    {
+        const int64_t count = std::min<int64_t> (kBlock, n - read);
+        rb.process (at (read), (size_t) count, read + count == n);
+        read += count;
+        drain();
+    }
+    for (int idle = 0; rb.available() >= 0 && idle < 64; ++idle)
+        drain();
     return result;
 }
 } // namespace daw::dsp

@@ -2,6 +2,7 @@
 
 #include "Controls.h"
 
+#include "../engine/WarpService.h"
 #include "../model/ProjectActions.h"
 
 class AudioEngine;
@@ -19,7 +20,7 @@ class AudioClipEditor final : public juce::Component,
                               private juce::Timer
 {
 public:
-    static constexpr int kPropsWidth = 200, kRulerHeight = 30, kMargin = 8;
+    static constexpr int kPropsWidth = 200, kRulerHeight = 30, kWarpLane = 14, kStripHeight = 28, kMargin = 8;
     static constexpr double kMinBraceBeats = 1.0 / 64.0;
 
     AudioClipEditor (AudioEngine&, ProjectModel&, ProjectActions&);
@@ -41,6 +42,37 @@ public:
     void setLoopEnabled (bool on);
     void setFadeIn (double beats);
     void setFadeOut (double beats);
+
+    // Warp markers (docs/spec/07-warp.md, task 7.3). Each edit is one undo transaction. The map is the clip's (or a
+    // line from its start at its tempo); "materialized" markers are its markers, or the two ends of the file on that
+    // line when it has none, which is where the first marker edit starts from.
+    daw::engine::WarpMap warpMap() const;
+    std::vector<daw::engine::WarpMarker> materializedMarkers() const;
+    double fileFrames() const;
+    // Pins the audio under `beat` with a marker (and the ends of the file, the first time); returns its index.
+    int addWarpMarker (double beat);
+    // Moves marker `index` to `beat` (the audio stretches on both sides) or, with moveAudio, gives it the frame that
+    // played at `beat` in `before` (the audio under the marker moves). Clamped between its neighbours. No transaction of its own.
+    void moveWarpMarker (int index, double beat, bool moveAudio, const daw::engine::WarpMap& before);
+    void removeWarpMarker (int index);
+    void clearWarpMarkers();
+    // The moment at `beat` becomes the nearest bar line (the whole grid of the sound shifts by less than half a bar).
+    void setBarOneAt (double beat);
+    // The section from marker `index` to the next plays at `bpm`; the markers after it move with it.
+    void tempoFromMarker (int index, double bpm);
+    void quantizeMarkers();
+    void addMarkersAtOnsets();
+    // The project takes the tempo of the clip (its average between the markers).
+    void matchProjectTempo();
+    double clipTempo() const;
+    // An arrangement clip is cut into clips at the onsets of its audio or on the grid of the editor.
+    int sliceAtOnsets();
+    int sliceOnGrid();
+    int selectedMarker() const { return selected; }
+    void selectMarker (int index);
+    // Onsets and beats of the file from the analysis, in content beats (empty until the analysis is there).
+    std::vector<double> onsetBeats() const;
+    std::vector<double> uncertainBeats() const; // beats of the sound that the current grid misses
 
     // View state, for the chips, the tests and the screenshot script.
     struct View
@@ -65,6 +97,7 @@ public:
 
     class Wave;
     class Props;
+    class Strip;
     juce::Component& wave();
     juce::String helpAt (juce::Point<int>) const override { return {}; }
 
@@ -74,6 +107,7 @@ public:
 private:
     friend class Wave;
     friend class Props;
+    friend class Strip;
 
     void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override { dirty = true; }
     void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override { dirty = true; }
@@ -84,6 +118,9 @@ private:
 
     ClipRef clip() const;
     AudioFileRef file() const;
+    std::shared_ptr<const WarpService::Analysis> analysis() const;
+    void scaleTempoBy (double factor);
+    void setMarkers (std::vector<daw::engine::WarpMarker>, const juce::String& undoName);
 
     AudioEngine& engine;
     ProjectModel& model;
@@ -97,6 +134,9 @@ private:
 
     std::unique_ptr<Props> props;
     std::unique_ptr<Wave> waveView;
+    std::unique_ptr<Strip> strip;
+    int selected = -1;
+    bool shownAnalysis = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioClipEditor)
 };
