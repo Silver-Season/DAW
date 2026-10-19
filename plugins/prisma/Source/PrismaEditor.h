@@ -34,7 +34,7 @@ public:
     juce::Slider slider;
 
 private:
-    juce::Label label;
+    juce::Label label, value; // the value under the caption when the knob is tall enough
     juce::AudioProcessorValueTreeState::SliderAttachment attachment;
 };
 
@@ -91,6 +91,7 @@ class WavetableView : public juce::Component, private juce::Timer
 {
 public:
     WavetableView (PrismaProcessor&, int oscIndex);
+    juce::Colour colour; // the oscillator's colour: violet for A, jade for B
     void paint (juce::Graphics&) override;
 
 private:
@@ -101,6 +102,25 @@ private:
     std::atomic<float>* posParam;
     std::atomic<float>* onParam;
     float lastTable = -1, lastPos = -1, lastOn = -1;
+};
+
+// Small live pictures of a section's parameters: the ADSR curve of an envelope, the shape of an LFO, the response
+// of the filter. They read the parameters on a timer and draw in the section's colour.
+class ParamView : public juce::Component, private juce::Timer
+{
+public:
+    enum class Kind { envelope, lfo, filter };
+    ParamView (juce::AudioProcessorValueTreeState&, Kind, juce::String prefix, juce::Colour);
+    void paint (juce::Graphics&) override;
+
+private:
+    void timerCallback() override;
+    float norm (const juce::String& id) const;
+    juce::AudioProcessorValueTreeState& state;
+    Kind kind;
+    juce::String prefix;
+    juce::Colour colour;
+    std::vector<float> last;
 };
 
 // On-screen keyboard with octave shift and computer-keyboard playing:

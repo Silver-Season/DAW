@@ -77,6 +77,8 @@ void ThemeLookAndFeel::refresh()
         setColour (juce::TextButton::buttonOnColourId, t.accentFill);
         setColour (juce::TextButton::textColourOnId, t.inkOn (t.accentFill));
         setColour (juce::Slider::trackColourId, t.accentFill);
+        setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
     }
 }
 
@@ -358,11 +360,15 @@ ThemeLookAndFeel::drawLinearSlider (juce::Graphics& g,
                                 : bounds.withSizeKeepingCentre (bounds.getWidth (), 4.0f);
     g.setColour (t.line);
     g.fillRoundedRectangle (track, 2.0f);
-    const auto filled = vertical ? track.withTop (pos) : track.withRight (pos);
+    // a range across zero fills from the centre (mod amounts), otherwise from the start
+    const bool bipolar = s.getMinimum () < 0.0 && s.getMaximum () > 0.0;
+    const float zero = bipolar ? (float) s.getPositionOfValue (0.0) : (vertical ? track.getBottom () : track.getX ());
+    const auto filled = vertical ? juce::Rectangle<float>::leftTopRightBottom (track.getX (), juce::jmin (pos, zero), track.getRight (), juce::jmax (pos, zero))
+                                 : juce::Rectangle<float>::leftTopRightBottom (juce::jmin (pos, zero), track.getY (), juce::jmax (pos, zero), track.getBottom ());
     ui::glass::accent (g, filled, s.isEnabled () ? t.accentFill : t.dimText, 2.0f);
     const auto centre =
       vertical ? juce::Point<float> (bounds.getCentreX (), pos) : juce::Point<float> (pos, bounds.getCentreY ());
-    ui::glass::lens (g, juce::Rectangle<float> (22.0f, 18.0f).withCentre (centre), t.accentFill, vertical);
+    ui::glass::thumb (g, juce::Rectangle<float> (vertical ? 20.0f : 18.0f, vertical ? 14.0f : 18.0f).withCentre (centre));
 }
 
 void

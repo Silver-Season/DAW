@@ -70,12 +70,26 @@ Knob::Knob (juce::AudioProcessorValueTreeState& state, const juce::String& param
     label.setFont (juce::FontOptions (11.0f));
     label.setInterceptsMouseClicks (false, false);
     addAndMakeVisible (label);
+    value.setJustificationType (juce::Justification::centred);
+    value.setFont (juce::FontOptions (10.0f));
+    value.setInterceptsMouseClicks (false, false);
+    value.setAlpha (0.8f);
+    addChildComponent (value);
+    const auto update = [this] { value.setText (slider.getTextFromValue (slider.getValue()), juce::dontSendNotification); };
+    slider.onValueChange = update;
+    update();
 }
 
 void Knob::resized()
 {
     auto r = getLocalBounds();
-    label.setBounds (r.removeFromBottom (14));
+    // a tall knob shows its value under the caption, so the patch reads without hovering
+    const bool withValue = label.getText().isNotEmpty() && r.getHeight() >= 64 && slider.isRotary();
+    value.setVisible (withValue);
+    if (withValue)
+        value.setBounds (r.removeFromBottom (12));
+    if (label.getText().isNotEmpty())
+        label.setBounds (r.removeFromBottom (14));
     slider.setBounds (r);
 }
 
@@ -110,14 +124,118 @@ void Section::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (3.0f);
     g.setColour (findColour (juce::PopupMenu::backgroundColourId));
-    g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (findColour (juce::ComboBox::outlineColourId));
-    g.drawRoundedRectangle (r, 6.0f, 1.0f);
-    g.setColour (dynamic_cast<PrismaLookAndFeel*> (&getLookAndFeel ()) != nullptr
-                   ? accentColour
-                   : findColour (juce::ComboBox::arrowColourId));
+    g.fillRoundedRectangle (r, 10.0f);
+    g.setColour (findColour (juce::ComboBox::outlineColourId).withMultipliedAlpha (0.8f));
+    g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, 1.0f);
+    // the title: a dot in the section's colour, then the name in the text colour
+    const auto titleArea = r.reduced (10.0f, 4.0f).removeFromTop (16.0f);
+    g.setColour (accentColour);
+    g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ titleArea.getX() + 4.5f, titleArea.getCentreY() }));
+    g.setColour (findColour (juce::ComboBox::textColourId));
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
-    g.drawText (title.toUpperCase(), r.reduced (10.0f, 4.0f).removeFromTop (16.0f), juce::Justification::centredLeft);
+    g.drawText (title.toUpperCase(), titleArea.withTrimmedLeft (16.0f), juce::Justification::centredLeft);
+}
+
+//==============================================================================
+ParamView::ParamView (juce::AudioProcessorValueTreeState& s, Kind k, juce::String pre, juce::Colour c)
+    : state (s), kind (k), prefix (std::move (pre)), colour (c)
+{
+    setInterceptsMouseClicks (false, false);
+    startTimerHz (15);
+}
+
+float ParamView::norm (const juce::String& id) const
+{
+    if (auto* p = state.getParameter (prefix + id))
+        return p->getValue();
+    return 0.0f;
+}
+
+void ParamView::timerCallback()
+{
+    std::vector<float> now;
+    for (const auto* id : { "a", "d", "s", "r", "shape", "rate", "cutoff", "res", "type" })
+        now.push_back (norm (id));
+    if (now != last)
+    {
+        last = std::move (now);
+        repaint();
+    }
+}
+
+void ParamView::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat().reduced (4.0f, 3.0f);
+    g.setColour (findColour (juce::ResizableWindow::backgroundColourId).withAlpha (0.45f));
+    g.fillRoundedRectangle (r, 6.0f);
+    r = r.reduced (6.0f, 6.0f);
+    juce::Path line;
+    if (kind == Kind::envelope)
+    {
+        // attack, decay and release share the width by their (normalised) times; sustain is a level
+        const float a = 0.08f + norm ("a"), d = 0.08f + norm ("d"), rel = 0.08f + norm ("r"), hold = 0.35f;
+        const float total = a + d + hold + rel, sustain = norm ("s");
+        const auto xAt = [&] (float f) { return r.getX() + r.getWidth() * f / total; };
+        const float top = r.getY(), bottom = r.getBottom(), sy = bottom - (bottom - top) * sustain;
+        line.startNewSubPath (r.getX(), bottom);
+        line.quadraticTo (xAt (a * 0.5f), top + (bottom - top) * 0.15f, xAt (a), top);
+        line.quadraticTo (xAt (a + d * 0.3f), sy, xAt (a + d), sy);
+        line.lineTo (xAt (a + d + hold), sy);
+        line.quadraticTo (xAt (a + d + hold + rel * 0.3f), bottom, xAt (total), bottom);
+    }
+    else if (kind == Kind::lfo)
+    {
+        const int shape = juce::roundToInt (norm ("shape") * 5.0f);
+        const int cycles = 2;
+        for (int i = 0; i <= 160; ++i)
+        {
+            const float ph = (float) i / 160.0f * (float) cycles;
+            const float f = ph - std::floor (ph);
+            float v = 0.0f;
+            switch (shape)
+            {
+                case 0: v = std::sin (f * juce::MathConstants<float>::twoPi); break;
+                case 1: v = f < 0.5f ? f * 4.0f - 1.0f : 3.0f - f * 4.0f; break;
+                case 2: v = f * 2.0f - 1.0f; break;
+                case 3: v = 1.0f - f * 2.0f; break;
+                case 4: v = f < 0.5f ? 1.0f : -1.0f; break;
+                default: v = std::sin ((float) (int) (ph * 6.0f) * 2.3f) * 0.9f; break; // sample and hold: steps
+            }
+            const float x = r.getX() + r.getWidth() * (float) i / 160.0f, y = r.getCentreY() - v * r.getHeight() * 0.42f;
+            i == 0 ? line.startNewSubPath (x, y) : line.lineTo (x, y);
+        }
+    }
+    else
+    {
+        // an approximate response: flat, a resonant bump at the cutoff, then a slope (mirrored for high-pass)
+        const int type = juce::roundToInt (norm ("type") * 5.0f);
+        const float cut = 0.12f + norm ("cutoff") * 0.8f, res = norm ("res");
+        for (int i = 0; i <= 160; ++i)
+        {
+            const float x01 = (float) i / 160.0f;
+            const float dx = (type == 2 || type == 3 ? cut - x01 : x01 - cut) * (type == 1 || type == 3 ? 9.0f : 5.5f);
+            float level = dx < 0.0f ? 0.0f : -dx * dx;
+            level += res * 0.6f * std::exp (-std::pow ((x01 - cut) * 18.0f, 2.0f));
+            if (type == 4)
+                level = -std::pow ((x01 - cut) * 6.0f, 2.0f) + res * 0.6f;
+            if (type == 5)
+                level = -0.9f * std::exp (-std::pow ((x01 - cut) * 22.0f, 2.0f));
+            const float y = r.getY() + r.getHeight() * 0.35f - level * r.getHeight() * 0.5f;
+            const float px = r.getX() + r.getWidth() * x01, py = juce::jlimit (r.getY(), r.getBottom(), y);
+            i == 0 ? line.startNewSubPath (px, py) : line.lineTo (px, py);
+        }
+    }
+    if (kind != Kind::lfo)
+    {
+        auto area = line;
+        area.lineTo (r.getRight(), r.getBottom());
+        area.lineTo (r.getX(), r.getBottom());
+        area.closeSubPath();
+        g.setGradientFill (juce::ColourGradient (colour.withAlpha (0.35f), 0.0f, r.getY(), colour.withAlpha (0.04f), 0.0f, r.getBottom(), false));
+        g.fillPath (area);
+    }
+    g.setColour (colour);
+    g.strokePath (line, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 void Section::resized()
@@ -150,6 +268,7 @@ void Section::resized()
 //==============================================================================
 WavetableView::WavetableView (PrismaProcessor& p, int osc) : processor (p)
 {
+    colour = osc == 0 ? juce::Colour (0xff9855ef) : juce::Colour (0xff25dca0);
     const juce::String pre = osc == 0 ? "oscA_" : "oscB_";
     tableParam = p.apvts.getRawParameterValue (pre + "table");
     posParam = p.apvts.getRawParameterValue (pre + "pos");
@@ -207,14 +326,14 @@ void WavetableView::paint (juce::Graphics& g)
 
     for (int f = frames - 1; f >= 0; f -= 2)
     {
+        // the frames behind in the oscillator's colour, fading with depth
         const float t = (float) f / (float) juce::jmax (1, frames - 1);
-        g.setColour (findColour (juce::Label::textColourId).withAlpha (0.18f));
+        g.setColour ((on ? colour : findColour (juce::Label::textColourId)).withAlpha (on ? 0.12f + 0.22f * (1.0f - t) : 0.15f));
         g.strokePath (pathFor (f, t * depthX, t * depthY, -1.0f), juce::PathStrokeType (1.0f));
     }
 
     const float t = (float) active / (float) juce::jmax (1, frames - 1);
-    g.setColour ((on ? findColour (juce::Slider::trackColourId) : findColour (juce::Label::textColourId))
-                   .withAlpha (on ? 1.0f : 0.6f));
+    g.setColour ((on ? colour : findColour (juce::Label::textColourId)).withAlpha (on ? 1.0f : 0.6f));
     g.strokePath (pathFor (active, t * depthX, t * depthY, pos), juce::PathStrokeType (2.0f));
 
     g.setColour (findColour (juce::Label::textColourId));
@@ -404,13 +523,14 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     oscA = &makeOscSection (0);
     oscB = &makeOscSection (1);
 
-    filter = &make<Section> ("Filter", findColour (juce::ComboBox::arrowColourId));
+    filter = &make<Section> ("Filter", juce::Colour (0xffff4d6d));
     filter->addRow ({ &make<Toggle> (s, "flt_on", "On"), &make<Choice> (s, "flt_type") }, { 1.0f, 2.0f }, 0.45f);
+    filter->addRow ({ &make<ParamView> (s, ParamView::Kind::filter, "flt_", juce::Colour (0xffff4d6d)) }, {}, 0.8f);
     filter->addRow ({ &make<Knob> (s, "flt_cutoff", "Cutoff"), &make<Knob> (s, "flt_res", "Reso"), &make<Knob> (s, "flt_drive", "Drive"),
                       &make<Knob> (s, "flt_key", "Key"), &make<Knob> (s, "flt_env", "Env 2") });
     addAndMakeVisible (filter);
 
-    subNoise = &make<Section> ("Sub / Noise", findColour (juce::ComboBox::arrowColourId));
+    subNoise = &make<Section> ("Sub / Noise", juce::Colour (0xfff4cd48));
     subNoise->addRow ({ &make<Toggle> (s, "sub_on", "Sub"), &make<Choice> (s, "sub_oct"), &make<Knob> (s, "sub_level", "Sub"),
                         &make<Knob> (s, "noise_level", "Noise") },
                       { 1.0f, 1.4f, 1.0f, 1.0f });
@@ -419,9 +539,9 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     for (int e = 1; e <= 3; ++e)
     {
         const juce::String pre = "env" + juce::String (e) + "_";
-        auto& sec = make<Section> (e == 1 ? "Amp Env" : "Env " + juce::String (e),
-                                   e == 1 ? findColour (juce::Slider::trackColourId)
-                                          : findColour (juce::ComboBox::arrowColourId));
+        const juce::Colour envColour[] { juce::Colour (0xff25dca0), juce::Colour (0xff16bddd), juce::Colour (0xff9855ef) };
+        auto& sec = make<Section> (e == 1 ? "Amp Env" : "Env " + juce::String (e), envColour[e - 1]);
+        sec.addRow ({ &make<ParamView> (s, ParamView::Kind::envelope, pre, envColour[e - 1]) }, {}, 1.1f);
         sec.addRow ({ &make<Knob> (s, pre + "a", "A"), &make<Knob> (s, pre + "d", "D"), &make<Knob> (s, pre + "s", "S"), &make<Knob> (s, pre + "r", "R") });
         addAndMakeVisible (sec);
         envs.push_back (&sec);
@@ -430,15 +550,17 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     for (int l = 1; l <= 2; ++l)
     {
         const juce::String pre = "lfo" + juce::String (l) + "_";
-        auto& sec = make<Section> ("LFO " + juce::String (l), findColour (juce::ComboBox::arrowColourId));
+        const auto lfoColour = l == 1 ? juce::Colour (0xff448aff) : juce::Colour (0xffff9c49);
+        auto& sec = make<Section> ("LFO " + juce::String (l), lfoColour);
         sec.addRow ({ &make<Choice> (s, pre + "shape"), &make<Choice> (s, pre + "div") }, {}, 0.55f);
+        sec.addRow ({ &make<ParamView> (s, ParamView::Kind::lfo, pre, lfoColour) }, {}, 0.8f);
         sec.addRow ({ &make<Knob> (s, pre + "rate", "Rate"), &make<Toggle> (s, pre + "sync", "Sync"), &make<Toggle> (s, pre + "retrig", "Retrig") },
                     { 1.0f, 1.0f, 1.2f });
         addAndMakeVisible (sec);
         lfos.push_back (&sec);
     }
 
-    matrix = &make<Section> ("Mod Matrix");
+    matrix = &make<Section> ("Mod Matrix", juce::Colour (0xff16bddd));
     for (int row = 0; row < 4; ++row)
     {
         std::vector<juce::Component*> items;
@@ -448,8 +570,8 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
             items.push_back (&make<Choice> (s, pre + "src"));
             items.push_back (&make<Choice> (s, pre + "dst"));
             auto& amt = make<Knob> (s, pre + "amt", "");
-            amt.slider.setSliderStyle (juce::Slider::LinearBar);
-            amt.slider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 50, 20);
+            amt.slider.setSliderStyle (juce::Slider::LinearHorizontal); // a slider from the centre, the amount on its left
+            amt.slider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 44, 20);
             amt.slider.setNumDecimalPlacesToDisplay (2);
             items.push_back (&amt);
         }
@@ -457,7 +579,7 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     }
     addAndMakeVisible (matrix);
 
-    master = &make<Section> ("Voice / Master");
+    master = &make<Section> ("Voice / Master", juce::Colour (0xffeb48cc));
     master->addRow ({ &make<Knob> (s, "master_gain", "Gain"), &make<Knob> (s, "poly", "Voices"), &make<Knob> (s, "glide", "Glide"),
                       &make<Knob> (s, "bend", "Bend"), &make<Knob> (s, "vel_sens", "Velocity") });
     master->addRow ({ &make<Toggle> (s, "mono", "Mono"), &make<Toggle> (s, "legato", "Legato") }, {}, 0.5f);
@@ -481,7 +603,7 @@ Section& PrismaEditor::makeOscSection (int osc)
 {
     auto& s = synthProcessor.apvts;
     const juce::String pre = osc == 0 ? "oscA_" : "oscB_";
-    auto& sec = make<Section> (osc == 0 ? "Oscillator A" : "Oscillator B");
+    auto& sec = make<Section> (osc == 0 ? "Oscillator A" : "Oscillator B", osc == 0 ? juce::Colour (0xff9855ef) : juce::Colour (0xff25dca0));
     sec.addRow ({ &make<Toggle> (s, pre + "on", "On"), &make<Choice> (s, pre + "table") }, { 0.7f, 2.3f }, 0.6f);
     sec.addRow ({ &make<WavetableView> (synthProcessor, osc) }, {}, 1.5f);
     sec.addRow ({ &make<Knob> (s, pre + "pos", "WT Pos"), &make<Knob> (s, pre + "level", "Level"), &make<Knob> (s, pre + "pan", "Pan"),
@@ -522,7 +644,7 @@ void PrismaEditor::resized()
 
     const int h = r.getHeight();
     auto top = r.removeFromTop ((int)((float)h * 0.40f));
-    auto mid = r.removeFromTop ((int)((float)h * 0.25f));
+    auto mid = r.removeFromTop ((int)((float)h * 0.32f));
     auto bottom = r;
 
     const int w = top.getWidth();
