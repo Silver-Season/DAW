@@ -163,9 +163,148 @@ void ThemeLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar&, int x
     g.fillRoundedRectangle (thumb.toFloat(), 3.0f);
 }
 
+namespace
+{
+// Glass settings: the line icons of the tabs (Audio, MIDI, Recording, Appearance, Library, Plug-ins).
+juce::Path settingsIcon (int index, juce::Rectangle<float> b)
+{
+    juce::Path p;
+    const float x = b.getX(), y = b.getY(), w = b.getWidth(), h = b.getHeight();
+    const auto line = [&] (float x0, float y0, float x1, float y1) { p.startNewSubPath (x + w * x0, y + h * y0); p.lineTo (x + w * x1, y + h * y1); };
+    switch (index)
+    {
+        case 0: // audio: waveform bars
+            for (auto [k, a] : { std::pair { 0.1f, 0.3f }, { 0.3f, 0.8f }, { 0.5f, 0.5f }, { 0.7f, 0.95f }, { 0.9f, 0.4f } })
+                line (k, 0.5f - a * 0.5f, k, 0.5f + a * 0.5f);
+            break;
+        case 1: // MIDI: a keyboard
+            p.addRoundedRectangle (b.reduced (0.5f, 1.5f), 2.0f);
+            for (float k : { 0.3f, 0.5f, 0.7f })
+                line (k, 0.12f, k, 0.6f);
+            break;
+        case 2: // recording: a ring with a dot
+            p.addEllipse (b.reduced (0.5f));
+            p.addEllipse (b.reduced (w * 0.32f));
+            break;
+        case 3: // appearance: a sparkle
+            p.startNewSubPath (x + w * 0.5f, y);
+            p.quadraticTo (x + w * 0.56f, y + h * 0.44f, x + w, y + h * 0.5f);
+            p.quadraticTo (x + w * 0.56f, y + h * 0.56f, x + w * 0.5f, y + h);
+            p.quadraticTo (x + w * 0.44f, y + h * 0.56f, x, y + h * 0.5f);
+            p.quadraticTo (x + w * 0.44f, y + h * 0.44f, x + w * 0.5f, y);
+            break;
+        case 4: // library: a book
+            p.addRoundedRectangle (x + w * 0.15f, y, w * 0.7f, h, 2.0f);
+            line (0.32f, 0.0f, 0.32f, 1.0f);
+            break;
+        default: // plug-ins: a plug
+            p.addRoundedRectangle (x + w * 0.2f, y + h * 0.3f, w * 0.6f, h * 0.4f, 2.0f);
+            line (0.38f, 0.05f, 0.38f, 0.3f);
+            line (0.62f, 0.05f, 0.62f, 0.3f);
+            line (0.5f, 0.7f, 0.5f, 0.98f);
+            break;
+    }
+    juce::Path stroked;
+    juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (stroked, p);
+    return stroked;
+}
+
+// A small picture of a theme: its window background, title dots, a side column, the transport and a few clips.
+void drawThemeThumbnail (juce::Graphics& g, juce::Rectangle<float> r, const Theme& th)
+{
+    g.setColour (th.background);
+    g.fillRoundedRectangle (r, 8.0f);
+    const auto inner = r.reduced (5.0f);
+    for (int i = 0; i < 3; ++i)
+    {
+        const juce::Colour dots[] { juce::Colour (0xffff5f57), juce::Colour (0xfffebc2e), juce::Colour (0xff28c840) };
+        g.setColour (dots[i]);
+        g.fillEllipse (inner.getX() + (float) i * 7.0f, inner.getY(), 4.5f, 4.5f);
+    }
+    g.setColour (th.chrome);
+    g.fillRoundedRectangle (inner.getX() + 26.0f, inner.getY() - 0.5f, inner.getWidth() - 26.0f, 5.5f, 2.5f);
+    const auto body = inner.withTrimmedTop (9.0f);
+    g.setColour (th.chrome);
+    g.fillRoundedRectangle (body.withWidth (body.getWidth() * 0.22f), 3.0f);
+    const auto main = body.withTrimmedLeft (body.getWidth() * 0.26f);
+    g.setColour (th.panel);
+    g.fillRoundedRectangle (main, 3.0f);
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 4; ++col)
+        {
+            if ((row + col) % 3 == 2)
+                continue;
+            const float cw = (main.getWidth() - 10.0f) / 4.0f, ch = (main.getHeight() - 8.0f) / 3.0f;
+            g.setColour (th.palette ((col * 4 + row) % 16).withAlpha (th.glass ? 0.75f : 1.0f));
+            g.fillRoundedRectangle (main.getX() + 3.0f + (float) col * (cw + 1.3f), main.getY() + 3.0f + (float) row * (ch + 1.0f), cw, ch - 1.0f, 1.5f);
+        }
+}
+} // namespace
+
+void ThemeLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool over, bool down)
+{
+    const auto& t = theme();
+    if (t.glass && b.getProperties().contains ("themeCard"))
+    {
+        g.setColour (b.getToggleState() ? t.accent : t.text);
+        g.setFont (t.uiFont (12.0f, b.getToggleState() ? 600 : 500));
+        g.drawFittedText (b.getButtonText(), b.getLocalBounds().removeFromBottom (18), juce::Justification::centred, 1, 1.0f);
+        return;
+    }
+    if (t.glass && b.getProperties().contains ("primary"))
+    {
+        g.setColour (b.isEnabled() ? t.inkOn (t.accentFill) : t.dimText);
+        g.setFont (t.uiFont (13.0f, 600));
+        g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred, false);
+        return;
+    }
+    if (t.glass && b.getProperties().contains ("navIcon"))
+    {
+        const auto r = b.getLocalBounds().toFloat();
+        g.setColour (t.text.withAlpha (b.getToggleState() ? 1.0f : 0.8f));
+        g.fillPath (settingsIcon ((int) b.getProperties()["navIcon"], juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ r.getX() + 19.0f, r.getCentreY() })));
+        g.setColour (t.text);
+        g.setFont (t.uiFont (14.0f, b.getToggleState() ? 600 : 400));
+        g.drawText (b.getButtonText(), b.getLocalBounds().withTrimmedLeft (38), juce::Justification::centredLeft, true);
+        return;
+    }
+    LookAndFeel_V4::drawButtonText (g, b, over, down);
+}
+
 void ThemeLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& background, bool over, bool down)
 {
     const auto& t = theme();
+    if (t.glass && b.getProperties().contains ("themeCard"))
+    {
+        auto pic = b.getLocalBounds().toFloat().withTrimmedBottom (20.0f).reduced (1.5f);
+        for (const auto& th : ThemeManager::get().all())
+            if (th.id == b.getProperties()["themeCard"].toString())
+                drawThemeThumbnail (g, pic, th);
+        g.setColour (b.getToggleState() ? t.accent : (over ? t.dimText : t.line));
+        g.drawRoundedRectangle (pic.expanded (b.getToggleState() ? 1.0f : 0.0f), 8.0f, b.getToggleState() ? 2.0f : 1.0f);
+        return;
+    }
+    if (t.glass && b.getProperties().contains ("primary"))
+    {
+        // the main action of a dialog: accent-filled, with its own contrasting label
+        const auto r = b.getLocalBounds().toFloat().reduced (0.5f);
+        ui::glass::accent (g, r, b.isEnabled() ? t.accentFill : t.panel2, t.radius);
+        if (over || down)
+        {
+            g.setColour (t.highlight().withAlpha (down ? 0.18f : 0.1f));
+            g.fillRoundedRectangle (r, t.radius);
+        }
+        return;
+    }
+    if (t.glass && b.getProperties().contains ("navIcon"))
+    {
+        if (b.getToggleState() || over)
+        {
+            g.setColour (b.getToggleState() ? t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f) : t.panel2.withAlpha (0.7f));
+            g.fillRoundedRectangle (b.getLocalBounds().toFloat(), 8.0f);
+        }
+        return;
+    }
     auto r = b.getLocalBounds().toFloat().reduced (0.5f);
     auto fill = background;
     if (b.getToggleState())

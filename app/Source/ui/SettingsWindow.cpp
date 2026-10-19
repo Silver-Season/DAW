@@ -835,6 +835,7 @@ public:
             if (cards.size () >= 6)
                 break;
             auto b = std::make_unique<juce::TextButton> (t.name);
+            b->getProperties ().set ("themeCard", t.id); // glass: drawn as a thumbnail of the theme
             b->setClickingTogglesState (true);
             b->setToggleState (t.id == theme ().id, juce::dontSendNotification);
             b->setColour (juce::TextButton::buttonColourId, t.panel);
@@ -875,9 +876,19 @@ public:
 
     void resized () override
     {
-        const int columns = 3, gap = 8, width = (getWidth () - 40 - gap * 2) / columns;
-        for (size_t i = 0; i < cards.size (); ++i)
-            cards[i]->setBounds (20 + (int)(i % 3) * (width + gap), 46 + (int)(i / 3) * 39, width, 32);
+        if (theme ().glass)
+        {
+            // glass: one row of theme thumbnails, a picture of each theme with its name under it
+            const int gap = 8, count = juce::jmax (1, (int) cards.size ()), width = (getWidth () - 40 - gap * (count - 1)) / count;
+            for (size_t i = 0; i < cards.size (); ++i)
+                cards[i]->setBounds (20 + (int) i * (width + gap), 42, width, 82);
+        }
+        else
+        {
+            const int columns = 3, gap = 8, width = (getWidth () - 40 - gap * 2) / columns;
+            for (size_t i = 0; i < cards.size (); ++i)
+                cards[i]->setBounds (20 + (int)(i % 3) * (width + gap), 46 + (int)(i / 3) * 39, width, 32);
+        }
         custom.setBounds (20, 132, 290, 30);
         themeList.setBounds (320, 132, getWidth () - 340, 30);
         const int half = getWidth () / 2;
@@ -1245,6 +1256,7 @@ public:
         {
             addChildComponent (*pages[(size_t) i]);
             tabs[(size_t) i].setButtonText (names[i]);
+            tabs[(size_t) i].getProperties().set ("navIcon", i); // glass: an icon and a soft pill, as in the browser
             tabs[(size_t) i].setClickingTogglesState (true);
             tabs[(size_t) i].setRadioGroupId (1);
             tabs[(size_t) i].onClick = [this, i] { show ((Tab) i); };
@@ -1271,7 +1283,7 @@ public:
     void paint (juce::Graphics& g) override
     {
         g.fillAll (theme().chrome);
-        g.setColour (theme().panel);
+        g.setColour (theme().glass ? theme().chrome.interpolatedWith (theme().background, 0.35f) : theme().panel);
         g.fillRect (0, 0, kTabWidth, getHeight());
         g.setColour (theme().line);
         g.fillRect (kTabWidth, 0, 1, getHeight());

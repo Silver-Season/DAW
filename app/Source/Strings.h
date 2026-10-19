@@ -605,6 +605,18 @@ inline juce::String clipping (double peakDb)
         return utf8 ("Пик +") + juce::String (peakDb, 1).replace (".", ",") + utf8 (" dBFS: в файле будет клиппинг. Включите нормализацию или лимитер на мастере.");
     return "Peak +" + juce::String (peakDb, 1) + " dBFS: the file will clip. Turn on normalize or put a limiter on the master.";
 }
+// Glass: the details card beside the form.
+inline const juce::String fileDetails = tr ("File details", "Файл");
+inline const juce::String fileName = tr ("Name", "Имя");
+inline const juce::String destination = tr ("Folder", "Папка");
+inline const juce::String estimatedLength = tr ("Length", "Длительность");
+inline const juce::String estimatedSize = tr ("Estimated size", "Примерный размер");
+inline const juce::String nothingToExport = tr ("Nothing in the Arrangement yet", "В аранжировке пока пусто");
+inline juce::String sizeText (double bytes)
+{
+    return bytes >= 1.0e9 ? juce::String (bytes / 1.0e9, 1) + tr (" GB", " ГБ")
+                          : juce::String (juce::jmax (1.0, std::round (bytes / 1.0e6))) + tr (" MB", " МБ");
+}
 } // namespace exportUi
 
 // Return tracks and sends (docs/spec/06-effects-mixing.md, task 6.3)
