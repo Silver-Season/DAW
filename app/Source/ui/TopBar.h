@@ -38,7 +38,17 @@ public:
     std::function<void ()> onRecordToArrangement, onRecordToSlot;
     std::function<void ()> onCaptureClicked;
 
-    std::function<void ()> onCpuClicked, onAppearanceClicked, onExportClicked;
+    std::function<void ()> onCpuClicked, onAppearanceClicked, onExportClicked, onUndoClicked, onRedoClicked,
+      onSettingsClicked, onLibraryClicked;
+    // The right edge of the browser column (0 when it is hidden): the Library button above it takes its width.
+    void setLeftColumn (int right)
+    {
+        if (right != leftColumn)
+        {
+            leftColumn = right;
+            resized ();
+        }
+    }
     void setProjectName (const juce::String& name)
     {
         projectName = name;
@@ -71,7 +81,8 @@ private:
 
     NumberField tempo;
     std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, punchIn, punchOut, follow,
-      backToArrangement, capture, version, scaleButton, appearanceButton, exportButton;
+      backToArrangement, capture, version, scaleButton, appearanceButton, exportButton, undoButton, redoButton,
+      settingsButton, libraryButton;
     std::unique_ptr<FakeSlider> morph; // the A <-> B morph waits for snapshots; the spectrum has its place meanwhile
     std::unique_ptr<Spectrum> spectrum;
     std::unique_ptr<Tabs> tabs;
@@ -83,6 +94,7 @@ private:
 
     juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea, capsuleArea;
     std::vector<int> separators; // thin lines between the groups of the transport capsule
+    int leftColumn = 0;
     juce::String projectName;
     void paintRibbon (juce::Graphics&);
     void updateRibbon();

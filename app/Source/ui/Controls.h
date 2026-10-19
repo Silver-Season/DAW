@@ -117,6 +117,9 @@ public:
     void setBoxed (bool b) { boxed = b; repaint(); }
     // Glass themes: no box, the number sits on the surface it belongs to (the transport capsule).
     void setBoxedInGlass (bool b) { boxedInGlass = b; repaint(); }
+    // Glass themes: draw the value as a level slider (a green bar with a thumb) and the number to its right.
+    // `centre` is the value at the middle of the travel (a fader-like skew for dB).
+    void setLevelBarInGlass (bool b, double centre) { levelBar = b; levelCentre = centre; repaint(); }
     void setFontHeight (float h) { fontHeight = h; repaint(); }
     void setJustification (juce::Justification j) { justification = j; repaint(); }
     bool isEditing() const { return editor != nullptr; }
@@ -145,7 +148,8 @@ private:
     double value = 0.0, minimum = 0.0, maximum = 1.0, interval = 0.01, sensitivity = 0.1, wheelStep = 1.0;
     int decimals = 2;
     juce::String suffix;
-    bool boxed = true, boxedInGlass = true, gestureOpen = false;
+    bool boxed = true, boxedInGlass = true, levelBar = false, gestureOpen = false;
+    double levelCentre = 0.0;
     float fontHeight = 13.0f;
     juce::Justification justification = juce::Justification::centred;
     juce::Point<int> lastDragPosition;

@@ -164,6 +164,7 @@ private:
     ui::EdgeTab browserTab { 3 }, detailTab { 2 };
     juce::TooltipWindow tooltips { this, 500 }; // shows EdgeTab tooltips after half a second
     ui::ScanlineOverlay scanlines;
+    ui::CardFrames cardFrames;
 
     juce::ApplicationCommandManager commandManager;
     ui::AppMenuModel menuModel;

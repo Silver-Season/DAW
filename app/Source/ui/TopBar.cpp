@@ -11,6 +11,60 @@
 
 namespace ui
 {
+namespace
+{
+// Line icons of the top row, turned into filled outlines so IconButton can fill them like the others.
+juce::Path stroked (const juce::Path& lines, float thickness = 1.5f)
+{
+    juce::Path out;
+    juce::PathStrokeType (thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (out, lines);
+    return out;
+}
+juce::Path undoIcon (juce::Rectangle<float> b, bool mirrored)
+{
+    juce::Path p;
+    p.startNewSubPath (b.getX() + b.getWidth() * 0.88f, b.getY() + b.getHeight() * 0.85f);
+    p.quadraticTo (b.getX() + b.getWidth() * 0.88f, b.getY() + b.getHeight() * 0.32f, b.getX() + b.getWidth() * 0.18f, b.getY() + b.getHeight() * 0.32f);
+    p.startNewSubPath (b.getX() + b.getWidth() * 0.42f, b.getY() + b.getHeight() * 0.06f);
+    p.lineTo (b.getX() + b.getWidth() * 0.16f, b.getY() + b.getHeight() * 0.32f);
+    p.lineTo (b.getX() + b.getWidth() * 0.42f, b.getY() + b.getHeight() * 0.58f);
+    if (mirrored)
+        p.applyTransform (juce::AffineTransform::scale (-1.0f, 1.0f, b.getCentreX(), b.getCentreY()));
+    return stroked (p);
+}
+juce::Path exportIcon (juce::Rectangle<float> b)
+{
+    juce::Path p;
+    p.startNewSubPath (b.getX() + b.getWidth() * 0.12f, b.getY() + b.getHeight() * 0.55f);
+    p.lineTo (b.getX() + b.getWidth() * 0.12f, b.getBottom() - b.getHeight() * 0.06f);
+    p.lineTo (b.getRight() - b.getWidth() * 0.12f, b.getBottom() - b.getHeight() * 0.06f);
+    p.lineTo (b.getRight() - b.getWidth() * 0.12f, b.getY() + b.getHeight() * 0.55f);
+    p.startNewSubPath (b.getCentreX(), b.getY() + b.getHeight() * 0.68f);
+    p.lineTo (b.getCentreX(), b.getY() + b.getHeight() * 0.04f);
+    p.startNewSubPath (b.getCentreX() - b.getWidth() * 0.24f, b.getY() + b.getHeight() * 0.26f);
+    p.lineTo (b.getCentreX(), b.getY() + b.getHeight() * 0.02f);
+    p.lineTo (b.getCentreX() + b.getWidth() * 0.24f, b.getY() + b.getHeight() * 0.26f);
+    return stroked (p);
+}
+juce::Path gearIcon (juce::Rectangle<float> b)
+{
+    const float r = juce::jmin (b.getWidth(), b.getHeight()) * 0.5f;
+    juce::Path p;
+    p.addStar (b.getCentre(), 8, r * 0.74f, r, 0.0f);
+    p.addEllipse (juce::Rectangle<float> (r * 0.72f, r * 0.72f).withCentre (b.getCentre()));
+    p.setUsingNonZeroWinding (false);
+    return p;
+}
+juce::Path libraryIcon (juce::Rectangle<float> b)
+{
+    juce::Path p;
+    p.addRoundedRectangle (b.reduced (0.5f, 1.5f), 2.0f);
+    p.startNewSubPath (b.getX() + b.getWidth() * 0.38f, b.getY() + 1.5f);
+    p.lineTo (b.getX() + b.getWidth() * 0.38f, b.getBottom() - 1.5f);
+    return stroked (p, 1.4f);
+}
+} // namespace
+
 //==============================================================================
 class TopBar::IconButton final : public juce::Component
 {
@@ -29,6 +83,8 @@ public:
     bool on = false;
     bool accentInk = false; // the label in the accent colour (the scale button while a scale is set)
     bool framed = false;    // glass themes: a button of its own (top row), not one of the capsule's row
+    float iconSize = 0.0f;  // 0: the default size
+    bool leftAligned = false; // icon and label start at the left edge (the Library button)
     std::function<void()> onClick;
     std::function<void()> onPopup; // right mouse button
 
@@ -73,6 +129,21 @@ public:
             ink = t.dimText.withAlpha (0.6f);
             border = border.withMultipliedAlpha (0.6f);
         }
+        if (t.glass && role == Role::play && icon && text.isEmpty())
+        {
+            // Glass: play is a round green button at all times, glowing while the song plays.
+            const auto circle = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight()), juce::jmin (r.getWidth(), r.getHeight()));
+            juce::DropShadow (t.play.withAlpha (on ? 0.55f : 0.25f), on ? 12 : 6, { 0, 1 }).drawForRectangle (g, circle.toNearestInt().reduced (3));
+            g.setGradientFill (juce::ColourGradient (t.play.interpolatedWith (t.highlight(), 0.25f), circle.getX(), circle.getY(),
+                                                     t.play.interpolatedWith (t.shadow(), 0.12f), circle.getX(), circle.getBottom(), false));
+            g.fillEllipse (circle);
+            g.setColour (t.highlight().withAlpha (0.55f));
+            g.drawEllipse (circle.reduced (0.75f), 1.0f);
+            g.setColour (juce::Colours::white);
+            const float s = circle.getHeight() * 0.36f;
+            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (circle.getCentre().translated (s * 0.08f, 0.0f))));
+            return;
+        }
         if (t.glass)
         {
             // Inside the transport capsule a button is only its icon until it is lit or under the mouse.
@@ -98,16 +169,29 @@ public:
         }
 
         g.setColour (ink);
+        const auto font = t.uiFont (getWidth() < 34 ? 10.5f : (framed && t.glass ? 13.5f : 12.5f), 500);
+        const float s = iconSize > 0.0f ? iconSize : (text.isEmpty() ? 11.0f : 10.0f);
+        if (icon && text.isNotEmpty() && iconSize > 0.0f)
+        {
+            // icon and label as one group: centred, or from the left edge
+            const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
+            const float groupWidth = s + 9.0f + textWidth;
+            const float x0 = leftAligned ? r.getX() + 12.0f : r.getCentreX() - groupWidth * 0.5f;
+            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre ({ x0 + s * 0.5f, r.getCentreY() })));
+            g.setFont (font);
+            g.drawText (text, juce::Rectangle<float> (x0 + s + 9.0f, r.getY(), textWidth + 4.0f, r.getHeight()), juce::Justification::centredLeft, false);
+            return;
+        }
         if (icon)
         {
-            const float s = text.isEmpty() ? 11.0f : 10.0f;
-            const auto box = juce::Rectangle<float> (s, s).withCentre (text.isEmpty() ? r.getCentre() : juce::Point<float> (r.getX() + 15.0f, r.getCentreY()));
+            const auto box = juce::Rectangle<float> (s, s).withCentre (text.isEmpty() ? r.getCentre() : juce::Point<float> (r.getX() + 8.0f + s * 0.5f, r.getCentreY()));
             g.fillPath (icon (box));
         }
         if (text.isNotEmpty())
         {
-            g.setFont (t.uiFont (getWidth() < 34 ? 10.5f : 12.5f, 500));
-            g.drawText (text, getLocalBounds().withTrimmedLeft (icon ? 24 : 0), juce::Justification::centred, false);
+            g.setFont (font);
+            const int iconRoom = icon ? juce::roundToInt (s + 12.0f) : 0;
+            g.drawText (text, getLocalBounds().withTrimmedLeft (iconRoom), juce::Justification::centred, false);
         }
     }
 
@@ -351,6 +435,33 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat().reduced (0.5f);
+        if (t.glass)
+        {
+            // A sunken pill track; the shown view is a raised glass pill in it.
+            const float pill = r.getHeight() * 0.5f;
+            g.setColour (t.panel2.withAlpha (t.isLight() ? 0.85f : 0.7f));
+            g.fillRoundedRectangle (r, pill);
+            g.setColour (t.line.withAlpha (0.6f));
+            g.drawRoundedRectangle (r, pill, 1.0f);
+            const auto half = r.getWidth() * 0.5f;
+            const auto active = (arrangement ? r.withTrimmedLeft (half) : r.withWidth (half)).reduced (3.0f);
+            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
+            glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
+            for (int i = 0; i < 2; ++i)
+            {
+                const bool on = (i == 1) == arrangement;
+                g.setColour (on ? t.text : t.dimText);
+                g.setFont (t.uiFont (14.0f, on ? 600 : 500));
+                g.drawText (i == 0 ? Strings::transport::sessionTab : Strings::transport::arrangementTab,
+                            (i == 0 ? r.withWidth (half) : r.withTrimmedLeft (half)).toNearestInt(), juce::Justification::centred, false);
+            }
+            if (hovering)
+            {
+                g.setColour (t.accent.withAlpha (0.2f));
+                g.fillRoundedRectangle (r.withTrimmedLeft (half), pill);
+            }
+            return;
+        }
         g.setColour (t.panel);
         g.fillRoundedRectangle (r, t.radius);
         auto left = r.removeFromLeft (r.getWidth() * 0.5f);
@@ -426,6 +537,25 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     };
     addAndMakeVisible (*appearanceButton);
     addAndMakeVisible (*exportButton);
+    exportButton->icon = exportIcon;
+    exportButton->iconSize = 14.0f;
+    exportButton->text = Strings::transport::exportShort;
+    exportButton->setHelpText (Strings::help::exportButton);
+    undoButton = std::make_unique<IconButton> ([] (juce::Rectangle<float> b) { return undoIcon (b, false); }, juce::String(), Role::normal, Strings::help::undoButton);
+    redoButton = std::make_unique<IconButton> ([] (juce::Rectangle<float> b) { return undoIcon (b, true); }, juce::String(), Role::normal, Strings::help::redoButton);
+    settingsButton = std::make_unique<IconButton> (gearIcon, juce::String(), Role::normal, Strings::help::settingsButton);
+    libraryButton = std::make_unique<IconButton> (libraryIcon, Strings::transport::library, Role::normal, Strings::help::libraryButton);
+    for (auto* b : { undoButton.get(), redoButton.get(), settingsButton.get(), libraryButton.get() })
+    {
+        b->iconSize = 15.0f;
+        addAndMakeVisible (*b);
+    }
+    undoButton->onClick = [this] { if (onUndoClicked) onUndoClicked(); };
+    redoButton->onClick = [this] { if (onRedoClicked) onRedoClicked(); };
+    settingsButton->onClick = [this] { if (onSettingsClicked) onSettingsClicked(); };
+    libraryButton->onClick = [this] { if (onLibraryClicked) onLibraryClicked(); };
+    libraryButton->leftAligned = true;
+    appearanceButton->setVisible (false); // Settings (the gear) opens Appearance among the other tabs
     scaleButton = std::make_unique<IconButton> (nullptr, Strings::transport::scaleOff, Role::normal, Strings::help::scaleButton);
     scaleButton->onClick = [this] {
         showScalePicker (*scaleButton, model.scaleRoot(), model.scaleMode(), [this] (int root, const juce::String& mode) {
@@ -628,9 +758,12 @@ void TopBar::tick()
 void TopBar::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
-    g.setColour (t.line);
-    g.fillRect (0, getHeight() - 1, getWidth(), 1);
+    g.fillAll (t.glass ? t.background : t.chrome); // glass: the window background, the capsule and cards float on it
+    if (! t.glass)
+    {
+        g.setColour (t.line);
+        g.fillRect (0, getHeight() - 1, getWidth(), 1);
+    }
 
     if (t.glass)
     {
@@ -642,13 +775,15 @@ void TopBar::paint (juce::Graphics& g)
     ui::drawLogo (g, logoArea.toFloat());
     g.setColour (t.text);
     g.setFont (t.uiFont (22.0f, 600));
-    g.drawText (Strings::labelAppName, juce::Rectangle<int> (64, 10, 105, 34), juce::Justification::centredLeft, false);
-    g.setColour (t.dimText);
-    g.setFont (t.uiFont (12.5f));
-    g.drawFittedText (projectName,
-                      juce::Rectangle<int> (185, 10, juce::jmax (60, getWidth () / 2 - 350), 34),
-                      juce::Justification::centredLeft,
-                      1);
+    g.drawText (Strings::labelAppName, juce::Rectangle<int> (logoArea.getRight() + 9, 9, 96, 34), juce::Justification::centredLeft, false);
+    // the project name, after a thin divider
+    const int nameX = logoArea.getRight() + 9 + 96 + 14;
+    g.setColour (t.line);
+    g.fillRect (nameX - 14, 17, 1, 18);
+    g.setColour (t.text);
+    g.setFont (t.uiFont (15.0f, 500));
+    g.drawFittedText (projectName, juce::Rectangle<int> (nameX, 9, juce::jmax (40, tabs->getX() - nameX - 12), 34),
+                      juce::Justification::centredLeft, 1, 1.0f);
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
         if (! t.glass)
@@ -744,24 +879,37 @@ void TopBar::paintRibbon (juce::Graphics& g)
 
 void TopBar::resized()
 {
-    // Two rows. The upper one: the mark and the project name, the Session/Arrangement switch in the middle, the version,
-    // export and appearance on the right. The lower one is a capsule holding the transport, left to right in groups,
-    // with the lamps and the CPU on its right end; the ribbon and the spectrum take the room left in between.
-    constexpr int h = 30, gap = 6, groupGap = 15, cy = 77;
-    logoArea = { 17, 7, 38, 38 };
-    tabs->setBounds (getWidth () / 2 - 112, 10, 224, 32);
-    appearanceButton->setBounds (getWidth () - 14 - 104, 11, 104, 30);
-    exportButton->setBounds (appearanceButton->getX () - 8 - 96, 11, 96, 30);
-    version->setBounds (exportButton->getX () - 8 - 100, 11, 100, 30);
-    for (auto* b : { appearanceButton.get (), exportButton.get (), version.get (), capture.get () })
+    // Two rows. The upper one: the mark and the project name, the Session/Arrangement switch in the middle, then the
+    // version, undo/redo, export and settings on the right. The lower one: the Library button over the browser column
+    // and a capsule holding the transport in groups, with the lamps and the CPU at its right end; the ribbon and the
+    // spectrum take the room left in between.
+    constexpr int h = 30, gap = 6, groupGap = 15, cy = 78;
+    logoArea = { 16, 10, 34, 34 };
+    tabs->setBounds (getWidth () / 2 - 120, 9, 240, 34);
+    settingsButton->setBounds (getWidth () - 14 - 34, 10, 34, 32);
+    exportButton->setBounds (settingsButton->getX () - 8 - 104, 10, 104, 32);
+    redoButton->setBounds (exportButton->getX () - 10 - 32, 10, 32, 32);
+    undoButton->setBounds (redoButton->getX () - 2 - 32, 10, 32, 32);
+    version->setBounds (undoButton->getX () - 10 - 96, 10, 96, 32);
+    appearanceButton->setBounds (version->getX (), 10, 0, 0);
+    for (auto* b : { exportButton.get (), version.get (), capture.get (), libraryButton.get () })
         b->framed = true;
+    // the top row's icons are plain until hovered
+    for (auto* b : { undoButton.get (), redoButton.get (), settingsButton.get () })
+        b->framed = false;
 
-    capsuleArea = { 10, cy - 21, getWidth () - 20, 42 };
+    // The transport needs about 1090 px; below that the Library button shrinks to its icon and gives the capsule room.
+    const int libraryFull = juce::jmax (110, leftColumn - 10);
+    const bool libraryCompact = getWidth () - 10 - (10 + libraryFull + 8) < 1090;
+    libraryButton->text = libraryCompact ? juce::String () : Strings::transport::library;
+    libraryButton->setBounds (10, cy - 20, libraryCompact ? 40 : libraryFull, 40);
+    capsuleArea = { libraryButton->getRight () + 8, cy - 21, getWidth () - 10 - (libraryButton->getRight () + 8), 42 };
+
     separators.clear ();
-    int x = capsuleArea.getX () + 10;
-    auto place = [&] (juce::Component& c, int width)
+    int x = capsuleArea.getX () + 12;
+    auto place = [&] (juce::Component& c, int width, int height = h)
     {
-        c.setBounds (x, cy - h / 2, width, h);
+        c.setBounds (x, cy - height / 2, width, height);
         x += width + gap;
     };
     auto separate = [&]
@@ -770,15 +918,15 @@ void TopBar::resized()
         separators.push_back (x - groupGap / 2 - 1);
     };
     place (*stop, h);
-    place (*play, h);
+    place (*play, 36, 36);
     place (*record, h);
     place (*overdub, 40);
     separate ();
-    positionArea = { x, cy - h / 2, 90, h };
-    x += 90 + gap;
-    place (tempo, 76);
-    signatureArea = { x, cy - h / 2, 54, h };
-    x += 54 + gap;
+    positionArea = { x, cy - h / 2, 80, h };
+    x += 80 + gap;
+    place (tempo, 70);
+    signatureArea = { x, cy - h / 2, 48, h };
+    x += 48 + gap;
     separate ();
     place (*scaleButton, 100);
     place (*metronome, h);
@@ -807,7 +955,7 @@ void TopBar::resized()
     capture->setVisible (false);
     morph->setVisible (false);
     spectrum->setVisible (false);
-    if (right - x >= 286 + 90 + groupGap)
+    if (right - x >= 286 + 120 + groupGap)
     {
         ribbonArea = { x, cy - h / 2, 286, h };
         ribbonStripArea = { x + 58, cy - 10, 130, 20 };
@@ -826,7 +974,7 @@ void TopBar::resized()
     if (right - x >= 90)
     {
         spectrum->setVisible (true);
-        spectrum->setBounds (x, cy - 15, juce::jmin (right - x, 260), 30);
+        spectrum->setBounds (x, cy - 15, juce::jmin (right - x, 300), 30);
     }
 }
 } // namespace ui

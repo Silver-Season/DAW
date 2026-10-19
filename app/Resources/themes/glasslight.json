@@ -1,8 +1,8 @@
 {
   "id": "glass-light",
   "name": "Glass · Light",
-  "background": "#e3e7e8",
-  "chrome": "#edf0f0",
+  "background": "#dde2e6",
+  "chrome": "#f0f3f4",
   "panel": "#f6f8f7",
   "panel2": "#e5eaf0",
   "line": "#c2cdd3",

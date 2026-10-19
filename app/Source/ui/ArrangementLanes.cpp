@@ -128,7 +128,7 @@ void ArrangementLanes::paintNotes (juce::Graphics& g, const ArrangementClipRef& 
     const float noteH = juce::jlimit (1.5f, 4.0f, rowH);
     const bool narrow = r.getWidth() < 40.0f;
     const auto clipBox = g.getClipBounds().toFloat();
-    g.setColour (ink.withAlpha (nameRow ? 0.6f : 0.45f));
+    g.setColour (theme().glass ? ink : ink.withAlpha (nameRow ? 0.6f : 0.45f));
     const double px = view.v.pxPerBeat;
     int drawn = 0;
     (void) clipStart;
@@ -209,22 +209,32 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
     if (inSession)
         base = base.withMultipliedSaturation (0.15f).withMultipliedBrightness (0.8f);
     const float a = alpha * (muted && ! inSession ? 0.55f : 1.0f);
-    g.setColour (base.withAlpha (a));
+    // Glass: a pastel clip with the notes and waveform in the deeper track colour, like the Session cells.
+    const bool pastel = t.glass && ! inSession && ! missing;
+    const auto fill = pastel ? t.panel.interpolatedWith (base, t.isLight() ? 0.40f : 0.34f) : base;
+    const auto content = pastel ? (t.isLight() ? base.interpolatedWith (t.text, 0.22f) : base.interpolatedWith (t.highlight(), 0.15f)) : t.clipInk;
+    const auto labelInk = pastel ? t.inkOn (fill) : t.clipInk;
+    g.setColour (fill.withAlpha (a));
     g.fillRoundedRectangle (r, radius);
+    if (pastel)
+    {
+        g.setColour (base.withAlpha (0.55f * a));
+        g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+    }
 
     {
         juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (r.toNearestInt());
         // the grid goes on under the notes and the waveform, so they can be lined up by eye
-        paintGrid (g, r.toNearestInt(), t.clipInk, 0.22f * a);
+        paintGrid (g, r.toNearestInt(), pastel ? base : t.clipInk, (pastel ? 0.14f : 0.22f) * a);
         if (audio)
-            paintAudio (g, c, r, clipLength, clipOffset, t.clipInk);
+            paintAudio (g, c, r, clipLength, clipOffset, content);
         else
-            paintNotes (g, c, r, clipStart, clipLength, clipOffset, t.clipInk);
+            paintNotes (g, c, r, clipStart, clipLength, clipOffset, pastel ? content.withAlpha (1.0f) : content);
 
         if (r.getWidth() > 26.0f)
         {
-            g.setColour (t.clipInk.withAlpha (a));
+            g.setColour (labelInk.withAlpha (a));
             g.setFont (t.uiFont (11.0f, 500));
             const bool looping = c.loop() && c.clip().isValid() && clipLength > c.clip().lengthBeats() - c.clip().loopStart() + kEpsilon;
             auto text = r.toNearestInt().withTrimmedLeft (6).withHeight (15).withTrimmedRight (looping ? 16 : 4);
@@ -246,7 +256,7 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
             }
             if (looping)
             {
-                g.setColour (t.clipInk.withAlpha (0.8f * a));
+                g.setColour (labelInk.withAlpha (0.8f * a));
                 g.fillPath (loopMark (juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ r.getRight() - 9.0f, r.getY() + 8.0f })));
             }
         }

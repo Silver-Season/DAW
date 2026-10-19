@@ -60,9 +60,12 @@ void InfoBar::timerCallback()
 void InfoBar::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
-    g.setColour (t.line);
-    g.fillRect (0, 0, getWidth(), 1);
+    g.fillAll (t.glass ? t.background : t.chrome);
+    if (! t.glass)
+    {
+        g.setColour (t.line);
+        g.fillRect (0, 0, getWidth(), 1);
+    }
 
     auto area = getLocalBounds().reduced (12, 0);
     if (message.isNotEmpty())
@@ -144,6 +147,53 @@ void EdgeTab::paint (juce::Graphics& g)
     const auto icon = juce::Rectangle<float> (s, s).withCentre (r.getCentre());
     g.setColour (hover ? t.accent : t.dimText);
     g.fillPath (icons::triangle (dir % 2 == 0 ? icon.withTrimmedLeft (-1).withTrimmedRight (-1) : icon.withTrimmedTop (-1).withTrimmedBottom (-1), dir));
+}
+
+//==============================================================================
+void CardFrames::setCards (std::vector<juce::Rectangle<int>> areas)
+{
+    if (areas != cards)
+    {
+        cards = std::move (areas);
+        repaint();
+    }
+}
+
+void CardFrames::paint (juce::Graphics& g)
+{
+    const auto& t = theme();
+    if (! t.glass)
+        return;
+    for (const auto& card : cards)
+    {
+        if (card.isEmpty())
+            continue;
+        const auto r = card.toFloat();
+        juce::Path rounded;
+        rounded.addRoundedRectangle (r, kRadius);
+        // corners: the window background outside the rounded shape
+        juce::Path corners;
+        corners.addRectangle (r);
+        corners.setUsingNonZeroWinding (false);
+        corners.addPath (rounded);
+        g.setColour (t.background);
+        g.fillPath (corners);
+        // a soft shadow below the card, kept out of the card itself
+        {
+            juce::Graphics::ScopedSaveState save (g);
+            for (const auto& other : cards)
+                g.excludeClipRegion (other.reduced (2));
+            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.07f : 0.30f), 12, { 0, 3 }).drawForPath (g, rounded);
+        }
+        // the rim: bright along the top, a quiet line all round
+        g.setColour (t.line.withAlpha (t.isLight() ? 0.55f : 0.7f));
+        g.strokePath (rounded, juce::PathStrokeType (1.0f));
+        g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.9f : 0.16f), 0.0f, r.getY(),
+                                                 t.highlight().withAlpha (0.0f), 0.0f, r.getY() + 40.0f, false));
+        juce::Path inner;
+        inner.addRoundedRectangle (r.reduced (1.0f), kRadius - 1.0f);
+        g.strokePath (inner, juce::PathStrokeType (1.0f));
+    }
 }
 
 //==============================================================================

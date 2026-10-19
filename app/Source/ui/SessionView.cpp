@@ -201,7 +201,18 @@ public:
                     g.fillRoundedRectangle (glyph.getX() + (float) k * 3.4f, glyph.getCentreY() - h * 0.5f, 2.0f, h, 1.0f);
                 }
                 textArea.removeFromRight (24);
-                g.setColour (t.clipInk);
+                g.setColour (t.glass ? t.inkOn (t.palette (track.colour ())) : t.clipInk);
+            }
+            if (t.glass)
+            {
+                // the track number before the name
+                const auto ink = t.inkOn (t.palette (track.colour ()));
+                const auto number = juce::String (view.model.indexOfTrack (track.id()) + 1);
+                g.setColour (ink.withAlpha (0.7f));
+                g.setFont (t.uiFont (12.0f, 500));
+                g.drawText (number, textArea.removeFromLeft (18), juce::Justification::centredLeft, false);
+                g.setColour (ink);
+                g.setFont (t.uiFont (12.5f, 600));
             }
             g.drawText (track.name(), textArea, juce::Justification::centredLeft, true);
         }
@@ -481,7 +492,8 @@ public:
             SessionRecorder::Progress progress;
             const bool hasProgress = recScene >= 0 && view.recorder->getProgress (v.track.id(), progress);
             // empty slots carry a trace of the track colour, so neighbouring columns differ
-            const auto emptyFill = t.panel.interpolatedWith (t.palette (v.track.colour()), t.glass ? 0.05f : 0.08f);
+            const auto emptyFill = t.glass ? t.panel.interpolatedWith (t.panel2, 0.45f).interpolatedWith (t.palette (v.track.colour()), 0.03f)
+                                           : t.panel.interpolatedWith (t.palette (v.track.colour()), 0.08f);
 
             for (int s = 0; s < numScenes; ++s)
             {
@@ -519,7 +531,9 @@ public:
                 if (audioClip)
                     audioSource = view.engine.peekAudioSource (clip.fileId());
                 const bool missing = audioClip && audioSource == nullptr;
-                const auto glassFill = t.panel.interpolatedWith (colour, isPlaying ? 0.9f : 0.5f);
+                // Glass: a pastel cell; notes and waveform in the deeper track colour, label in a contrasting ink.
+                const auto glassFill = t.panel.interpolatedWith (colour, isPlaying ? 0.62f : (t.isLight() ? 0.40f : 0.34f));
+                const auto deep = t.isLight() ? colour.interpolatedWith (t.text, 0.22f) : colour.interpolatedWith (t.highlight(), 0.15f);
                 const auto ink = missing ? t.dimText : (t.glass ? t.inkOn (glassFill) : t.clipInk);
                 if (t.glass && !missing)
                     fillCell (g, cell, glassFill);
@@ -541,7 +555,7 @@ public:
                                        false,
                                        clip.lengthBeats (),
                                        clip.contentTempo (view.model.tempo ()),
-                                       ink.withAlpha (0.7f));
+                                       t.glass ? deep.withAlpha (0.9f) : ink.withAlpha (0.7f));
                     if (audioSource->peaksAvailable.load (std::memory_order_acquire) < audioSource->numPeaks)
                         peaksPending = true; // still decoding: repaint on the next tick to show more
                 }
@@ -575,6 +589,13 @@ public:
                     g.setFont (t.uiFont (11.0f, 500));
                     g.drawText (clip.name(), b.withTrimmedLeft (26).withTrimmedRight (6).withHeight (16), juce::Justification::centredLeft, true);
                 }
+                else if (t.glass && cell.getHeight() >= 32.0f)
+                {
+                    // the name on top, a miniature of the notes below it
+                    g.setFont (t.uiFont (11.5f, 500));
+                    g.drawText (clip.name(), b.withTrimmedLeft (26).withTrimmedRight (6).withHeight (18).translated (0, 1), juce::Justification::centredLeft, true);
+                    paintNotePreview (g, clip, cell.withTrimmedLeft (26.0f).withTrimmedRight (7.0f).withTrimmedTop (19.0f).withTrimmedBottom (5.0f), deep);
+                }
                 else
                     g.drawText (clip.name(), b.withTrimmedLeft (26).withTrimmedRight (6), juce::Justification::centredLeft, true);
 
@@ -583,8 +604,11 @@ public:
                     const double pos = view.engine.isPlaying()
                                            ? clipProgress (clip, juce::jmax (0.0, view.engine.getPositionBeats() - rt->playingStartBeat.load()))
                                            : 0.0;
-                    g.setColour (t.clipInk.withAlpha (0.6f));
-                    g.fillRect (cell.getX(), cell.getBottom() - 3.0f, (float) cell.getWidth() * (float) pos, 3.0f);
+                    g.setColour (t.glass ? deep : t.clipInk.withAlpha (0.6f));
+                    if (t.glass) // the progress runs along the bottom inside the rounded cell
+                        g.fillRoundedRectangle (cell.getX() + 6.0f, cell.getBottom() - 4.0f, (cell.getWidth() - 12.0f) * (float) pos, 2.0f, 1.0f);
+                    else
+                        g.fillRect (cell.getX(), cell.getBottom() - 3.0f, (float) cell.getWidth() * (float) pos, 3.0f);
 
                     if (animate && t.glow > 0.0f)
                         drawSheen (g, cell, now, t.glow);
@@ -868,6 +892,35 @@ private:
                 const float y = top + height - (float) (n.pitch - lo) / span * height;
                 g.fillRect (x, y - 1.0f, juce::jmin (w, area.getRight() - x), 2.0f);
             }
+        }
+    }
+
+    // Glass: a miniature of a MIDI clip's notes, one short bar per note across the clip's length.
+    static void paintNotePreview (juce::Graphics& g, const ClipRef& clip, juce::Rectangle<float> area, juce::Colour colour)
+    {
+        if (area.getWidth() < 8.0f || area.getHeight() < 4.0f)
+            return;
+        const auto midi = clip.toMidiClip();
+        const double total = juce::jmax (0.25, midi.lengthBeats);
+        if (midi.notes.empty())
+            return;
+        int lo = 127, hi = 0;
+        for (const auto& n : midi.notes)
+        {
+            lo = juce::jmin (lo, n.pitch);
+            hi = juce::jmax (hi, n.pitch);
+        }
+        const float span = (float) juce::jmax (6, hi - lo);
+        const float barH = juce::jlimit (1.5f, 2.5f, area.getHeight() / (span + 1.0f) + 0.5f);
+        g.setColour (colour.withAlpha (0.9f));
+        for (const auto& n : midi.notes)
+        {
+            if (n.start >= total)
+                continue;
+            const float x = area.getX() + (float) (n.start / total) * area.getWidth();
+            const float w = juce::jmax (2.0f, (float) (n.length / total) * area.getWidth() - 1.0f);
+            const float y = area.getBottom() - barH - (float) (n.pitch - lo) / span * (area.getHeight() - barH);
+            g.fillRoundedRectangle (x, y, juce::jmin (w, area.getRight() - x), barH, barH * 0.5f);
         }
     }
 
@@ -1218,7 +1271,8 @@ public:
 
         dbField.setBounds (r.removeFromBottom (16).withTrimmedLeft (r.getWidth() / 3));
         meter.setBounds (r.getX(), r.getY(), 14, r.getHeight());
-        fader.setBounds (r.getX() + 20, r.getY(), 24, r.getHeight());
+        // the glass fader draws a dB scale in the room on its right
+        fader.setBounds (r.getX() + 20, r.getY(), juce::jmax (24, juce::jmin (64, r.getWidth() - 20)), r.getHeight());
     }
 
 private:
@@ -1295,7 +1349,8 @@ public:
         r.removeFromTop (6);
         dbField.setBounds (r.removeFromBottom (16).withTrimmedLeft (r.getWidth() / 3));
         meter.setBounds (r.getX(), r.getY(), 14, r.getHeight());
-        fader.setBounds (r.getX() + 20, r.getY(), 24, r.getHeight());
+        // the glass fader draws a dB scale in the room on its right
+        fader.setBounds (r.getX() + 20, r.getY(), juce::jmax (24, juce::jmin (64, r.getWidth() - 20)), r.getHeight());
     }
 
 private:

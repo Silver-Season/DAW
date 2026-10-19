@@ -386,6 +386,8 @@ inline const juce::String cpu = utf8 ("CPU");
 inline const juce::String keysOn = tr ("KEYS", "КЛАВ");
 inline const juce::String midi = utf8 ("MIDI");
 inline const juce::String scaleOff = tr ("Scale: off", "Лад: выкл");
+inline const juce::String library = tr ("Library", "Библиотека");
+inline const juce::String exportShort = tr ("Export", "Экспорт");
 } // namespace transport
 
 // Browser panel (frame only; the sources come with task 1.5)
@@ -1114,6 +1116,11 @@ inline const juce::String controllerLane = make (tr ("Controller lane", "Пол�
 inline const juce::String morph = make (tr ("Morph A ↔ B", "Морф A ↔ B"), tr ("Smooth transition between knob snapshots. ", "Плавный переход между снимками ручек. ") + soon6);
 inline const juce::String tabSession = make (utf8 ("Session"), tr ("A grid of clips for live playing. Tab switches between Session and Arrangement.", "Сетка клипов для живой игры. Tab переключает Session и Arrangement."));
 inline const juce::String tabArrangement = make (utf8 ("Arrangement"), tr ("A linear timeline: clips by bar, markers, loop. Drag a clip from Session here. Tab switches between Session and Arrangement.", "Линейная шкала времени: клипы по тактам, маркеры, петля. Клип из Session можно перетащить сюда. Tab переключает Session и Arrangement."));
+inline const juce::String undoButton = make (tr ("Undo", "Отменить"), tr ("Takes back the last change. Cmd+Z", "Отменяет последнее изменение. Cmd+Z"));
+inline const juce::String redoButton = make (tr ("Redo", "Повторить"), tr ("Brings back what was undone. Cmd+Shift+Z", "Возвращает отменённое. Cmd+Shift+Z"));
+inline const juce::String settingsButton = make (tr ("Settings", "Настройки"), tr ("Audio, MIDI, recording, appearance and library. Cmd+,", "Звук, MIDI, запись, оформление и библиотека. Cmd+,"));
+inline const juce::String libraryButton = make (tr ("Library", "Библиотека"), tr ("Shows or hides the browser of sounds, instruments, effects and files.", "Показывает или прячет браузер звуков, инструментов, эффектов и файлов."));
+inline const juce::String exportButton = make (tr ("Export", "Экспорт"), tr ("Renders the song or the selected time to an audio file.", "Сводит песню или выделенное время в аудиофайл."));
 inline const juce::String version = make (tr ("Version history", "История версий"), tr ("Version number and time since the last save. Click to open the list: labels, return to a version.", "Номер версии и время с последнего сохранения. Щелчок открывает список: метки, возврат к версии."));
 inline const juce::String cpu = make (tr ("CPU load", "Нагрузка процессора"), tr ("Click to open audio settings.", "Щелчок открывает настройки звука."));
 inline const juce::String midiIn = make (tr ("MIDI input", "MIDI-вход"), tr ("Blinks when events arrive from MIDI devices.", "Мигает, когда приходят события с MIDI-устройств."));
