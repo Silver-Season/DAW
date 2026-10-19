@@ -166,6 +166,61 @@ surface (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float r
 }
 
 void
+bead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juce::Colour fringe)
+{
+    const auto& t = theme ();
+    if (round)
+        radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
+    radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
+    const float k = t.material > 0.0f ? t.material : 0.0f;
+    const auto shape = [&] (juce::Rectangle<float> b, float rad) {
+        juce::Path p;
+        if (round)
+            p.addEllipse (b);
+        else
+            p.addRoundedRectangle (b, rad);
+        return p;
+    };
+    const float thick = juce::jlimit (1.2f, 2.6f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.07f);
+    if (fringe.isTransparent ())
+        fringe = t.accentFill;
+    // shadow under the glass
+    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.16f : 0.5f), juce::roundToInt (thick * 3.5f) + 2, { 0, juce::roundToInt (thick) + 1 })
+      .drawForPath (g, shape (r, radius));
+    // the body: near white in light themes, a lifted panel in dark ones, lighter toward the top
+    const auto body = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.12f);
+    const auto lower = t.isLight () ? t.panel.interpolatedWith (t.line, 0.18f) : t.panel;
+    g.setGradientFill (juce::ColourGradient (body, 0.0f, r.getY (), lower, 0.0f, r.getBottom (), false));
+    g.fillPath (shape (r, radius));
+    if (k > 0.0f)
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (shape (r, radius));
+        // caustic: light gathered along the bottom inside the rim
+        const auto low = r.withTrimmedTop (r.getHeight () * 0.55f);
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha (0.0f), 0.0f, low.getY (),
+                                                 t.highlight ().withAlpha ((t.isLight () ? 0.7f : 0.16f) * k), 0.0f, r.getBottom () - thick, false));
+        g.fillRect (low);
+        // gloss on the upper half
+        const auto top = r.reduced (thick * 1.5f).withHeight (r.getHeight () * 0.45f);
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.85f : 0.22f) * k), 0.0f, top.getY (),
+                                                 t.highlight ().withAlpha (0.0f), 0.0f, top.getBottom (), false));
+        g.fillPath (shape (top, juce::jmax (0.0f, radius - thick * 1.5f)));
+        // the refracting rim: a darker band just inside the edge, lit cyan where the light bends at the lower left
+        g.setColour (t.shadow ().withAlpha ((t.isLight () ? 0.07f : 0.2f) * k));
+        g.strokePath (shape (r.reduced (thick * 1.1f), juce::jmax (0.0f, radius - thick * 1.1f)), juce::PathStrokeType (thick * 0.9f));
+        juce::ColourGradient rim (t.highlight ().withAlpha (t.isLight () ? 1.0f : 0.5f), r.getRight (), r.getY (),
+                                  fringe.withAlpha (0.75f * k), r.getX (), r.getBottom (), false);
+        rim.addColour (0.55, t.highlight ().withAlpha (t.isLight () ? 0.85f : 0.3f));
+        g.setGradientFill (rim);
+        g.strokePath (shape (r.reduced (thick * 0.5f), juce::jmax (0.0f, radius - thick * 0.5f)), juce::PathStrokeType (thick));
+    }
+    // a hairline outside, so the bead holds its shape on light ground
+    g.setColour (t.line.withAlpha (t.isLight () ? 0.55f : 0.8f));
+    g.strokePath (shape (r.reduced (0.25f), radius), juce::PathStrokeType (0.75f));
+}
+
+void
 cell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float radius)
 {
     const auto& t = theme ();
@@ -211,19 +266,8 @@ capsule (juce::Graphics& g, juce::Rectangle<float> r)
 void
 thumb (juce::Graphics& g, juce::Rectangle<float> r)
 {
-    // A glossy capsule: soft shadow, a body lit from above, a bright upper half and a rim.
-    const auto& t = theme ();
-    const float radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
-    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.26f : 0.55f), 5, { 0, 2 })
-      .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (r, radius); return p; } ());
-    const auto body = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.7f);
-    g.setGradientFill (juce::ColourGradient (body, 0.0f, r.getY (), body.interpolatedWith (t.line, 0.45f), 0.0f, r.getBottom (), false));
-    g.fillRoundedRectangle (r, radius);
-    const auto gloss = r.reduced (1.5f).withHeight (r.getHeight () * 0.48f);
-    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha (0.95f), 0.0f, gloss.getY (), t.highlight ().withAlpha (0.15f), 0.0f, gloss.getBottom (), false));
-    g.fillRoundedRectangle (gloss, juce::jmin (radius, gloss.getHeight () * 0.5f));
-    g.setColour (t.isLight () ? t.line.withAlpha (0.85f) : t.shadow ().withAlpha (0.5f));
-    g.drawRoundedRectangle (r.reduced (0.5f), radius - 0.5f, 1.0f);
+    // a small glass bead
+    bead (g, r, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f, std::abs (r.getWidth () - r.getHeight ()) < 0.5f);
 }
 
 void
@@ -313,28 +357,8 @@ knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour col
     const auto c = r.getCentre ();
     const auto sphere = juce::Rectangle<float> (sphereR * 2.0f, sphereR * 2.0f).withCentre (c);
     const float strength = t.material > 0.0f ? t.material : 0.0f;
-    juce::DropShadow (t.shadow ().withAlpha ((t.isLight () ? 0.22f : 0.55f) * juce::jmax (0.4f, strength)), juce::roundToInt (sphereR * 0.45f) + 2,
-                      { 0, juce::roundToInt (sphereR * 0.18f) + 1 })
-      .drawForPath (g, [&] { juce::Path p; p.addEllipse (sphere); return p; } ());
-    const auto light = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.35f);
-    const auto dark = t.isLight () ? t.panel2.interpolatedWith (t.line, 0.35f) : t.panel.interpolatedWith (t.shadow (), 0.3f);
-    juce::ColourGradient body (light, c.x - sphereR * 0.35f, c.y - sphereR * 0.55f, dark, c.x + sphereR * 0.4f, c.y + sphereR * 1.05f, true);
-    g.setGradientFill (body);
-    g.fillEllipse (sphere);
-    if (strength > 0.0f && sphereR >= 6.0f)
-    {
-        // the specular spot and a faint bounce of light along the lower rim
-        const auto spot = juce::Rectangle<float> (sphereR * 0.9f, sphereR * 0.55f).withCentre ({ c.x - sphereR * 0.22f, c.y - sphereR * 0.48f });
-        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.95f : 0.45f) * strength), spot.getCentreX (), spot.getCentreY (),
-                                                 t.highlight ().withAlpha (0.0f), spot.getRight (), spot.getBottom (), true));
-        g.fillEllipse (spot);
-        juce::Path bounce;
-        bounce.addCentredArc (c.x, c.y, sphereR - 1.2f, sphereR - 1.2f, 0.0f, juce::MathConstants<float>::pi * 0.65f, juce::MathConstants<float>::pi * 1.35f, true);
-        g.setColour (t.highlight ().withAlpha ((t.isLight () ? 0.7f : 0.2f) * strength));
-        g.strokePath (bounce, juce::PathStrokeType (1.0f));
-    }
-    g.setColour (t.isLight () ? t.line.withAlpha (0.8f) : t.shadow ().withAlpha (0.6f));
-    g.drawEllipse (sphere.reduced (0.25f), 0.8f);
+
+    bead (g, sphere, sphereR, true, colour);
     g.setColour (t.text);
     g.drawLine (c.x + std::sin (angle) * sphereR * 0.18f, c.y - std::cos (angle) * sphereR * 0.18f,
                 c.x + std::sin (angle) * sphereR * 0.78f, c.y - std::cos (angle) * sphereR * 0.78f, juce::jmax (1.4f, sphereR * 0.12f));

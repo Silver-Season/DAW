@@ -107,10 +107,20 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
     }
     else
     {
-        auto base = s.down ? t.panel2 : (s.hover ? t.panel.interpolatedWith (t.highlight(), t.isLight() ? 0.5f : 0.06f) : t.panel);
-        glass::surface (g, r, s.enabled ? base : base.withMultipliedAlpha (0.5f), radius);
-        g.setColour (t.line.withAlpha (s.enabled ? 0.85f : 0.45f));
-        g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+        if (s.enabled)
+        {
+            glass::bead (g, r, radius);
+            if (s.hover || s.down)
+            {
+                g.setColour ((s.down ? t.shadow() : t.highlight()).withAlpha (s.down ? 0.06f : 0.25f));
+                g.fillRoundedRectangle (r, radius);
+            }
+        }
+        else
+        {
+            g.setColour (t.panel2.withAlpha (0.5f));
+            g.fillRoundedRectangle (r, radius);
+        }
         ink = s.enabled ? t.text : t.dimText.withAlpha (0.6f);
     }
     if (s.focus)
@@ -210,9 +220,8 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
         }
         if (selected >= 0)
         {
-            const auto active = seg (selected).reduced (3.0f);
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
-            glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
+            const auto active = seg (selected).reduced (2.0f);
+            glass::bead (g, active, active.getHeight() * 0.5f);
         }
     }
     else

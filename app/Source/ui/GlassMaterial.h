@@ -17,6 +17,11 @@ bool capturing ();
 // material is off (reduce transparency) or the image is empty.
 void frosted (juce::Graphics&, juce::Rectangle<float> r, float radius, const juce::Image& behind, juce::Colour tint);
 
+// A liquid-glass body for a raised control (the selected segment, framed buttons, thumbs, knobs): a soft shadow, a
+// near-white body, a thick bright rim whose lower edge bends the light into a cyan fringe, a gloss on top and a caustic
+// glow along the bottom. `round` draws a circle in r.
+void bead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round = false, juce::Colour fringe = juce::Colour());
+
 // A flat cell (clip slot, field, meter): a soft top light only, no rim, so a grid of them stays calm.
 void
 cell (juce::Graphics&, juce::Rectangle<float>, juce::Colour, float radius);
