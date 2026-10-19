@@ -940,8 +940,11 @@ void TopBar::resized()
 
     separators.clear ();
     int x = capsuleArea.getX () + 12;
-    auto place = [&] (juce::Component& c, int width, int height = h)
+    // A local cannot be a default argument, so 0 stands for the row height.
+    auto place = [&] (juce::Component& c, int width, int height = 0)
     {
+        if (height == 0)
+            height = h;
         c.setBounds (x, cy - height / 2, width, height);
         x += width + gap;
     };
