@@ -4,6 +4,7 @@
 
 #include "DemoProject.h"
 #include "Strings.h"
+#include "engine/PluginFolders.h"
 #include "project/AudioImport.h"
 #include "ui/Dialogs.h"
 #include "ui/ThemeLookAndFeel.h"
@@ -1046,10 +1047,34 @@ void MainComponent::doOpen (const juce::File& file)
     }
 }
 
-void MainComponent::startup()
+void MainComponent::openFromSystem (const juce::File& file)
 {
+    if (! file.existsAsFile())
+        return;
+    if (! started)
+    {
+        pendingOpen = file;
+        return;
+    }
+    if (doc.hasFile() && doc.mainFile() == file)
+        return; // already open
+    confirmDiscard ([this, file] { doOpen (file); });
+}
+
+void MainComponent::startup (const juce::File& fileToOpen)
+{
+    started = true;
+    if (fileToOpen.existsAsFile())
+        pendingOpen = fileToOpen;
     const auto check = project::RecoveryCheck::check (project::ProjectSession::lockFileFor (settings));
     auto openFresh = [this] {
+        if (const auto file = std::exchange (pendingOpen, juce::File()); file.existsAsFile())
+        {
+            settings.setFirstRunDone();
+            doOpen (file);
+            if (doc.hasFile())
+                return;
+        }
         if (! settings.firstRunDone())
         {
             // The first launch shows the demo project once.
@@ -1313,6 +1338,7 @@ void MainComponent::showSettings (ui::SettingsWindow::Tab tab)
         };
         hooks.placesChanged = [this] { sources.scanPlaces (false); };
         hooks.scanPlugins = [this] { showPluginScanner(); };
+        hooks.scanPluginFolders = [this] { showPluginScanner (true); };
         hooks.closed = [this] {
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
                 if (safe != nullptr)
@@ -1325,35 +1351,126 @@ void MainComponent::showSettings (ui::SettingsWindow::Tab tab)
     settingsWindow->toFront (true);
 }
 
-void MainComponent::showPluginScanner()
+namespace
 {
-    if (scannerWindow != nullptr)
+// The plug-in list with one line above it: where a VST3 scan looks, a link to change it and a button that scans now.
+// A scan started here (or from Settings) runs each format in turn without the folder dialog: VST3 over the folders
+// of the settings, then the Audio Units the system knows.
+class PluginScanner final : public juce::Component, private juce::Timer
+{
+public:
+    PluginScanner (AudioEngine& e, std::function<void()> openFolders) : engine (e)
     {
-        scannerWindow->toFront (true);
-        return;
+        auto& props = engine.getSettings().getPropertiesFile();
+        auto deadMansPedal = props.getFile().getSiblingFile ("RecentlyCrashedPluginsList");
+        list = std::make_unique<juce::PluginListComponent> (engine.getFormatManager(), engine.getKnownPlugins(), deadMansPedal, &props, true);
+        addAndMakeVisible (*list);
+        change.setButtonText (Strings::settingsui::change);
+        change.onClick = std::move (openFolders);
+        scan.setButtonText (Strings::settingsui::scanNow);
+        scan.onClick = [this] { scanAll(); };
+        line.setFont (theme().uiFont (12.5f));
+        line.setColour (juce::Label::textColourId, theme().dimText);
+        for (auto* c : std::initializer_list<juce::Component*> { &line, &change, &scan })
+            addAndMakeVisible (c);
+        refreshLine();
+        setSize (760, 560);
     }
 
-    auto& props = engine.getSettings().getPropertiesFile();
-    auto deadMansPedal = props.getFile().getSiblingFile ("RecentlyCrashedPluginsList");
-    auto* list = new juce::PluginListComponent (engine.getFormatManager(), engine.getKnownPlugins(), deadMansPedal, &props, true);
-    list->setSize (760, 520);
-
-    struct ScannerWindow final : juce::DocumentWindow
+    void scanAll()
     {
-        ScannerWindow (juce::Component* content, std::function<void()> onClose)
-            : DocumentWindow (Strings::windowPlugins, theme().panel, DocumentWindow::closeButton), close (std::move (onClose))
-        {
-            setUsingNativeTitleBar (true);
-            setContentOwned (content, true);
-            setResizable (true, false);
-            centreWithSize (getWidth(), getHeight());
-            setVisible (true);
-        }
-        void closeButtonPressed() override { close(); }
-        std::function<void()> close;
-    };
+        if (list->isScanning())
+            return;
+        pending.clear();
+        for (auto* f : engine.getFormatManager().getFormats())
+            if (f->getName() == "VST3" || f->getName() == "AudioUnit")
+                pending.add (f->getName());
+        startTimer (200);
+        timerCallback();
+    }
 
-    scannerWindow = std::make_unique<ScannerWindow> (list, [this] {
-        juce::MessageManager::callAsync ([this] { scannerWindow.reset(); });
-    });
+    void refreshLine()
+    {
+        const auto folders = pluginfolders::vst3Folders (engine.getSettings().getPropertiesFile(), engine.getFormatManager());
+        line.setText (Strings::settingsui::scanFoldersLine (folders.size()), juce::dontSendNotification);
+        line.setTooltip (folders.joinIntoString ("\n"));
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds();
+        auto top = r.removeFromTop (40).reduced (10, 7);
+        scan.setBounds (top.removeFromRight (120));
+        top.removeFromRight (6);
+        change.setBounds (top.removeFromRight (110));
+        top.removeFromRight (6);
+        line.setBounds (top);
+        list->setBounds (r);
+    }
+
+    void paint (juce::Graphics& g) override { g.fillAll (theme().chrome); }
+
+private:
+    void timerCallback() override
+    {
+        refreshLine();
+        if (list->isScanning())
+            return;
+        while (! pending.isEmpty())
+        {
+            const auto name = pending[0];
+            pending.remove (0);
+            if (auto* format = pluginfolders::findFormat (engine.getFormatManager(), name))
+            {
+                const auto files = pluginfolders::filesToScan (engine.getSettings().getPropertiesFile(), engine.getFormatManager(), *format);
+                if (! files.isEmpty())
+                {
+                    list->scanFor (*format, files);
+                    return;
+                }
+            }
+        }
+        stopTimer();
+    }
+
+    AudioEngine& engine;
+    std::unique_ptr<juce::PluginListComponent> list;
+    juce::Label line;
+    juce::TextButton change, scan;
+    juce::StringArray pending;
+};
+} // namespace
+
+void MainComponent::showPluginScanner (bool scanNow)
+{
+    if (scannerWindow == nullptr)
+    {
+        auto* content = new PluginScanner (engine, [this] { showSettings (ui::SettingsWindow::plugins); });
+
+        struct ScannerWindow final : juce::DocumentWindow
+        {
+            ScannerWindow (juce::Component* c, std::function<void()> onClose)
+                : DocumentWindow (Strings::windowPlugins, theme().panel, DocumentWindow::closeButton), close (std::move (onClose))
+            {
+                setUsingNativeTitleBar (true);
+                setContentOwned (c, true);
+                setResizable (true, false);
+                centreWithSize (getWidth(), getHeight());
+                setVisible (true);
+            }
+            void closeButtonPressed() override { close(); }
+            std::function<void()> close;
+        };
+
+        scannerWindow = std::make_unique<ScannerWindow> (content, [this] {
+            juce::MessageManager::callAsync ([this] { scannerWindow.reset(); });
+        });
+    }
+    scannerWindow->toFront (true);
+    if (auto* scanner = dynamic_cast<PluginScanner*> (scannerWindow->getContentComponent()))
+    {
+        scanner->refreshLine();
+        if (scanNow)
+            scanner->scanAll();
+    }
 }

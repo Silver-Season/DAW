@@ -883,7 +883,7 @@ void DeviceChainView::rebuild()
 {
     dirty = false;
     const auto viewPosition = viewport.getViewPosition();
-    content->rebuild (model.findTrack (trackId));
+    content->rebuild (model.findTrackOrMaster (trackId));
     viewport.setViewPosition (viewPosition);
     content->applySelection (selection.get());
 }
@@ -1033,18 +1033,18 @@ void DetailPanel::tick()
 {
     updateEditor();
     const auto selected = model.selectedTrack();
-    if (selected != shownTrack || ! model.findTrack (shownTrack).isValid())
+    if (selected != shownTrack || ! model.findTrackOrMaster (shownTrack).isValid())
     {
-        shownTrack = model.findTrack (selected).isValid() ? selected : -1;
+        shownTrack = model.findTrackOrMaster (selected).isValid() ? selected : -1;
         chainView->setTrack (shownTrack);
     }
     chainView->tick();
 
-    const auto track = model.findTrack (shownTrack);
+    const auto track = model.findTrackOrMaster (shownTrack);
     if (! transposeField.isEditing())
         transposeField.setValue (track.isValid() ? track.transpose() : 0);
-    // without a track the summary card is empty, so its two controls go too
-    const bool cardShown = track.isValid() && ! editorShown;
+    // without a track the summary card is empty, so its two controls go too; the master has neither
+    const bool cardShown = track.isValid() && ! editorShown && ! track.isMaster();
     transposeField.setVisible (cardShown);
     recordSwitch->setVisible (cardShown);
     recordSwitch->setSource (track.isValid() ? track.recordSource() : juce::String ("midi"));
@@ -1125,12 +1125,25 @@ void DetailPanel::paint (juce::Graphics& g)
     g.fillRect (kInfoWidth - 1, 1, 1, getHeight() - 1);
 
     auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (14, 12);
-    const auto track = model.findTrack (shownTrack);
+    const auto track = model.findTrackOrMaster (shownTrack);
     if (! track.isValid())
     {
         g.setColour (t.dimText);
         g.setFont (t.uiFont (12.5f));
         g.drawFittedText (Strings::detail::noTrack, area, juce::Justification::topLeft, 4);
+        return;
+    }
+    if (track.isMaster())
+    {
+        // the master: its chain is everything there is to say
+        g.setColour (t.text);
+        g.setFont (t.uiFont (14.0f, 600));
+        g.drawText (Strings::masterName, area.removeFromTop (38), juce::Justification::bottomLeft, true);
+        area.removeFromTop (6);
+        g.setColour (t.dimText);
+        g.setFont (t.uiFont (12.5f));
+        g.drawText (Strings::detail::devices (track.numDevices()), area.removeFromTop (22), juce::Justification::centredLeft, true);
+        g.drawFittedText (Strings::detail::masterHint, area.removeFromTop (60), juce::Justification::topLeft, 4);
         return;
     }
 

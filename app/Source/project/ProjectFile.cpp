@@ -319,4 +319,22 @@ bool copyProjectFolder (const juce::File& from, const juce::File& to, juce::Stri
     }
     return true;
 }
+juce::File projectFileFromCommandLine (const juce::String& commandLine)
+{
+    auto args = juce::StringArray::fromTokens (commandLine, true);
+    for (auto arg : args)
+    {
+        arg = arg.trim().unquoted();
+        if (arg.isEmpty() || arg.startsWithChar ('-') || ! juce::File::isAbsolutePath (arg))
+            continue;
+        const juce::File f (arg);
+        if (f.existsAsFile() && f.hasFileExtension (kExtension))
+            return f;
+        if (f.isDirectory())
+            if (const auto main = findMainFile (f); main.existsAsFile())
+                return main;
+    }
+    return {};
+}
+
 } // namespace project

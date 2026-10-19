@@ -45,7 +45,7 @@ public:
     static constexpr int kHeaderWidth = 208, kMarkerLaneHeight = 20, kBraceHeight = 14, kBarRulerHeight = 24;
     static constexpr int kRulerHeight = kMarkerLaneHeight + kBraceHeight + kBarRulerHeight;
     static constexpr int kMinimapHeight = 36, kScrollBar = 10;
-    static constexpr int kMinTrackHeight = 24, kMaxTrackHeight = 240, kDefaultTrackHeight = 84;
+    static constexpr int kMinTrackHeight = 24, kMaxTrackHeight = 240, kDefaultTrackHeight = 84, kMasterRowHeight = 64;
     static constexpr int kAddTrackArea = 72; // below the last track: the add buttons, and room to drop a new track
     static constexpr double kMinPxPerBeat = 0.2, kMaxPxPerBeat = 600.0;
     static constexpr double kMinGridPixels = 12.0; // grid lines are never closer than this when the grid is adaptive

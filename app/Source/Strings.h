@@ -212,6 +212,32 @@ inline const juce::String tabSound = tr ("Audio", "Звук");
 inline const juce::String tabMidi = utf8 ("MIDI");
 inline const juce::String tabAppearance = tr ("Appearance", "Внешний вид");
 inline const juce::String tabLibrary = tr ("Library", "Библиотека");
+inline const juce::String tabPlugins = tr ("Plug-ins", "Плагины");
+inline const juce::String vst3Folders = tr ("VST3 folders", "Папки VST3");
+inline const juce::String vst3FoldersHint = tr ("A scan looks for .vst3 plug-ins in these folders and their subfolders.",
+                                               "Сканирование ищет плагины .vst3 в этих папках и во вложенных.");
+inline const juce::String auNote = tr ("Audio Units need no folder: macOS knows where they are installed (/Library/Audio/Plug-Ins/Components).",
+                                      "Audio Units не требуют папки: macOS сама знает, где они установлены (/Library/Audio/Plug-Ins/Components).");
+inline const juce::String addFolder = tr ("Add Folder…", "Добавить папку…");
+inline const juce::String chooseVst3Folder = tr ("Choose a folder with VST3 plug-ins", "Выберите папку с плагинами VST3");
+inline const juce::String scanNow = tr ("Scan Now", "Сканировать");
+inline const juce::String openPluginList = tr ("Plug-in List…", "Список плагинов…");
+inline juce::String pluginsFound (int n)
+{
+    if (! isRussian())
+        return n == 1 ? juce::String ("1 plug-in found") : juce::String (n) + " plug-ins found";
+    const int m10 = n % 10, m100 = n % 100;
+    const char* word = (m10 == 1 && m100 != 11) ? "плагин" : ((m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) ? "плагина" : "плагинов");
+    return utf8 ("Найдено: ") + juce::String (n) + " " + juce::String::fromUTF8 (word);
+}
+inline juce::String scanFoldersLine (int n)
+{
+    if (! isRussian())
+        return "VST3: " + juce::String (n) + (n == 1 ? " folder" : " folders") + " searched";
+    const int m10 = n % 10, m100 = n % 100;
+    const char* word = (m10 == 1 && m100 != 11) ? "папке" : "папках";
+    return juce::String::fromUTF8 ("VST3: поиск в ") + juce::String (n) + " " + juce::String::fromUTF8 (word);
+}
 inline const juce::String tabRecording = tr ("Recording", "Запись");
 inline const juce::String driver = tr ("Driver", "Драйвер");
 inline const juce::String input = tr ("Input", "Вход");
@@ -452,6 +478,8 @@ inline const juce::String input = tr ("Input", "Вход");
 inline const juce::String monitor = tr ("Monitoring", "Мониторинг");
 inline const juce::String chain = tr ("Chain", "Цепочка");
 inline const juce::String noTrack = tr ("Select a track to see its device chain", "Выберите дорожку, чтобы увидеть её цепочку устройств");
+inline const juce::String masterHint = tr ("Effects here process the whole mix. Drop an effect from the browser onto the chain.",
+                                          "Эффекты здесь обрабатывают весь микс. Перетащите эффект из браузера на цепочку.");
 inline const juce::String dropHere = tr ("Drag an effect or plug-in here from the browser", "Перетащите сюда эффект или плагин из браузера");
 inline juce::String devices (int n) { return juce::String (n) + tr (" dev.", " устр."); }
 inline juce::String missingPlugin (const juce::String& name) { return tr ("Plug-in not found: ", "Плагин не найден: ") + name; }
@@ -501,6 +529,33 @@ inline const juce::String none = tr ("None", "Нет");
 inline const juce::String peak01 = tr ("Peak −0.1 dBFS", "По пику −0,1 dBFS");
 inline const juce::String peak1 = tr ("Peak −1 dBFS", "По пику −1 dBFS");
 inline const juce::String tail = tr ("Add tail (reverb, delay)", "Добавлять хвост (ревер, дилей)");
+inline const juce::String what = tr ("What", "Что");
+inline const juce::String master = tr ("Master", "Мастер");
+inline const juce::String masterAndStems = tr ("Master and stems", "Мастер и стемы");
+inline const juce::String stemsOnly = tr ("Stems only", "Только стемы");
+inline const juce::String mp3Quality = tr ("Quality", "Качество");
+inline const juce::String vbrBest = tr ("VBR best (V0)", "VBR лучшее (V0)");
+inline const juce::String vbrGood = tr ("VBR good (V2)", "VBR хорошее (V2)");
+inline const juce::String lufs14 = tr ("Loudness −14 LUFS", "Громкость −14 LUFS");
+inline const juce::String lufs16 = tr ("Loudness −16 LUFS", "Громкость −16 LUFS");
+inline const juce::String lufs9 = tr ("Loudness −9 LUFS (loud)", "Громкость −9 LUFS (громко)");
+inline const juce::String stemsMuted = tr ("Include muted tracks in stems", "Стемы и для заглушённых дорожек");
+inline const juce::String stemsFolderSuffix = tr (" Stems", " Стемы");
+inline juce::String loudness (double lufs, double rangeLu, double truePeakDb)
+{
+    const auto n = [] (double v) { return isRussian() ? juce::String (v, 1).replace (".", ",") : juce::String (v, 1); };
+    if (isRussian())
+        return utf8 ("Громкость ") + n (lufs) + utf8 (" LUFS, диапазон ") + n (rangeLu) + utf8 (" LU, истинный пик ") + n (truePeakDb) + " dBTP";
+    return "Loudness " + n (lufs) + " LUFS, range " + n (rangeLu) + " LU, true peak " + n (truePeakDb) + " dBTP";
+}
+inline const juce::String limitedByPeak = tr ("Stopped short of the loudness target so the true peak stays at −1 dBTP. Put a limiter on the master to get louder.",
+                                              "Не дотянули до цели по громкости, чтобы истинный пик остался −1 dBTP. Чтобы было громче, поставьте лимитер на мастер.");
+inline juce::String stemsWritten (int n, const juce::String& folder)
+{
+    if (isRussian())
+        return utf8 ("Стемов: ") + juce::String (n) + utf8 (", папка «") + folder + utf8 ("»");
+    return juce::String (n) + (n == 1 ? " stem" : " stems") + juce::String::fromUTF8 (" in \xe2\x80\x9c") + folder + juce::String::fromUTF8 ("\xe2\x80\x9d");
+}
 inline const juce::String exportButton = tr ("Export…", "Экспорт…");
 inline const juce::String close = tr ("Close", "Закрыть");
 inline const juce::String cancel = tr ("Cancel", "Отмена");
@@ -921,6 +976,7 @@ inline const juce::String backToArrangement = tr ("Back to Arrangement", "Вер
 inline const juce::String automationMode = tr ("Automation (A)", "Автоматизация (A)");
 inline const juce::String autoVolume = tr ("Volume", "Громкость");
 inline const juce::String autoPan = tr ("Pan", "Панорама");
+inline const juce::String autoTempo = tr ("Tempo", "Темп");
 inline const juce::String autoParameter = tr ("Parameter", "Параметр");
 inline const juce::String autoNoDevices = tr ("No devices", "Устройств нет");
 inline const juce::String autoCurve = tr ("Curve", "Изгиб");
@@ -1092,6 +1148,7 @@ inline const juce::String soon3 = tr ("Arrives in stage 3", "Появится н
 inline const juce::String soon6 = tr ("Arrives in stage 6", "Появится на этапе 6");
 
 inline const juce::String logo = make (tr ("Prisma", "Призма"), tr ("The main DAW window. Track colors follow the spectrum from left to right.", "Главное окно DAW. Цвета дорожек идут по спектру слева направо."));
+inline const juce::String tempoMapped = make (tr ("Tempo", "Темп"), tr ("The song follows the Tempo envelope of the master (Arrangement, automation mode, master row); this shows the tempo at the cursor. Changing it here speeds up or slows down the whole envelope.", "Песня идёт по огибающей «Темп» на мастере (Аранжировка, режим автоматизации, строка мастера); здесь темп под курсором. Изменение здесь ускоряет или замедляет всю огибающую."));
 inline const juce::String tempo = make (tr ("Tempo", "Темп"), tr ("Beats per minute. Drag or scroll to change, double-click to type a number. Shift: finer.", "Ударов в минуту. Тяните мышью, колесо меняет, двойной щелчок вводит число. Shift: точнее."));
 inline const juce::String signature = make (tr ("Time signature", "Размер"), tr ("The project time signature. Change it in the “Project Properties” window (Cmd+Alt+P).", "Размер такта проекта. Меняется в окне «Свойства проекта» (Cmd+Alt+P)."));
 inline const juce::String metronome = make (tr ("Metronome", "Метроном"), tr ("Click to turn on the project metronome. Right-click: volume, “Only While Recording”, count-in, click sound.", "Щелчок включает метроном проекта. Правая кнопка: громкость, «Только во время записи», отсчёт, звук клика."));
@@ -1134,7 +1191,7 @@ inline const juce::String emptySlot =make (tr ("Empty slot", "Пустой сл�
 inline const juce::String sceneLaunch = make (tr ("Scene launch", "Запуск сцены"), tr ("Launches all clips of this scene. Double-click the name to rename.", "Запускает все клипы этой сцены. Двойной щелчок по названию переименовывает."));
 inline const juce::String sceneName = make (tr ("Scene", "Сцена"), tr ("Click to select the scene, double-click to rename, right-click for the menu.", "Щелчок выделяет сцену, двойной щелчок переименовывает, правая кнопка открывает меню."));
 inline const juce::String stopAllClips = make (tr ("Stop all clips", "Остановить все клипы"), tr ("Stops the clips of all tracks at the next quantize boundary.", "Останавливает клипы всех дорожек на ближайшей границе квантизации."));
-inline const juce::String masterHeader = make (tr ("Master", "Мастер"), tr ("The project’s main output. The scene launch buttons are to the right of the clips.", "Общий выход проекта. Справа от клипов находятся кнопки запуска сцен."));
+inline const juce::String masterHeader = make (tr ("Master", "Мастер"), tr ("The project’s main output. Click to show its effects in the bottom panel. The scene launch buttons are below.", "Общий выход проекта. Щелчок показывает его эффекты в нижней панели. Ниже находятся кнопки запуска сцен."));
 inline const juce::String fader = make (tr ("Volume", "Громкость"), tr ("Drag the fader or scroll to change, double-click to reset to 0 dB. Shift: finer.", "Тяните фейдер, колесо меняет, двойной щелчок сбрасывает в 0 дБ. Shift: точнее."));
 inline const juce::String volumeReadout = make (tr ("Volume in dB", "Громкость в дБ"), tr ("Double-click to type a number: Enter confirms, Esc cancels.", "Двойной щелчок открывает ввод числа: Enter подтверждает, Esc отменяет."));
 inline const juce::String panKnob = make (tr ("Pan", "Панорама"), tr ("Position in the stereo field. Double-click to center, Shift while turning: finer.", "Положение в стерео. Двойной щелчок возвращает в центр, Shift при вращении: точнее."));
@@ -1212,6 +1269,7 @@ inline const juce::String arrLiveToSession = make (tr ("Play Session clips", "И
 inline const juce::String arrLiveToArrangement = make (tr ("Back to timeline", "Вернуть на шкалу"), tr ("This track plays Session clips. Click to give it back to the timeline at the next launch boundary; the other tracks stay as they are.", "Дорожка играет клипы Session. Щелчок возвращает её на шкалу на ближайшей границе запуска; остальные дорожки остаются как есть."));
 inline const juce::String arrLiveNoClips = make (tr ("Play Session clips", "Играть клипы Session"), tr ("This track has no Session clips yet: put a clip into one of its slots in the Session View first.", "У дорожки ещё нет клипов Session: сначала положите клип в один из её слотов в Session View."));
 inline const juce::String arrHeader = make (tr ("Track header", "Заголовок дорожки"), tr ("The same tracks as in Session. Click to select, double-click the name to rename. Drag the bottom edge to change the track height.", "Те же дорожки, что в Session. Щелчок выделяет, двойной щелчок по имени переименовывает. Нижний край тянется, меняя высоту дорожки."));
+inline const juce::String arrMasterHeader = make (tr ("Master", "Мастер"), tr ("Envelopes of the whole mix: volume, pan and the master effects. Choose one above the lane and draw it like a track’s.", "Огибающие всего микса: громкость, панорама и эффекты мастера. Выберите огибающую над дорожкой и рисуйте её, как у обычной дорожки."));
 inline const juce::String arrHeaderEdge = make (tr ("Track height", "Высота дорожки"), tr ("Drag up and down: 24 to 240 pixels. Key H switches between “same height” and “fit notes”.", "Тяните вверх и вниз: от 24 до 240 пикселей. Клавиша H переключает «одинаковая высота» и «по нотам»."));
 inline const juce::String arrHeaderVolume = make (tr ("Track volume", "Громкость дорожки"), tr ("Drag up and down, double-click to type a number in dB. Shift: finer.", "Тяните вверх и вниз, двойной щелчок вводит число в дБ. Shift: точнее."));
 inline const juce::String arrAddMarker = make (tr ("New marker", "Новый маркер"), tr ("Adds a marker at the cursor (Cmd+M).", "Ставит маркер в позиции курсора (Cmd+M)."));

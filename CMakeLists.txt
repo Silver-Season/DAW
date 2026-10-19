@@ -25,6 +25,7 @@ endif()
 
 # Vendored third-party code (licences and versions in each folder's SOURCE.md).
 add_subdirectory(third_party/rubberband)
+add_subdirectory(third_party/lame)
 
 add_subdirectory(core)
 
@@ -58,6 +59,8 @@ if(DAW_BUILD_JUCE)
     # Sources shared by the app and the engine tests: model, settings, engine, theme, built-in Prisma.
     set(DAW_APP_SHARED_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Settings.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/PluginFolders.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/engine/Mp3Writer.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/Language.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ModelRefs.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/model/ProjectModel.cpp
@@ -132,7 +135,7 @@ if(DAW_BUILD_JUCE)
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_demo_song PRIVATE
             JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1)
-        target_link_libraries(daw_demo_song PRIVATE daw_core DawResources juce::juce_audio_utils
+        target_link_libraries(daw_demo_song PRIVATE daw_core mp3lame DawResources juce::juce_audio_utils
             juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     endif()
 
@@ -156,6 +159,7 @@ if(DAW_BUILD_JUCE)
             tests/SessionAudioUiTests.cpp
             tests/AudioRecordingTests.cpp
             tests/WarpTests.cpp
+            tests/MixTests.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/SessionView.cpp
             ${DAW_APP_SHARED_SOURCES})
         target_compile_definitions(daw_engine_tests PRIVATE
@@ -164,7 +168,7 @@ if(DAW_BUILD_JUCE)
             # the VST3 built from plugins/prisma in this same build, hosted by the hosting test
             DAW_TEST_VST3_DIR="${CMAKE_BINARY_DIR}/plugins/prisma/Prisma_artefacts/$<CONFIG>/VST3")
         add_dependencies(daw_engine_tests Prisma_VST3)
-        target_link_libraries(daw_engine_tests PRIVATE daw_core DawResources juce::juce_audio_utils
+        target_link_libraries(daw_engine_tests PRIVATE daw_core mp3lame DawResources juce::juce_audio_utils
             juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
         add_test(NAME daw_engine_tests COMMAND daw_engine_tests)
         # The same tests with the Russian UI: every text of Strings.h exists in both languages.

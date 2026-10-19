@@ -65,6 +65,9 @@ private:
     ProjectModel& model;
 
     NumberField tempo;
+    bool tempoMapped = false; // the master has a tempo envelope: the field shows its tempo and scales it
+    std::vector<std::pair<juce::ValueTree, double>> tempoScalePoints; // during a gesture on the field: the points and their BPM
+    double tempoScaleFrom = 0.0;
     std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, punchIn, punchOut, follow, backToArrangement, capture, version, scaleButton;
     std::unique_ptr<FakeSlider> morph; // the A <-> B morph waits for snapshots; the spectrum has its place meanwhile
     std::unique_ptr<Spectrum> spectrum;

@@ -179,11 +179,14 @@ bool BrowserActions::deviceHasType (const DeviceRef& d, const juce::String& type
 bool BrowserActions::accepts (const DragItem& item, DropTarget target, int64_t trackId, int64_t deviceId) const
 {
     const bool needsTrack = target == DropTarget::track || target == DropTarget::slot || target == DropTarget::chainGap || target == DropTarget::device;
-    if (needsTrack && ! model.findTrack (trackId).isValid() && target != DropTarget::device)
+    // The master takes effects in its chain (track and gap targets), nothing that makes clips.
+    const auto track = target == DropTarget::chainGap || target == DropTarget::track ? model.findTrackOrMaster (trackId) : model.findTrack (trackId);
+    if (needsTrack && ! track.isValid() && target != DropTarget::device)
+        return false;
+    if (track.isMaster() && (item.kind == kinds::midiFile || item.kind == kinds::audioFile))
         return false;
 
-    const auto track = model.findTrack (trackId);
-    const bool audioTrack = track.isValid() && track.isAudio();
+    const bool audioTrack = track.isValid() && ! track.hasInstrument();
     if (item.kind == kinds::midiFile)
         return target == DropTarget::newTrack || (target == DropTarget::slot && ! audioTrack);
     if (item.kind == kinds::audioFile)
@@ -338,7 +341,7 @@ DropResult BrowserActions::drop (const DragItem& item, DropTarget target, int64_
     }
 
     // track, slot or gap. A preset replaces the device of its own type wherever it is in the chain.
-    const auto track = model.findTrack (trackId);
+    const auto track = model.findTrackOrMaster (trackId);
     const bool isPreset = item.kind == kinds::prismaPreset || item.kind == kinds::userPreset;
     int sameType = -1;
     if (isPreset)
@@ -374,7 +377,7 @@ DropResult BrowserActions::drop (const DragItem& item, DropTarget target, int64_
     {
         // an effect: at the gap, otherwise at the end; never in front of the instrument
         int at = (target == DropTarget::chainGap && index >= 0) ? index : track.numDevices();
-        at = juce::jlimit (juce::jmin (1, track.numDevices()), track.numDevices(), at);
+        at = juce::jlimit (track.hasInstrument() ? juce::jmin (1, track.numDevices()) : 0, track.numDevices(), at);
         model.undo.beginNewTransaction (Strings::undoAddEffect (describe (spec)));
         r.deviceId = addSpec (track, spec, at).id();
     }
@@ -555,6 +558,12 @@ DropResult BrowserActions::dropAudioOnTimeline (const juce::Array<juce::File>& f
 
 DropResult BrowserActions::useOnTrack (const DragItem& item, int64_t selectedTrackId)
 {
+    if (selectedTrackId == ProjectModel::kMasterTrackId && item.kind != kinds::audioFile && item.kind != kinds::midiFile)
+    {
+        if (accepts (item, DropTarget::track, selectedTrackId))
+            return drop (item, DropTarget::track, selectedTrackId);
+        return {};
+    }
     const auto track = model.findTrack (selectedTrackId);
     if (item.kind == kinds::audioFile)
         return dropAudioFiles ({ juce::File (item.path) }, track.isValid() && track.isAudio() ? DropTarget::track : DropTarget::newTrack,

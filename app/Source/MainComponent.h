@@ -49,7 +49,11 @@ public:
 
     // Called once the window is visible: offers the recovery of a lost session, or opens the first-run demo
     // or a new project (the template if there is one).
-    void startup();
+    // `fileToOpen`: the project the app was launched with (Finder, the command line); it replaces the new project.
+    void startup (const juce::File& fileToOpen = {});
+    // A project handed over by the system while the app runs (a double click in Finder, a second launch with a file):
+    // asks about unsaved changes, then opens it. Before startup() it is kept for startup.
+    void openFromSystem (const juce::File&);
     // Asks about unsaved changes, then calls `quitNow` (the lock is removed first). Cancel does nothing.
     void requestQuit (std::function<void()> quitNow);
     project::ProjectSession& document() { return doc; }
@@ -135,7 +139,8 @@ private:
     void recordToSlotClicked();
     void recordArrangementClicked();
     void captureClicked();
-    void showPluginScanner();
+    // The plug-in list; `scanNow` also scans the VST3 folders and the Audio Units right away.
+    void showPluginScanner (bool scanNow = false);
 
     AudioEngine& engine;
     ProjectModel& model;
@@ -146,6 +151,8 @@ private:
     browser::BrowserSources sources;
     browser::BrowserActions browserActions;
     project::ProjectSession doc;
+    bool started = false;
+    juce::File pendingOpen; // handed over before startup()
     ui::SelectionState selection;
     ui::EditCommands editCommands;
 

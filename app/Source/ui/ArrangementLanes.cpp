@@ -464,7 +464,7 @@ ArrangementLanes::AutoHit ArrangementLanes::autoHitAt (juce::Point<int> p) const
     hit.row = view.rowAtY (p.y);
     if (hit.row < 0)
         return hit;
-    const auto track = view.model.findTrack (view.layoutRows[(size_t) hit.row].trackId);
+    const auto track = view.model.findTrackOrMaster (view.layoutRows[(size_t) hit.row].trackId);
     if (! track.isValid())
         return hit;
     const auto target = view.automationTarget (track.id());
@@ -490,7 +490,7 @@ ArrangementLanes::AutoHit ArrangementLanes::autoHitAt (juce::Point<int> p) const
 void ArrangementLanes::paintEnvelope (juce::Graphics& g, int row) const
 {
     const auto& t = theme();
-    const auto track = view.model.findTrack (view.layoutRows[(size_t) row].trackId);
+    const auto track = view.model.findTrackOrMaster (view.layoutRows[(size_t) row].trackId);
     if (! track.isValid())
         return;
     const auto target = view.automationTarget (track.id());
@@ -567,7 +567,7 @@ bool ArrangementLanes::beginAutomationGesture (const juce::MouseEvent& e)
     if (hit.row < 0 || (hit.point < 0 && ! hit.onLine))
         return false;
     const auto trackId = view.layoutRows[(size_t) hit.row].trackId;
-    const auto track = view.model.findTrack (trackId);
+    const auto track = view.model.findTrackOrMaster (trackId);
     if (! track.isValid())
         return false;
     const auto target = view.automationTarget (trackId);
@@ -621,7 +621,7 @@ void ArrangementLanes::dragAutomation (const juce::MouseEvent& e)
 {
     if (! autoPointNode.isValid() || ! autoPointNode.getParent().isValid())
         return;
-    const auto track = view.model.findTrack (autoTrackId);
+    const auto track = view.model.findTrackOrMaster (autoTrackId);
     if (! track.isValid())
         return;
     if (! movedEnough && e.getDistanceFromDragStart() < 2)
@@ -767,7 +767,7 @@ void ArrangementLanes::updateMoveGesture (const juce::MouseEvent& e)
             ok = false;
             break;
         }
-        const auto from = view.model.findTrack (d.trackId), to = view.model.findTrack (view.layoutRows[(size_t) target].trackId);
+        const auto from = view.model.findTrackOrMaster (d.trackId), to = view.model.findTrackOrMaster (view.layoutRows[(size_t) target].trackId);
         if (from.type() != to.type()) // a MIDI clip does not go to an audio lane
             ok = false;
     }
@@ -879,7 +879,7 @@ void ArrangementLanes::mouseDoubleClick (const juce::MouseEvent& e)
         const auto ah = autoHitAt (e.getPosition());
         if (ah.point >= 0)
         {
-            const auto track = view.model.findTrack (view.layoutRows[(size_t) ah.row].trackId);
+            const auto track = view.model.findTrackOrMaster (view.layoutRows[(size_t) ah.row].trackId);
             const auto lane = automation::findLane (track, view.automationTarget (track.id()));
             if (lane.isValid() && ah.point < lane.getNumChildren())
             {
@@ -1056,7 +1056,9 @@ void ArrangementLanes::showEmptyMenu (juce::Point<int> screenPosition, double be
     juce::PopupMenu menu;
     const juce::Component::SafePointer<ArrangementLanes> safe (this);
     const int row = view.rowAtY (getLocalPoint (nullptr, screenPosition).y);
-    const auto trackId = row >= 0 ? view.layoutRows[(size_t) row].trackId : -1;
+    auto trackId = row >= 0 ? view.layoutRows[(size_t) row].trackId : -1;
+    if (trackId == ProjectModel::kMasterTrackId)
+        trackId = -1; // the master row holds automation only
     menu.addItem (A::menuNewClip, trackId >= 0, false, [safe, trackId, beat] {
         if (safe != nullptr)
             safe->view.drawClipAt (trackId, beat);
