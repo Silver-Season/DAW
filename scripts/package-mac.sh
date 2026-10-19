@@ -69,12 +69,13 @@ ln -s /Applications "$stage_dir/image/Applications"
 } > "$stage_dir/image/BUILD-INFO.txt"
 
 created=0
-for attempt in 1 2 3; do
+# hdiutil on hosted runners sometimes fails with "Resource busy"; waiting a little longer each time gets through.
+for attempt in 1 2 3 4; do
     if hdiutil create -volname "Prisma DAW" -srcfolder "$stage_dir/image" -ov -format UDZO "$output"; then
         created=1
         break
     fi
-    sleep 2
+    sleep $((attempt * 5))
 done
 [ "$created" = 1 ] || exit 1
 hdiutil verify "$output"
