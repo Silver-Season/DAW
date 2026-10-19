@@ -37,6 +37,33 @@ public:
         const auto& t = theme();
         auto r = getLocalBounds().toFloat().reduced (0.5f);
         const bool lit = isToggle && on;
+        if (t.glass && isToggle)
+        {
+            // glass: a switch, the label on its left, no box
+            if (isMouseOver() && isEnabled())
+            {
+                g.setColour (t.panel2.withAlpha (0.6f));
+                g.fillRoundedRectangle (r, 6.0f);
+            }
+            const auto track = juce::Rectangle<float> (24.0f, 14.0f).withCentre ({ r.getRight() - 14.0f, r.getCentreY() });
+            if (lit)
+                glass::accent (g, track, t.accentFill, 7.0f);
+            else
+            {
+                g.setColour (t.line);
+                g.fillRoundedRectangle (track, 7.0f);
+            }
+            glass::thumb (g, juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ lit ? track.getRight() - 7.0f : track.getX() + 7.0f, track.getCentreY() }));
+            g.setColour (isEnabled() ? t.text : t.dimText);
+            g.setFont (t.uiFont (11.5f, lit ? 500 : 400));
+            g.drawText (text, getLocalBounds().withTrimmedLeft (4).withTrimmedRight (30), juce::Justification::centredLeft, true);
+            if (! isEnabled())
+            {
+                g.setColour (t.chrome.withAlpha (0.5f));
+                g.fillRect (getLocalBounds());
+            }
+            return;
+        }
         const auto litFill = t.glass ? t.accentFill : t.accent;
         auto fill = lit ? litFill : (isMouseOver() && isEnabled() ? t.panel2.brighter (0.08f) : t.panel2);
         if (! isEnabled())

@@ -206,7 +206,7 @@ ComingSoonView::ComingSoonView (const juce::String& t, const juce::String& x, co
 
 void ComingSoonView::resized()
 {
-    card = juce::Rectangle<int> (juce::jmin (440, getWidth() - 40), 220).withCentre (getLocalBounds().getCentre());
+    card = juce::Rectangle<int> (juce::jmin (440, getWidth() - 40), juce::jmin (220, getHeight() - 20)).withCentre (getLocalBounds().getCentre());
     button.setBounds (juce::Rectangle<int> (juce::jmin (260, card.getWidth() - 40), 34).withCentre ({ card.getCentreX(), card.getBottom() - 38 }));
 }
 
@@ -214,9 +214,15 @@ void ComingSoonView::paint (juce::Graphics& g)
 {
     const auto& t = theme();
     g.fillAll (t.chrome);
+    if (ghost)
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.setOpacity (t.isLight() ? 0.6f : 0.5f);
+        ghost (g, getLocalBounds().toFloat().reduced (12.0f));
+    }
     // the ghost: the strips the mixer will have, in the track colours, very faint
     const auto list = columns ? columns() : std::vector<Column>();
-    const int count = juce::jmax (6, (int) list.size());
+    const int count = ghost ? 0 : juce::jmax (6, (int) list.size()); // none when a picture of its own was drawn
     const float stripW = juce::jmin (118.0f, ((float) getWidth() - 24.0f) / (float) count);
     {
         juce::Graphics::ScopedSaveState save (g);

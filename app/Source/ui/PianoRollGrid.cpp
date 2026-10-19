@@ -99,7 +99,7 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
                 g.fillRect (0, y, w, vw.rowHeight);
             }
         }
-        g.setColour (t.line.withAlpha (pitch % 12 == 0 ? 0.9f : 0.35f));
+        g.setColour (t.line.withAlpha ((pitch % 12 == 0 ? 0.9f : 0.35f) * (t.glass ? 0.7f : 1.0f)));
         g.fillRect (0, y + vw.rowHeight - 1, w, 1);
     }
 
@@ -120,7 +120,7 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
         const double inBar = std::fmod (b / bar + 1.0e-6, 1.0);
         const bool isBar = inBar < 2.0e-6 || std::abs (std::fmod (b, bar)) < 1.0e-6;
         const bool isBeat = std::abs (b - std::round (b)) < 1.0e-6;
-        g.setColour (t.line.withAlpha (isBar ? 1.0f : (isBeat ? 0.6f : 0.28f)));
+        g.setColour (t.line.withAlpha ((isBar ? 1.0f : (isBeat ? 0.6f : 0.28f)) * (t.glass ? 0.7f : 1.0f)));
         g.fillRect (x, 0, 1, h);
     }
 
@@ -144,6 +144,35 @@ void PianoRoll::NoteGrid::paint (juce::Graphics& g)
         const bool sel = owner.isSelected (node);
         const auto r = b.toFloat().reduced (0.0f, 0.5f).withTrimmedRight (1.0f);
         const bool lit = owner.isPlayingNote (node);
+        if (t.glass)
+        {
+            // Glass: a rounded note, tinted by velocity, with a deeper rim; selected notes get an accent rim and two
+            // round handles at the ends.
+            const float radius = juce::jmin (4.0f, r.getHeight() * 0.35f);
+            const float vel = (float) note.velocity / 127.0f;
+            const auto fill = lit ? base.brighter (0.35f) : t.panel.interpolatedWith (base, 0.45f + 0.45f * vel);
+            g.setColour (fill);
+            g.fillRoundedRectangle (r, radius);
+            g.setColour (lit ? t.play : (sel ? t.accent : base.interpolatedWith (t.text, 0.25f)));
+            g.drawRoundedRectangle (r.reduced (0.5f), radius, lit || sel ? 1.8f : 1.0f);
+            if (sel && r.getWidth() > 12.0f && vw.rowHeight >= 8)
+                for (const float hx : { r.getX(), r.getRight() })
+                {
+                    const auto handle = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ hx, r.getCentreY() });
+                    g.setColour (t.highlight());
+                    g.fillEllipse (handle);
+                    g.setColour (t.accent);
+                    g.drawEllipse (handle, 1.3f);
+                }
+            if (vw.rowHeight >= 12 && r.getWidth() > 22.0f)
+            {
+                g.setColour (t.inkOn (fill));
+                g.setFont (t.numFont ((float) vw.rowHeight - 5.0f));
+                g.drawText (juce::MidiMessage::getMidiNoteName (note.pitch, true, true, 3), r.toNearestInt().reduced (5, 0),
+                            juce::Justification::centredLeft, false);
+            }
+            continue;
+        }
         fillCell (g, r, lit ? base.brighter (0.45f) : base.withAlpha (0.4f + 0.6f * (float) note.velocity / 127.0f), 0.35f);
         if (lit)
             strokeCell (g, r.expanded (1.0f), t.play, 2.0f, 0.35f); // the note sounds right now

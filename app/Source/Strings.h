@@ -429,6 +429,14 @@ inline const juce::String mixPlaceholderTitle = tr ("Mixer", "Микшер");
 inline const juce::String mixPlaceholderText = tr ("Every track at full height with inserts, sends, meters and a routing matrix. Until it is here, the mixer sits under the clips in Session.",
                                                    "Все дорожки во всю высоту: вставки, посылы, индикаторы и матрица маршрутизации. Пока его нет, микшер живёт под клипами в Session.");
 inline const juce::String mixPlaceholderAction = tr ("Open the Session mixer", "Открыть микшер в Session");
+inline const juce::String modePianoRoll = tr ("Piano Roll", "Пианоролл");
+inline const juce::String modeScore = tr ("Score", "Ноты");
+inline const juce::String modeStep = tr ("Step", "Шаги");
+inline const juce::String scoreSoonText = tr ("The clip as notation: staves, clefs, note values and ties, edited with the same gestures as the piano roll.",
+                                              "Клип нотной записью: станы, ключи, длительности и лиги, правка теми же жестами, что в пианоролле.");
+inline const juce::String stepSoonText = tr ("A step sequencer for the clip: rows of keys, sixteen steps a bar, velocity and probability per step.",
+                                             "Шаговый секвенсор для клипа: ряды клавиш, шестнадцать шагов на такт, сила и вероятность для каждого шага.");
+inline const juce::String backToPianoRoll = tr ("Back to the piano roll", "Вернуться в пианоролл");
 inline const juce::String exportShort = tr ("Export", "Экспорт");
 } // namespace transport
 

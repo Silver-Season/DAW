@@ -144,6 +144,7 @@ public:
     };
     ComingSoonView (const juce::String& title, const juce::String& text, const juce::String& action);
     std::function<std::vector<Column>()> columns; // the ghost picture: one mixer strip per column
+    std::function<void (juce::Graphics&, juce::Rectangle<float>)> ghost; // or a picture of its own
     std::function<void()> onAction;
     void paint (juce::Graphics&) override;
     void resized() override;
