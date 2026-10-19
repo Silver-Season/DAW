@@ -94,6 +94,8 @@ struct EffectType
     std::string id;       // "eq8"
     std::string name;     // English name; the app has its own translation by id
     std::string category; // "eq", "dynamics", "space", "colour", "modulation", "filter"
+    // Up to eight parameter ids the compact device shows as knobs, most important first; the rest fill in from params().
+    std::vector<std::string> keyParams;
 };
 
 // Every built-in effect, in the order the browser lists them.

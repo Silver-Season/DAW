@@ -2,6 +2,14 @@
 
 This file is updated at every notable step. A new chat, Codex or a person continues from here: what is done, what is in progress, what the next step is. The state lives in the repository, not in a chat.
 
+## Areas and agents (2026-10-19)
+
+The owner split the work into areas with one owner each (table in [AGENTS.md](../AGENTS.md)); `AGENTS.md` is now the one instruction for every agent and `CLAUDE.md` imports it. Codex owns the effects area: guide [docs/agents/EFFECTS.md](agents/EFFECTS.md), tasks [docs/agents/EFFECTS-BACKLOG.md](agents/EFFECTS-BACKLOG.md) (FX-1 Utility first). To keep that area self-contained, the Russian names of the effects moved from `Strings.h` to `app/Source/FxStrings.h`, the key knobs of each effect moved from `BuiltInEffectProcessor` into the registry (`EffectType::keyParams`), and `core/tests/fx/ContractTests.cpp` checks every registered effect (no allocation on the audio thread, extremes, rates, block sizes). Claude reviews and merges Codex's PRs.
+
+### Effects area (Codex)
+
+Nothing in progress yet. Next: FX-1.
+
 ## Glass round two (2026-10-19, after PR #27)
 
 Branch `claude/project-thread-ayt3r1` again, from main `e151afe`. The owner asked to bring the whole UI to the ten design sheets (`media/design/prisma-glass-system/`, local only: they name other products), with placeholders "in their ideal look" where a feature does not exist yet. Stage 1 done (main window): Session/Arrangement/Mix switch with a Mix placeholder (`ui::ComingSoonView`), status bar, browser icons, marker section bands, glass device cards, knob values, Capture dot, chevrons. Stage 2 done: piano roll (Score/Step placeholders), settings (icon tabs, theme thumbnails), export (details card), versions (cards), synth editor (envelope/LFO/filter pictures, coloured wavetables), drum pads. Not built from the sheets: a real Mix view with inserts and a routing matrix (05), the expanded library with tags and preview (08), sampler/sequencer/Touch inside the drum rack (07), the audio take comping and Voice panel (04): these are features, not restyling.

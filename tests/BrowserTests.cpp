@@ -496,6 +496,22 @@ void testToneAndPreview()
     check (runner.run (20) < 1e-5, "stopping the preview silences it");
     check (runner.nonFinite == 0, "no bad samples");
 }
+
+// Every effect in core's registry has a display name and a category name, and in Russian a Russian name: a new effect
+// that forgot app/Source/FxStrings.h fails here (in the Russian run). Untranslated parameters fall back to English.
+void testEffectNames()
+{
+    std::printf ("[stage 6] every built-in effect is named in both languages\n");
+    for (const auto& t : daw::fx::effectTypes())
+    {
+        const juce::String id (t.id), category (t.category);
+        const auto name = Strings::fx::effectName (id);
+        check (name.isNotEmpty() && name != id, id + ": has a display name (" + name + ")");
+        check (Strings::fx::categoryName (category) != category, id + ": its category " + category + " has a display name");
+        if (Strings::isRussian())
+            check (name != juce::String (t.name), id + ": has a Russian name");
+    }
+}
 } // namespace
 
 void tests::runBrowserTests()
@@ -506,4 +522,5 @@ void tests::runBrowserTests()
     testFavouritesAndRecents();
     testDrops();
     testToneAndPreview();
+    testEffectNames();
 }
