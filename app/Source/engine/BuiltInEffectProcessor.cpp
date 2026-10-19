@@ -152,28 +152,14 @@ void BuiltInEffectProcessor::setStateInformation (const void* data, int size)
 
 std::vector<int> BuiltInEffectProcessor::defaultMacros() const
 {
-    static const std::map<juce::String, std::vector<const char*>> knobs {
-        { "eq8", { "b2gain", "b3gain", "b4gain", "b5gain", "b6gain", "b7gain", "b1on", "b8on" } },
-        { "comp", { "threshold", "ratio", "attack", "release", "knee", "makeup", "mix", "output" } },
-        { "gate", { "threshold", "hysteresis", "attack", "hold", "release", "floor", "lookahead", "output" } },
-        { "limiter", { "ceiling", "gain", "release", "lookahead", "truePeak", "autoRelease", "output" } },
-        { "reverb", { "size", "decay", "predelay", "damping", "lowCut", "width", "diffusion", "mix" } },
-        { "delay", { "divL", "divR", "feedback", "pingPong", "hp", "lp", "ducking", "mix" } },
-        { "drive", { "mode", "drive", "tone", "bias", "input", "mix", "output" } },
-        { "crush", { "bits", "rate", "dither", "mix", "output" } },
-        { "filter", { "type", "freq", "resonance", "drive", "lfoDepth", "lfoRate", "envDepth", "mix" } },
-        { "chorus", { "voices", "rate", "depth", "delay", "width", "feedback", "mix", "output" } },
-        { "flanger", { "rate", "depth", "delay", "feedback", "phase", "sync", "div", "mix" } },
-        { "phaser", { "stages", "rate", "depth", "center", "feedback", "phase", "sync", "mix" } },
-        { "autopan", { "rate", "div", "sync", "depth", "shape", "phase", "offset", "mix" } },
-    };
     std::vector<int> result;
     if (effect == nullptr)
         return result;
-    if (const auto it = knobs.find (type); it != knobs.end())
-        for (const auto* id : it->second)
-            if (const int index = effect->paramIndex (id); index >= 0)
-                result.push_back (index);
+    for (const auto& t : daw::fx::effectTypes())
+        if (juce::String (t.id) == type)
+            for (const auto& id : t.keyParams)
+                if (const int index = effect->paramIndex (id); index >= 0 && result.size() < 8)
+                    result.push_back (index);
     for (int i = 0; result.size() < 8 && i < (int) params.size(); ++i)
         if (std::find (result.begin(), result.end(), i) == result.end())
             result.push_back (i);

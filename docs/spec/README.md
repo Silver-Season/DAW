@@ -24,6 +24,8 @@ Stages 8–10 can run in parallel with the main line after stage 6 (09 can start
 
 An English UI (translation of `app/Source/Strings.h`, a language switch, English screenshots) is a separate, later stage that does not have a spec file yet.
 
+New effects beyond stage 6 are a separate area with its own guide and task list: [`docs/agents/EFFECTS.md`](../agents/EFFECTS.md) and [`docs/agents/EFFECTS-BACKLOG.md`](../agents/EFFECTS-BACKLOG.md).
+
 Prototypes that Codex built separately (a trackpad drum pad and a vocal processor) are in [`docs/reference/codex/`](../reference/codex/README.md) as reference for stages 08 and 12.
 
 ## How to hand a stage to an implementer
