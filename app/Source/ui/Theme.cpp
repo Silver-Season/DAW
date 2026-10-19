@@ -237,6 +237,27 @@ bool Theme::fromJson (const juce::String& json, Theme& result, juce::String& err
             (juce::String (key) == "accentFill" ? t.accentFill : t.accentFill2) =
               juce::Colour (0xff000000u | (juce::uint32)hex.getHexValue32 ());
         }
+    t.metrics.controlRadius = t.metrics.panelRadius = t.radius;
+    if (const auto* m = obj->getProperty ("metrics").getDynamicObject())
+    {
+        const auto read = [m] (const char* key, float& value, float lo, float hi) {
+            if (m->hasProperty (key))
+                value = juce::jlimit (lo, hi, (float) (double) m->getProperty (key));
+        };
+        auto& x = t.metrics;
+        read ("gap", x.gap, 0.0f, 40.0f);
+        read ("padding", x.padding, 0.0f, 40.0f);
+        read ("controlHeight", x.controlHeight, 16.0f, 48.0f);
+        read ("compactHeight", x.compactHeight, 14.0f, 40.0f);
+        read ("controlRadius", x.controlRadius, 0.0f, 24.0f);
+        read ("panelRadius", x.panelRadius, 0.0f, 32.0f);
+        read ("text", x.text, 9.0f, 20.0f);
+        read ("small", x.small, 8.0f, 16.0f);
+        read ("title", x.title, 10.0f, 28.0f);
+        read ("number", x.number, 9.0f, 24.0f);
+        if (m->hasProperty ("pill"))
+            x.pill = (bool) m->getProperty ("pill");
+    }
     t.fontUi = obj->getProperty ("fontUi").toString();
     t.fontNum = obj->getProperty ("fontNum").toString();
 

@@ -82,6 +82,7 @@ if(DAW_BUILD_JUCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/browser/BrowserActions.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Theme.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/GlassMaterial.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Kit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/UiCommon.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Controls.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/app/Source/ui/Chrome.cpp

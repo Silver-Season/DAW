@@ -39,6 +39,19 @@
   "fontUi": "Onest",
   "fontNum": "JetBrains Mono",
   "glass": true,
+  "metrics": {
+    "gap": 8,
+    "padding": 12,
+    "controlHeight": 28,
+    "compactHeight": 24,
+    "controlRadius": 8,
+    "panelRadius": 12,
+    "pill": true,
+    "text": 13,
+    "small": 11.5,
+    "title": 15,
+    "number": 15
+  },
   "accentFill": "#16bddd",
   "accentFill2": "#9855ef",
   "nameRu": "Стекло · Светлая"
