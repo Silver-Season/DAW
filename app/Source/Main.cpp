@@ -6,6 +6,7 @@
 #include "engine/NullAudioDriver.h"
 #include "library/UserLibrary.h"
 #include "model/ArrangementEdit.h"
+#include "model/ProjectActions.h"
 #include "project/ProjectFile.h"
 #include "ui/ExportWindow.h"
 #include "ui/ThemeLookAndFeel.h"
@@ -62,6 +63,14 @@ public:
         if (snapshotDirectory != juce::File ())
         {
             populateDemoProject (*model);
+            {
+                // more scenes with clips, so the captures show clips passing under the glass mixer
+                ProjectActions actions (*model);
+                for (int scene = 0; scene < 3; ++scene)
+                    actions.duplicateScene (scene * 2);
+                for (const int scene : { 5, 3, 4, 1 })
+                    actions.duplicateScene (scene);
+            }
             for (const auto& track : model->tracks ())
                 for (int scene = 0; scene < juce::jmin (3, model->numScenes ()); ++scene)
                     if (const auto clip = track.clipAt (scene); clip.isValid ())

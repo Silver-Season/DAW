@@ -279,6 +279,20 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     });
 }
 
+void MainComponent::setGpuRendering (bool on)
+{
+    if (on == glContext.isAttached())
+        return;
+    if (on)
+    {
+        glContext.setComponentPaintingEnabled (true);
+        glContext.setContinuousRepainting (false);
+        glContext.attachTo (*this);
+    }
+    else
+        glContext.detach();
+}
+
 void MainComponent::attachKeyListeners (juce::Component& window)
 {
     window.addKeyListener (noteKeys.get());
@@ -287,6 +301,7 @@ void MainComponent::attachKeyListeners (juce::Component& window)
 
 MainComponent::~MainComponent()
 {
+    glContext.detach();
     stopTimer();
     topBar->setRecorder (nullptr);
     session->setRecorder (nullptr);
@@ -1131,6 +1146,8 @@ void MainComponent::openFromSystem (const juce::File& file)
 
 void MainComponent::startup (const juce::File& fileToOpen)
 {
+    // after the window is shown: the snapshot mode never calls startup, so its captures stay on the CPU
+    setGpuRendering (settings.gpuRendering());
     started = true;
     if (fileToOpen.existsAsFile())
         pendingOpen = fileToOpen;
@@ -1409,6 +1426,7 @@ void MainComponent::showSettings (ui::SettingsWindow::Tab tab)
         hooks.placesChanged = [this] { sources.scanPlaces (false); };
         hooks.scanPlugins = [this] { showPluginScanner(); };
         hooks.scanPluginFolders = [this] { showPluginScanner (true); };
+        hooks.gpuChanged = [this] (bool on) { setGpuRendering (on); };
         hooks.closed = [this] {
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
                 if (safe != nullptr)

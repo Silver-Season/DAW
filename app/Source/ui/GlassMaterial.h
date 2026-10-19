@@ -7,6 +7,16 @@ namespace ui::glass
 // Background surfaces never distort musical data or labels. Small control lenses refract their own track.
 void
 surface (juce::Graphics&, juce::Rectangle<float>, juce::Colour, float radius);
+// Real glass: what lies behind a glass panel, painted from `source` (a sibling layer, e.g. the clip grid under the
+// mixer) for `area` in the source's coordinates, at `scale` and blurred. Painting the source never repaints the glass,
+// and a glass panel painted during a capture skips its own capture (no recursion).
+juce::Image backdrop (juce::Component& source, juce::Rectangle<int> area, float scale = 0.25f, int blurRadius = 3);
+bool capturing ();
+// Draws a glass pane over `r` from a backdrop image (scaled to fill it): the blurred content, magnified a little toward
+// the centre so the rim bends it, a tint of the panel colour, the gloss and the rim. Falls back to `surface` when the
+// material is off (reduce transparency) or the image is empty.
+void frosted (juce::Graphics&, juce::Rectangle<float> r, float radius, const juce::Image& behind, juce::Colour tint);
+
 // A flat cell (clip slot, field, meter): a soft top light only, no rim, so a grid of them stays calm.
 void
 cell (juce::Graphics&, juce::Rectangle<float>, juce::Colour, float radius);

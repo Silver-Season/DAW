@@ -123,6 +123,9 @@ private:
 
     int contentWidth() const { return columnX.empty() ? 0 : columnX.back() + columnW.back(); }
     int contentHeight() const;
+    // Glass themes: the clip grid runs on under the mixer, which is glass over it; this is the height it hides.
+    int underGlass = 0;
+    void repaintGlassOver (bool scenesColumn); // the glass over the grid (or the scenes) shows what changed
     juce::Rectangle<int> gridRect() const { return gridArea; }
 
     // Edit the name of an item in place; `host` is the component the item is painted in.

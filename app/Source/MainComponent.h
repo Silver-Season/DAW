@@ -2,6 +2,8 @@
 
 #include "ui/ExportWindow.h"
 
+#include <juce_opengl/juce_opengl.h>
+
 #include "../../plugins/prisma/Source/PrismaEditor.h"
 #include "browser/BrowserActions.h"
 #include "browser/BrowserSources.h"
@@ -148,6 +150,11 @@ private:
     AudioEngine& engine;
     ProjectModel& model;
     Settings& settings;
+    // The window drawn on the graphics card (OpenGL, on Metal under macOS); see Settings::gpuRendering.
+    juce::OpenGLContext glContext;
+public:
+    void setGpuRendering (bool on);
+private:
     ProjectActions actions;
     SessionRecorder recorder; // MIDI recording and capture; polls the engine at 30 Hz
     library::UserLibrary library;

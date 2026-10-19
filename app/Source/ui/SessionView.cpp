@@ -444,6 +444,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        // the glass mixer shows this grid blurred: it follows every repaint of the grid
+        if (view.underGlass > 0 && ! glass::capturing())
+            view.repaintGlassOver (false);
         const auto& t = theme();
         const int numScenes = view.model.numScenes();
         const bool animate = view.engine.getSettings().animations();
@@ -1030,6 +1033,8 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (view.underGlass > 0 && ! glass::capturing())
+            view.repaintGlassOver (true);
         const auto& t = theme();
         const auto& sel = view.selection.get();
         const auto clipBounds = g.getClipBounds();
@@ -1296,6 +1301,13 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
+        if (view.underGlass > 0)
+        {
+            // glass over the clip grid: what scrolls beneath shows through, blurred
+            const auto area = view.grid->getLocalArea (this, getLocalBounds());
+            glass::frosted (g, r, t.metrics.panelRadius, glass::backdrop (*view.grid, area), t.panel);
+            return;
+        }
         fillCell (g, r, t.panel);
         strokeCell (g, r, t.line);
     }
@@ -1420,6 +1432,13 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
+        if (view.underGlass > 0)
+        {
+            // glass over the clip grid: what scrolls beneath shows through, blurred
+            const auto area = view.grid->getLocalArea (this, getLocalBounds());
+            glass::frosted (g, r, t.metrics.panelRadius, glass::backdrop (*view.scenes, area), t.panel);
+            return;
+        }
         fillCell (g, r, t.panel);
         strokeCell (g, r, t.line);
     }
@@ -1558,9 +1577,18 @@ void SessionView::setMixerVisible (bool visible)
         onMixerVisibilityChanged (visible);
 }
 
+void SessionView::repaintGlassOver (bool scenesColumn)
+{
+    if (scenesColumn)
+        masterStrip->repaint();
+    else
+        mixer->repaint();
+}
+
 int SessionView::contentHeight() const
 {
-    return model.numScenes() * kStep + kStopHeight;
+    // under a glass mixer the last row can be scrolled above it
+    return model.numScenes() * kStep + kStopHeight + underGlass;
 }
 
 void SessionView::updateLayout()
@@ -1674,7 +1702,9 @@ void SessionView::resized()
         mixerHeight = juce::jlimit (kMixerMinHeight, kMixerMaxHeight, free);
         gridBottom = bottom - mixerHeight - kMixerGap;
     }
-    gridArea = { left, gridTop, leftWidth, juce::jmax (0, gridBottom - gridTop) };
+    // Glass: the grid and the scenes go on under the mixer, which is glass over them.
+    underGlass = theme().glass && mixerVisible ? mixerHeight + kMixerGap : 0;
+    gridArea = { left, gridTop, leftWidth, juce::jmax (0, gridBottom - gridTop + underGlass) };
     sceneArea = { right - kMasterWidth, gridTop, kMasterWidth, gridArea.getHeight() };
     mixerArea = { left, bottom - mixerHeight, leftWidth, mixerHeight };
     masterStripArea = { right - kMasterWidth, bottom - mixerHeight, kMasterWidth, mixerHeight };
@@ -1688,12 +1718,16 @@ void SessionView::resized()
     masterStrip->setVisible (mixerVisible);
 
     constexpr int bar = 9;
-    hbar.setBounds (gridArea.getX(), gridArea.getBottom() - bar, gridArea.getWidth() - bar, bar);
-    vbar.setBounds (gridArea.getRight() - bar, gridArea.getY(), bar, gridArea.getHeight());
+    const int visibleBottom = gridArea.getBottom() - underGlass; // where the grid shows without glass over it
+    hbar.setBounds (gridArea.getX(), visibleBottom - bar, gridArea.getWidth() - bar, bar);
+    vbar.setBounds (gridArea.getRight() - bar, gridArea.getY(), bar, visibleBottom - gridArea.getY());
 
-    mixerTab.setBounds (juce::Rectangle<int> (30, 11).withCentre ({ sceneArea.getCentreX(), gridArea.getBottom() + (mixerVisible ? kMixerGap / 2 : 6) }));
+    mixerTab.setBounds (juce::Rectangle<int> (30, 11).withCentre ({ sceneArea.getCentreX(), visibleBottom + (mixerVisible ? kMixerGap / 2 : 6) }));
     mixerTab.setOpen (mixerVisible);
 
+    mixer->toFront (false);
+    masterStrip->toFront (false);
+    mixerTab.toFront (false);
     updateLayout();
     mixer->layoutStrips();
     applyScroll();

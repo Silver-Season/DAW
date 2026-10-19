@@ -2,9 +2,117 @@
 #include <cmath>
 #include <map>
 #include <tuple>
+#include <vector>
 
 namespace ui::glass
 {
+namespace
+{
+int captureDepth = 0; // message thread only
+
+// Three passes of a box blur in each direction approximate a gaussian; the image is small (a quarter scale or less).
+void boxBlur (juce::Image& image, int radius)
+{
+    if (radius <= 0 || ! image.isValid())
+        return;
+    const int w = image.getWidth(), h = image.getHeight();
+    juce::Image::BitmapData data (image, juce::Image::BitmapData::readWrite);
+    std::vector<juce::PixelARGB> line ((size_t) juce::jmax (w, h));
+    const auto pass = [&] (bool horizontal)
+    {
+        const int length = horizontal ? w : h, lines = horizontal ? h : w;
+        for (int l = 0; l < lines; ++l)
+        {
+            for (int i = 0; i < length; ++i)
+            {
+                const auto c = horizontal ? data.getPixelColour (i, l) : data.getPixelColour (l, i);
+                line[(size_t) i] = c.getPixelARGB();
+            }
+            int sum[4] { 0, 0, 0, 0 };
+            const auto add = [&] (int i, int sign) {
+                const auto& p = line[(size_t) juce::jlimit (0, length - 1, i)];
+                sum[0] += sign * p.getAlpha(); sum[1] += sign * p.getRed(); sum[2] += sign * p.getGreen(); sum[3] += sign * p.getBlue();
+            };
+            for (int i = -radius; i <= radius; ++i)
+                add (i, 1);
+            const int n = 2 * radius + 1;
+            for (int i = 0; i < length; ++i)
+            {
+                const auto c = juce::Colour ((juce::uint8) (sum[1] / n), (juce::uint8) (sum[2] / n), (juce::uint8) (sum[3] / n), (juce::uint8) (sum[0] / n));
+                horizontal ? data.setPixelColour (i, l, c) : data.setPixelColour (l, i, c);
+                add (i + radius + 1, 1);
+                add (i - radius, -1);
+            }
+        }
+    };
+    for (int k = 0; k < 3; ++k)
+    {
+        pass (true);
+        pass (false);
+    }
+}
+} // namespace
+
+bool capturing ()
+{
+    return captureDepth > 0;
+}
+
+juce::Image backdrop (juce::Component& source, juce::Rectangle<int> area, float scale, int blurRadius)
+{
+    area = area.getIntersection (source.getLocalBounds ());
+    if (area.isEmpty () || captureDepth > 0)
+        return {};
+    const int w = juce::jmax (1, juce::roundToInt ((float) area.getWidth () * scale));
+    const int h = juce::jmax (1, juce::roundToInt ((float) area.getHeight () * scale));
+    juce::Image image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType ());
+    {
+        ++captureDepth;
+        juce::Graphics g (image);
+        g.fillAll (theme ().chrome); // opaque: a blur over transparent pixels would darken the edges
+        g.addTransform (juce::AffineTransform::translation ((float) -area.getX (), (float) -area.getY ()).scaled (scale));
+        source.paintEntireComponent (g, true);
+        --captureDepth;
+    }
+    boxBlur (image, blurRadius);
+    return image;
+}
+
+void frosted (juce::Graphics& g, juce::Rectangle<float> r, float radius, const juce::Image& behind, juce::Colour tint)
+{
+    const auto& t = theme ();
+    if (!t.glass || t.material <= 0.0f || !behind.isValid ())
+    {
+        surface (g, r, tint, radius);
+        return;
+    }
+    const float strength = t.material;
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        juce::Path shape;
+        shape.addRoundedRectangle (r, radius);
+        g.reduceClipRegion (shape);
+        g.fillAll (t.background);
+        // the content, blurred, magnified a little about the centre: the rim seems to bend it
+        g.setImageResamplingQuality (juce::Graphics::mediumResamplingQuality);
+        g.setOpacity (1.0f);
+        g.drawImage (behind, r.expanded (r.getWidth () * 0.02f, r.getHeight () * 0.04f), juce::RectanglePlacement::stretchToFit);
+        // the frost: the panel colour over it, lighter in light themes
+        g.setColour (tint.withAlpha ((t.isLight () ? 0.74f : 0.78f) - 0.2f * strength));
+        g.fillRect (r);
+        // the gloss band and a soft vignette at the rim, where real glass is thicker
+        const auto gloss = r.reduced (1.5f).withHeight (r.getHeight () * 0.42f);
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.55f : 0.10f) * strength), 0.0f, gloss.getY (),
+                                                 t.highlight ().withAlpha (0.0f), 0.0f, gloss.getBottom (), false));
+        g.fillRect (gloss);
+    }
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.95f : 0.25f) * strength), 0.0f, r.getY (),
+                                             t.highlight ().withAlpha ((t.isLight () ? 0.3f : 0.04f) * strength), 0.0f, r.getBottom (), false));
+    g.drawRoundedRectangle (r.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f), 1.2f);
+    g.setColour (t.line.withAlpha (t.isLight () ? 0.6f : 0.7f));
+    g.drawRoundedRectangle (r.reduced (0.25f), radius, 0.8f);
+}
+
 void
 accent (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour colour, float radius)
 {

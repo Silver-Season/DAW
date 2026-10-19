@@ -59,6 +59,8 @@ void Settings::setUiScale (double scale) { props->setValue ("uiScale", juce::jli
 
 bool Settings::animations() const { return props->getBoolValue ("animations", true); }
 void Settings::setAnimations (bool on) { props->setValue ("animations", on); }
+bool Settings::gpuRendering() const { return props->getBoolValue ("gpuRendering", true); }
+void Settings::setGpuRendering (bool on) { props->setValue ("gpuRendering", on); }
 juce::String
 Settings::appearance () const
 {

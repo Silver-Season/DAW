@@ -282,6 +282,7 @@ inline const juce::String noMidiOutputs = tr ("No MIDI outputs", "MIDI-выхо�
 inline const juce::String themeHeading = tr ("Theme", "Тема");
 inline const juce::String scale = tr ("Interface scale", "Масштаб интерфейса");
 inline const juce::String animations = tr ("Animations", "Анимации");
+inline const juce::String gpuRendering = tr ("Draw on the graphics card", "Рисовать на видеокарте");
 inline const juce::String libraryPath = tr ("User Library folder", "Папка User Library");
 inline const juce::String change = tr ("Change…", "Изменить…");
 inline const juce::String byDefault = tr ("Default", "По умолчанию");
