@@ -86,6 +86,7 @@ public:
     bool isArrangementShown() const { return arrangementShown; }
     bool isMixShown() const { return mixShown; }
     void showMixView() { setMixShown (true); }
+    void showSessionView() { setArrangementShown (false); }
     bool isKeyboardStripWanted() const { return stripWanted; }
 
 private:
