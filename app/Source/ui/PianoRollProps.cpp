@@ -209,6 +209,15 @@ public:
         const auto row = [&] { return juce::Rectangle<int> (kMargin, y, w, kRow); };
         const auto next = [&] { y += kRow + kGap; };
         const auto halves = [&] (juce::Component& a, juce::Component& b) {
+            if (theme().glass && (&a == &loopChip || &a == &ownScaleChip || &a == &foldChip))
+            {
+                // glass: switches take a row each, label on the left, switch on the right
+                a.setBounds (row());
+                next();
+                b.setBounds (row());
+                next();
+                return;
+            }
             a.setBounds (kMargin, y, w / 2 - 2, kRow);
             b.setBounds (kMargin + w / 2 + 2, y, w - w / 2 - 2, kRow);
             next();

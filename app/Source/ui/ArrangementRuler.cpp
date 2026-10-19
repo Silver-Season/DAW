@@ -34,6 +34,20 @@ juce::Rectangle<int> ArrangementRuler::markerBounds (int64_t markerId) const
         {
             const int x = juce::roundToInt (view.beatToX (m.beat()));
             const int w = 12 + juce::roundToInt (juce::GlyphArrangement::getStringWidth (theme().uiFont (11.0f, 500), m.name()));
+            if (theme().glass)
+            {
+                // glass: a section band reaching to the next marker (the last one runs eight bars)
+                double next = m.beat() + 8.0 * view.beatsPerBar();
+                bool found = false;
+                for (const auto& other : view.model.markers())
+                    if (other.beat() > m.beat() + 1.0e-6 && (! found || other.beat() < next))
+                    {
+                        next = other.beat();
+                        found = true;
+                    }
+                const int x2 = juce::roundToInt (view.beatToX (next));
+                return { x + 1, 2, juce::jmax (juce::jmax (14, w), x2 - x - 2), ArrangementView::kMarkerLaneHeight - 4 };
+            }
             return { x, 1, juce::jmax (14, w), ArrangementView::kMarkerLaneHeight - 2 };
         }
     return {};
@@ -141,6 +155,22 @@ void ArrangementRuler::paintMarkers (juce::Graphics& g) const
             continue;
         const auto colour = markerColour (m);
         const bool selected = m.id() == view.markerSel;
+        if (t.glass)
+        {
+            // a pastel section band, its name in the middle
+            const auto band = r.toFloat();
+            const auto tone = m.colour() >= 0 ? colour : t.palette ((int) (std::abs (m.id()) * 3 % 16));
+            g.setColour (t.panel.interpolatedWith (tone, selected ? 0.55f : 0.32f));
+            g.fillRoundedRectangle (band, 6.0f);
+            if (selected)
+            {
+                g.setColour (tone.interpolatedWith (t.text, 0.3f));
+                g.drawRoundedRectangle (band.reduced (0.5f), 6.0f, 1.2f);
+            }
+            g.setColour (t.text);
+            g.drawText (m.name(), r.reduced (6, 0), band.getWidth() > 90.0f ? juce::Justification::centred : juce::Justification::centredLeft, true);
+            continue;
+        }
         g.setColour (colour);
         g.fillRect (r.getX(), 0, 2, ArrangementView::kMarkerLaneHeight);
         const auto pill = r.withTrimmedLeft (2).toFloat();

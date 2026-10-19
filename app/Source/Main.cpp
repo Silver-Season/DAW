@@ -7,6 +7,7 @@
 #include "library/UserLibrary.h"
 #include "model/ArrangementEdit.h"
 #include "project/ProjectFile.h"
+#include "ui/ExportWindow.h"
 #include "ui/ThemeLookAndFeel.h"
 
 class DawApplication final
@@ -160,7 +161,7 @@ private:
     {
         static const char* themes[]{ "prism", "neon", "studio", "paper", "glass-light", "glass-dark" };
         auto* content = dynamic_cast<MainComponent*> (mainWindow->getContentComponent ());
-        if (snapshotStep >= 44)
+        if (snapshotStep >= 56)
         {
             stopTimer ();
             quit ();
@@ -184,7 +185,19 @@ private:
             else
             {
                 ThemeManager::get ().setCurrent (capture % 2 == 0 ? "glass-light" : "glass-dark");
-                if (capture < 20)
+                lookAndFeel->refresh (); // the theme's change message arrives later; new windows need its colours now
+                if (capture >= 26)
+                {
+                    snapshotWindow.reset ();
+                    content->showSessionView ();
+                    content->getDetailPanel ().setEditorMode (false);
+                    model->setSelectedTrack (model->trackAt (0).id ()); // the drum track: its pads in the bottom panel
+                }
+                else if (capture >= 24)
+                    snapshotWindow = std::make_unique<ui::ExportWindow> (*settings, *model, *engine, snapshotDirectory, "Afterlight", [] {});
+                else if (capture >= 22)
+                    content->showMixView ();
+                else if (capture < 20)
                 {
                     auto window =
                       std::make_unique<ui::SettingsWindow> (*engine, *settings, ui::SettingsWindow::Hooks ());
@@ -213,6 +226,12 @@ private:
             }
             else if (capture < 20)
                 save (*snapshotWindow->getContentComponent (), theme ().id + "-appearance");
+            else if (capture >= 26)
+                save (*content, theme ().id + "-drums");
+            else if (capture >= 24)
+                save (*snapshotWindow->getContentComponent (), theme ().id + "-export");
+            else if (capture >= 22)
+                save (*content, theme ().id + "-mix");
             else
             {
                 PrismaProcessor processor;

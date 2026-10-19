@@ -17,6 +17,15 @@ public:
     // The help text of the element at `positionInComponent` of `component` (or of its nearest parent with one).
     static juce::String helpFor (juce::Component* component, juce::Point<int> positionInComponent);
     juce::String currentText() const { return message.isNotEmpty() ? message : helpText; }
+    // Glass themes: the device fields shown on the left ("48 kHz", "256 samples", the interface), refreshed by the window.
+    void setStatus (const juce::StringArray& fields)
+    {
+        if (fields != status)
+        {
+            status = fields;
+            repaint();
+        }
+    }
 
     void paint (juce::Graphics&) override;
     void mouseMove (const juce::MouseEvent&) override; // also receives the global mouse events
@@ -26,6 +35,7 @@ private:
 
     juce::Component& window;
     juce::String helpText, message;
+    juce::StringArray status;
 };
 
 // Draggable border between two panels. The owner turns the drag into a new panel size.
@@ -120,6 +130,29 @@ public:
 
 private:
     std::vector<juce::Rectangle<int>> cards;
+};
+
+// A view that is designed but not built yet: a faint picture of what it will hold, and a glass card in the middle
+// with a "Coming soon" badge, a title, a sentence and one button that leads to what exists today.
+class ComingSoonView final : public juce::Component
+{
+public:
+    struct Column
+    {
+        juce::String name;
+        juce::Colour colour;
+    };
+    ComingSoonView (const juce::String& title, const juce::String& text, const juce::String& action);
+    std::function<std::vector<Column>()> columns; // the ghost picture: one mixer strip per column
+    std::function<void (juce::Graphics&, juce::Rectangle<float>)> ghost; // or a picture of its own
+    std::function<void()> onAction;
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+private:
+    juce::String title, text;
+    juce::TextButton button;
+    juce::Rectangle<int> card;
 };
 
 // The triangle and six spectrum rays of the concept, drawn in code.

@@ -84,6 +84,9 @@ public:
     ui::KeyboardStrip& getKeyboardStrip() { return *keyboardStrip; }
     ui::ComputerKeys& getComputerKeys() { return computerKeys; }
     bool isArrangementShown() const { return arrangementShown; }
+    bool isMixShown() const { return mixShown; }
+    void showMixView() { setMixShown (true); }
+    void showSessionView() { setArrangementShown (false); }
     bool isKeyboardStripWanted() const { return stripWanted; }
 
 private:
@@ -163,9 +166,11 @@ private:
     std::unique_ptr<ui::DetailPanel> detail;
     std::unique_ptr<ui::InfoBar> infoBar;
     std::unique_ptr<ui::ArrangementView> arrangement;
+    std::unique_ptr<ui::ComingSoonView> mixView; // the Mix tab: drawn, not built yet
     std::unique_ptr<ui::KeyboardStrip> keyboardStrip;
     std::unique_ptr<ui::ProjectPropertiesWindow> propertiesWindow;
-    bool arrangementShown = false, stripWanted = false;
+    bool arrangementShown = false, stripWanted = false, mixShown = false;
+    void setMixShown (bool);
     double stripFraction = 0.0; // 0 hidden, 1 shown; slides in the 30 Hz timer
     ui::Splitter browserSplitter { true }, detailSplitter { false };
     ui::EdgeTab browserTab { 3 }, detailTab { 2 };

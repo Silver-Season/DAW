@@ -61,7 +61,9 @@ void Knob::paint (juce::Graphics& g)
 {
     const auto& t = theme();
     auto area = getLocalBounds().toFloat();
-    const float captionHeight = caption.isNotEmpty() ? 13.0f : 0.0f;
+    // Glass: a tall knob shows its value under the caption at all times, as the device cards of the design do.
+    const bool twoLines = t.glass && caption.isNotEmpty() && valueText && getHeight() >= 62;
+    const float captionHeight = caption.isNotEmpty() ? (twoLines ? 26.0f : 13.0f) : 0.0f;
     auto captionArea = area.removeFromBottom (captionHeight);
     const float d = juce::jmin (area.getWidth(), area.getHeight());
     const auto knob = juce::Rectangle<float> (d, d).withCentre (area.getCentre());
@@ -72,6 +74,16 @@ void Knob::paint (juce::Graphics& g)
                      (float)value,
                      isEnabled () ? ringColour.value_or (t.accentFill) : t.dimText.withAlpha (0.5f),
                      bipolar);
+        if (twoLines)
+        {
+            g.setColour (isEnabled () ? t.text : t.dimText);
+            g.setFont (t.uiFont (11.0f, 500));
+            g.drawText (caption, captionArea.removeFromTop (13.0f).toNearestInt ().expanded (6, 0), juce::Justification::centred, false);
+            g.setColour (hover || gestureOpen ? t.text : t.dimText);
+            g.setFont (t.uiFont (10.5f));
+            g.drawText (valueText (value), captionArea.toNearestInt ().expanded (6, 0), juce::Justification::centred, false);
+            return;
+        }
         if (caption.isNotEmpty ())
         {
             const bool showValue = (hover || gestureOpen) && valueText && isEnabled ();

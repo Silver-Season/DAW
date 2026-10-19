@@ -1,4 +1,5 @@
 #include "VersionWindow.h"
+#include "GlassMaterial.h"
 
 #include "../Strings.h"
 #include "../model/TrackTransfer.h"
@@ -13,10 +14,11 @@ public:
     Content (project::ProjectSession& s, std::function<void (const juce::String&)> message) : session (s), report (std::move (message))
     {
         list.setModel (this);
-        list.setRowHeight (30);
+        list.setRowHeight (theme().glass ? 50 : 30);
+        restoreButton.getProperties().set ("primary", true);
         list.setColour (juce::ListBox::backgroundColourId, theme().chrome);
         list.setColour (juce::ListBox::outlineColourId, theme().line);
-        list.setOutlineThickness (1);
+        list.setOutlineThickness (theme().glass ? 0 : 1);
         addAndMakeVisible (list);
         for (auto* b : { &labelButton, &restoreButton, &takeButton, &closeButton })
             addAndMakeVisible (*b);
@@ -82,6 +84,55 @@ private:
             return;
         const auto& t = theme();
         const auto& v = rows[(size_t) row];
+        if (t.glass)
+        {
+            // Glass: a card per version. A ring (filled for the newest), the number, the label as a pill, the time;
+            // what made the version on the line below.
+            const auto card = juce::Rectangle<float> (4.0f, 3.0f, (float) width - 8.0f, (float) height - 6.0f);
+            if (selected)
+            {
+                g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.14f : 0.2f));
+                g.fillRoundedRectangle (card, 10.0f);
+                g.setColour (t.accent.withAlpha (0.7f));
+                g.drawRoundedRectangle (card.reduced (0.5f), 10.0f, 1.2f);
+            }
+            const auto ring = juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ 22.0f, (float) height * 0.38f });
+            if (row == 0)
+            {
+                g.setColour (t.play);
+                g.fillEllipse (ring);
+            }
+            else
+            {
+                g.setColour (selected ? t.accent : t.dimText);
+                g.drawEllipse (ring.reduced (0.75f), 1.5f);
+            }
+            float x = 40.0f;
+            const float top = (float) height * 0.38f - 10.0f;
+            g.setColour (t.text);
+            g.setFont (t.uiFont (14.0f, 600));
+            const auto number = "v" + juce::String (v.number);
+            g.drawText (number, juce::Rectangle<float> (x, top, 50.0f, 20.0f), juce::Justification::centredLeft, false);
+            x += juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), number) + 10.0f;
+            if (v.label.isNotEmpty())
+            {
+                const auto font = t.uiFont (11.5f, 600);
+                const float w = juce::jmin (220.0f, juce::GlyphArrangement::getStringWidth (font, v.label) + 16.0f);
+                const auto pill = juce::Rectangle<float> (x, top + 1.0f, w, 18.0f);
+                glass::accent (g, pill, t.accentFill, 9.0f);
+                g.setColour (t.inkOn (t.accentFill));
+                g.setFont (font);
+                g.drawText (v.label, pill.reduced (7.0f, 0.0f), juce::Justification::centred, true);
+                x += w + 10.0f;
+            }
+            g.setColour (t.dimText);
+            g.setFont (t.uiFont (12.0f));
+            g.drawText (juce::Time (v.timeMs).formatted ("%d.%m.%Y  %H:%M"), juce::Rectangle<float> (x, top, (float) width - x - 12.0f, 20.0f),
+                        juce::Justification::centredLeft, true);
+            g.setFont (t.uiFont (11.5f));
+            g.drawText (kindText (v.kind), juce::Rectangle<float> (40.0f, top + 20.0f, (float) width - 52.0f, 16.0f), juce::Justification::centredLeft, true);
+            return;
+        }
         if (selected)
         {
             g.setColour (t.panel2);

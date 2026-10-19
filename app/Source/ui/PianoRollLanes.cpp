@@ -90,7 +90,21 @@ void PianoRoll::Ruler::paint (juce::Graphics& g)
     const bool flash = owner.loopFlashing();
     const auto colour = flash ? t.accent2 : (on ? t.accent : t.dimText);
     auto brace = juce::Rectangle<float>::leftTopRightBottom (sx, (float) area.getY() + 1.0f, ex, (float) area.getBottom() - 2.0f);
-    if (brace.getWidth() > 0.0f)
+    if (brace.getWidth() > 0.0f && t.glass)
+    {
+        // glass: a soft bar with a triangle hanging from each end
+        const auto fill = flash ? t.accent2 : (on ? t.accentFill : t.dimText);
+        g.setColour (fill.withAlpha (on ? 0.38f : 0.18f));
+        g.fillRoundedRectangle (brace, 3.0f);
+        g.setColour (fill.interpolatedWith (t.text, 0.15f));
+        for (const float x : { brace.getX(), brace.getRight() })
+        {
+            juce::Path tri;
+            tri.addTriangle (x - 5.0f, brace.getY(), x + 5.0f, brace.getY(), x, brace.getBottom() + 1.0f);
+            g.fillPath (tri);
+        }
+    }
+    else if (brace.getWidth() > 0.0f)
     {
         g.setColour (colour.withAlpha (on ? 0.45f : 0.22f));
         g.fillRoundedRectangle (brace, 2.0f);
@@ -249,7 +263,15 @@ void PianoRoll::Keys::paint (juce::Graphics& g)
             // white keys light, black keys dark, whatever the skin: the lightness decides which way round
             g.setColour (whiteKey);
             g.fillRect (0, y, getWidth(), vw.rowHeight);
-            if (black)
+            if (black && t.glass)
+            {
+                // glass: a black key with a rounded tip and a soft top light
+                const auto key = juce::Rectangle<float> (-4.0f, (float) y + 0.5f, (float) (getWidth() * 3 / 5) + 4.0f, (float) vw.rowHeight - 1.0f);
+                g.setGradientFill (juce::ColourGradient (blackKey.interpolatedWith (t.highlight(), 0.18f), 0.0f, key.getY(),
+                                                         blackKey, 0.0f, key.getBottom(), false));
+                g.fillRoundedRectangle (key, juce::jmin (3.0f, key.getHeight() * 0.4f));
+            }
+            else if (black)
             {
                 g.setColour (blackKey);
                 g.fillRect (0, y, getWidth() * 3 / 5, vw.rowHeight);
@@ -390,6 +412,16 @@ void PianoRoll::VelocityLane::paint (juce::Graphics& g)
         const int h = juce::roundToInt ((double) (bottom - top) * note.velocity / 127.0);
         const bool sel = owner.isSelected (node);
         g.setColour (base.withAlpha (sel ? 1.0f : 0.7f));
+        if (t.glass) // glass: a plain rounded stem
+        {
+            g.fillRoundedRectangle ((float) x, (float) (bottom - h), 3.0f, (float) h, 1.5f);
+            if (sel)
+            {
+                g.setColour (t.accent);
+                g.fillRoundedRectangle ((float) x - 1.0f, (float) (bottom - h) - 1.0f, 5.0f, 4.0f, 2.0f);
+            }
+            continue;
+        }
         g.fillRect (x, bottom - h, 3, h);
         g.fillEllipse ((float) x - 1.5f, (float) (bottom - h) - 3.0f, 6.0f, 6.0f);
         if (sel)

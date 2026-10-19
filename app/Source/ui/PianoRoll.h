@@ -14,6 +14,7 @@ class AudioEngine;
 namespace ui
 {
 class QuantiseWindow;
+class ComingSoonView;
 
 // The clip editor (docs/spec/02-midi-recording.md, task 2.4): properties of the clip on the left, a ruler with
 // the loop brace, piano keys, the note grid, the velocity lane and the controller strip. It edits one clip of
@@ -203,6 +204,13 @@ private:
     std::unique_ptr<ControllerStrip> controllers;
     juce::ScrollBar hbar { false }, vbar { true };
     std::unique_ptr<QuantiseWindow> quantiseWindow;
+    // Glass: the Piano Roll / Score / Step switch above the editor; Score and Step are drawn, not built yet.
+    class ModeBar;
+    std::unique_ptr<ModeBar> modeBar;
+    std::unique_ptr<ComingSoonView> scoreSoon, stepSoon;
+    int editorMode = 0; // 0 piano roll, 1 score, 2 step
+    void setEditorMode (int);
+    void lookAndFeelChanged() override { layoutParts(); } // a theme switch shows or hides the glass mode bar
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRoll)
 };

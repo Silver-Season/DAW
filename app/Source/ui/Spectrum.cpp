@@ -268,6 +268,9 @@ void Spectrum::paintContent (juce::Graphics& g)
         g.setGradientFill (fade);
         g.fillRect (area);
     }
+    // glass, while nothing sounds: no line along the floor, the band under the lens is enough
+    if (! lensBounds().isEmpty() && silent)
+        return;
     g.setGradientFill (rainbow);
     if (t.glow > 0.0f)
     {

@@ -41,8 +41,10 @@ ArrangementLanes::ArrangementLanes (ArrangementView& v) : view (v)
 juce::Rectangle<float> ArrangementLanes::rectFor (int row, double start, double length) const
 {
     const auto& r = view.layoutRows[(size_t) row];
-    const float x = (float) view.beatToX (start) + 0.5f;
-    const float w = juce::jmax (1.0f, (float) (length * view.v.pxPerBeat) - 1.5f);
+    // glass: an even 1 px gap on both sides, so neighbouring clips meet the bar line in the middle of their gap
+    const bool even = theme().glass;
+    const float x = (float) view.beatToX (start) + (even ? 1.0f : 0.5f);
+    const float w = juce::jmax (1.0f, (float) (length * view.v.pxPerBeat) - (even ? 2.0f : 1.5f));
     return { x, (float) (r.y - view.v.scrollY) + kLanePad, w, (float) r.height - 2.0f * kLanePad };
 }
 
@@ -216,17 +218,13 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
     const auto labelInk = pastel ? t.inkOn (fill) : t.clipInk;
     g.setColour (fill.withAlpha (a));
     g.fillRoundedRectangle (r, radius);
-    if (pastel)
-    {
-        g.setColour (base.withAlpha (0.55f * a));
-        g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
-    }
 
     {
         juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (r.toNearestInt());
         // the grid goes on under the notes and the waveform, so they can be lined up by eye
-        paintGrid (g, r.toNearestInt(), pastel ? base : t.clipInk, (pastel ? 0.14f : 0.22f) * a);
+        if (! pastel) // glass clips stay calm: no grid inside, the notes carry the timing
+            paintGrid (g, r.toNearestInt(), t.clipInk, 0.22f * a);
         if (audio)
             paintAudio (g, c, r, clipLength, clipOffset, content);
         else
@@ -283,7 +281,7 @@ void ArrangementLanes::paint (juce::Graphics& g)
         g.setColour (t.line);
         g.fillRect (0, y + row.height - 1, getWidth(), 1);
     }
-    paintGrid (g, bounds, t.line);
+    paintGrid (g, bounds, t.line, t.glass ? 0.55f : 1.0f);
 
     // under the last track: the place for a new one (drops from the browser or Finder land here; the headers have the buttons)
     if (! view.drop.valid)

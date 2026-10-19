@@ -68,6 +68,53 @@ void InfoBar::paint (juce::Graphics& g)
     }
 
     auto area = getLocalBounds().reduced (12, 0);
+    if (t.glass)
+    {
+        // Glass: a status bar. The device on the left, divided by thin lines; the main shortcuts on the right while
+        // no hint is shown; the hint or a message in the middle.
+        area = area.withTrimmedLeft (6).withTrimmedRight (6);
+        g.setFont (t.uiFont (12.0f));
+        for (int i = 0; i < status.size(); ++i)
+        {
+            const int w = (int) std::ceil (juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), status[i])) + 2;
+            g.setColour (t.dimText);
+            g.drawText (status[i], area.removeFromLeft (w), juce::Justification::centredLeft, false);
+            area.removeFromLeft (12);
+            g.setColour (t.line);
+            g.fillRect (area.getX(), getHeight() / 2 - 6, 1, 12);
+            area.removeFromLeft (13);
+        }
+        if (message.isEmpty() && helpText.isEmpty())
+        {
+            const std::pair<const char*, const juce::String*> keys[] {
+                { "\xe2\x8c\x98" "Z", &Strings::transport::keyUndo }, { "\xe2\x8c\x98\xe2\x87\xa7" "Z", &Strings::transport::keyRedo },
+                { "Space", &Strings::transport::keyPlay }, { "F9", &Strings::transport::keyRecord }, { "\xe2\x8c\xa5\xe2\x8c\x98" "B", &Strings::transport::keyBrowser }
+            };
+            auto right = area;
+            for (int i = (int) std::size (keys) - 1; i >= 0; --i)
+            {
+                const auto key = juce::String::fromUTF8 (keys[i].first);
+                const auto label = *keys[i].second;
+                const auto labelFont = t.uiFont (12.0f), keyFont = t.uiFont (11.0f, 500);
+                const int lw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (labelFont, label)) + 2;
+                const int kw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (keyFont, key)) + 10;
+                if (right.getWidth() < lw + kw + 30)
+                    break;
+                g.setColour (t.dimText);
+                g.setFont (labelFont);
+                g.drawText (label, right.removeFromRight (lw), juce::Justification::centredRight, false);
+                right.removeFromRight (6);
+                const auto chip = right.removeFromRight (kw).toFloat().withSizeKeepingCentre ((float) kw, 18.0f);
+                g.setColour (t.panel2.withAlpha (0.8f));
+                g.fillRoundedRectangle (chip, 4.0f);
+                g.setColour (t.text);
+                g.setFont (keyFont);
+                g.drawText (key, chip, juce::Justification::centred, false);
+                right.removeFromRight (16);
+            }
+            return;
+        }
+    }
     if (message.isNotEmpty())
     {
         g.setColour (t.accent);
@@ -147,6 +194,116 @@ void EdgeTab::paint (juce::Graphics& g)
     const auto icon = juce::Rectangle<float> (s, s).withCentre (r.getCentre());
     g.setColour (hover ? t.accent : t.dimText);
     g.fillPath (icons::triangle (dir % 2 == 0 ? icon.withTrimmedLeft (-1).withTrimmedRight (-1) : icon.withTrimmedTop (-1).withTrimmedBottom (-1), dir));
+}
+
+//==============================================================================
+ComingSoonView::ComingSoonView (const juce::String& t, const juce::String& x, const juce::String& action) : title (t), text (x)
+{
+    button.setButtonText (action);
+    button.onClick = [this] { if (onAction) onAction(); };
+    addAndMakeVisible (button);
+}
+
+void ComingSoonView::resized()
+{
+    card = juce::Rectangle<int> (juce::jmin (440, getWidth() - 40), juce::jmin (220, getHeight() - 20)).withCentre (getLocalBounds().getCentre());
+    button.setBounds (juce::Rectangle<int> (juce::jmin (260, card.getWidth() - 40), 34).withCentre ({ card.getCentreX(), card.getBottom() - 38 }));
+}
+
+void ComingSoonView::paint (juce::Graphics& g)
+{
+    const auto& t = theme();
+    g.fillAll (t.chrome);
+    if (ghost)
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.setOpacity (t.isLight() ? 0.6f : 0.5f);
+        ghost (g, getLocalBounds().toFloat().reduced (12.0f));
+    }
+    // the ghost: the strips the mixer will have, in the track colours, very faint
+    const auto list = columns ? columns() : std::vector<Column>();
+    const int count = ghost ? 0 : juce::jmax (6, (int) list.size()); // none when a picture of its own was drawn
+    const float stripW = juce::jmin (118.0f, ((float) getWidth() - 24.0f) / (float) count);
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.setOpacity (t.isLight() ? 0.55f : 0.45f);
+        for (int i = 0; i < count; ++i)
+        {
+            const auto colour = i < (int) list.size() ? list[(size_t) i].colour : t.line;
+            const auto strip = juce::Rectangle<float> (12.0f + stripW * (float) i, 12.0f, stripW - 6.0f, (float) getHeight() - 24.0f);
+            g.setColour (t.panel);
+            g.fillRoundedRectangle (strip, 10.0f);
+            g.setColour (t.line.withAlpha (0.6f));
+            g.drawRoundedRectangle (strip, 10.0f, 1.0f);
+            g.setColour (colour);
+            g.fillRoundedRectangle (strip.getX() + 8.0f, strip.getY() + 10.0f, 4.0f, 18.0f, 2.0f);
+            if (i < (int) list.size())
+            {
+                g.setColour (t.text);
+                g.setFont (t.uiFont (12.5f, 600));
+                g.drawText (list[(size_t) i].name, strip.withTrimmedLeft (18.0f).withHeight (38.0f).toNearestInt(), juce::Justification::centredLeft, true);
+            }
+            for (int row = 0; row < 4; ++row) // insert slots
+            {
+                const auto slot = juce::Rectangle<float> (strip.getX() + 8.0f, strip.getY() + 44.0f + (float) row * 22.0f, strip.getWidth() - 16.0f, 17.0f);
+                g.setColour (t.panel2);
+                g.fillRoundedRectangle (slot, 5.0f);
+                g.setColour (colour.withAlpha (0.8f));
+                g.fillRoundedRectangle (slot.getX() + 5.0f, slot.getY() + 4.0f, 3.0f, 9.0f, 1.5f);
+            }
+            const float knobY = strip.getY() + 150.0f;
+            for (int k = 0; k < 2; ++k)
+            {
+                const auto knob = juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ strip.getX() + strip.getWidth() * (k == 0 ? 0.32f : 0.68f), knobY });
+                g.setColour (t.line);
+                g.drawEllipse (knob, 2.0f);
+                g.setColour (colour);
+                juce::Path arc;
+                arc.addCentredArc (knob.getCentreX(), knob.getCentreY(), 12.0f, 12.0f, 0.0f, -2.3f, -0.6f + (float) ((i + k) % 3) * 0.7f, true);
+                g.strokePath (arc, juce::PathStrokeType (2.0f));
+            }
+            const float faderTop = knobY + 40.0f, faderBottom = strip.getBottom() - 50.0f;
+            if (faderBottom > faderTop + 20.0f)
+            {
+                const float fx = strip.getCentreX() - 8.0f;
+                g.setColour (t.line);
+                g.fillRoundedRectangle (fx - 2.0f, faderTop, 4.0f, faderBottom - faderTop, 2.0f);
+                const float level = 0.45f + 0.08f * (float) (i % 4);
+                g.setColour (colour);
+                g.fillRoundedRectangle (fx - 2.0f, faderBottom - (faderBottom - faderTop) * level, 4.0f, (faderBottom - faderTop) * level, 2.0f);
+                for (int m = 0; m < 2; ++m)
+                {
+                    const float mx = strip.getCentreX() + 14.0f + (float) m * 7.0f;
+                    g.setColour (t.line.withAlpha (0.7f));
+                    g.fillRoundedRectangle (mx, faderTop, 4.0f, faderBottom - faderTop, 2.0f);
+                    g.setColour (t.play);
+                    const float h = (faderBottom - faderTop) * (0.5f + 0.06f * (float) ((i + m) % 5));
+                    g.fillRoundedRectangle (mx, faderBottom - h, 4.0f, h, 2.0f);
+                }
+            }
+        }
+    }
+    // the card
+    const auto c = card.toFloat();
+    juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.14f : 0.5f), 24, { 0, 6 }).drawForRectangle (g, card);
+    glass::surface (g, c, t.panel, 16.0f);
+    g.setColour (t.line.withAlpha (0.7f));
+    g.drawRoundedRectangle (c, 16.0f, 1.0f);
+    // badge
+    const auto badgeText = Strings::transport::comingSoon;
+    const auto badgeFont = t.uiFont (11.5f, 600);
+    const float bw = juce::GlyphArrangement::getStringWidth (badgeFont, badgeText) + 20.0f;
+    const auto badge = juce::Rectangle<float> (bw, 22.0f).withPosition (c.getX() + 24.0f, c.getY() + 22.0f);
+    glass::accent (g, badge, t.accentFill, 11.0f);
+    g.setColour (t.inkOn (t.accentFill));
+    g.setFont (badgeFont);
+    g.drawText (badgeText, badge, juce::Justification::centred, false);
+    g.setColour (t.text);
+    g.setFont (t.uiFont (22.0f, 600));
+    g.drawText (title, c.withTrimmedLeft (24.0f).withTrimmedTop (54.0f).withHeight (32.0f).toNearestInt(), juce::Justification::centredLeft, false);
+    g.setColour (t.dimText);
+    g.setFont (t.uiFont (13.5f));
+    g.drawFittedText (text, c.reduced (24.0f, 0.0f).withTrimmedTop (90.0f).withHeight (58.0f).toNearestInt(), juce::Justification::topLeft, 3, 1.0f);
 }
 
 //==============================================================================

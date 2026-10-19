@@ -25,6 +25,7 @@ public:
     int getDefaultScrollbarWidth() override { return 9; }
     juce::Font getPopupMenuFont() override;
     juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool over, bool down) override;
     void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& backgroundColour, bool isMouseOver, bool isButtonDown) override;
     void drawLinearSlider (juce::Graphics&,
                            int,

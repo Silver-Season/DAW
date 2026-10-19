@@ -12,7 +12,8 @@ namespace ui
 namespace
 {
 constexpr int kRowH = 24;
-constexpr int kNavRowH = 22;
+constexpr int kClassicNavRowH = 22;
+int navRowH() { return theme().glass ? 29 : kClassicNavRowH; } // glass: roomier rows with line icons
 constexpr int kBottomH = 38;
 constexpr int kNumLabels = 7;
 constexpr int kLabelPalette[kNumLabels] { 0, 2, 4, 7, 11, 13, -1 }; // red orange yellow green blue purple grey (-1: dim text)
@@ -47,6 +48,75 @@ const juce::String& labelName (int label)
                                                   Strings::tr ("Green", "Зелёная"), Strings::tr ("Blue", "Синяя"),        Strings::tr ("Purple", "Фиолетовая"),
                                                   Strings::tr ("Gray", "Серая") };
     return names[juce::jlimit (0, kNumLabels - 1, label)];
+}
+
+// Line icons of the navigation in glass themes, one per category, drawn in the text colour.
+juce::Path navIcon (int kind, int index, juce::Rectangle<float> b)
+{
+    juce::Path p;
+    const float x = b.getX(), y = b.getY(), w = b.getWidth(), h = b.getHeight();
+    const auto line = [&] (float x0, float y0, float x1, float y1) { p.startNewSubPath (x + w * x0, y + h * y0); p.lineTo (x + w * x1, y + h * y1); };
+    if (kind == 0) // recent: a clock
+    {
+        p.addEllipse (b.reduced (0.5f));
+        line (0.5f, 0.22f, 0.5f, 0.52f);
+        line (0.5f, 0.52f, 0.72f, 0.64f);
+    }
+    else
+        switch ((browser::Category) index)
+        {
+            case browser::Category::instruments: // a keyboard
+                p.addRoundedRectangle (b.reduced (0.5f, 1.5f), 2.0f);
+                for (float k : { 0.3f, 0.5f, 0.7f })
+                    line (k, 0.12f, k, 0.6f);
+                break;
+            case browser::Category::presets: // two sliders
+                line (0.05f, 0.3f, 0.95f, 0.3f);
+                line (0.05f, 0.72f, 0.95f, 0.72f);
+                p.addEllipse (x + w * 0.22f, y + h * 0.15f, w * 0.3f, h * 0.3f);
+                p.addEllipse (x + w * 0.52f, y + h * 0.57f, w * 0.3f, h * 0.3f);
+                break;
+            case browser::Category::effects: // a four-point sparkle
+                p.startNewSubPath (x + w * 0.5f, y);
+                p.quadraticTo (x + w * 0.56f, y + h * 0.44f, x + w, y + h * 0.5f);
+                p.quadraticTo (x + w * 0.56f, y + h * 0.56f, x + w * 0.5f, y + h);
+                p.quadraticTo (x + w * 0.44f, y + h * 0.56f, x, y + h * 0.5f);
+                p.quadraticTo (x + w * 0.44f, y + h * 0.44f, x + w * 0.5f, y);
+                break;
+            case browser::Category::plugins: // a plug
+                p.addRoundedRectangle (x + w * 0.2f, y + h * 0.3f, w * 0.6f, h * 0.4f, 2.0f);
+                line (0.38f, 0.05f, 0.38f, 0.3f);
+                line (0.62f, 0.05f, 0.62f, 0.3f);
+                line (0.5f, 0.7f, 0.5f, 0.98f);
+                break;
+            case browser::Category::chains: // two links
+                p.addRoundedRectangle (x, y + h * 0.3f, w * 0.6f, h * 0.4f, h * 0.2f);
+                p.addRoundedRectangle (x + w * 0.4f, y + h * 0.3f, w * 0.6f, h * 0.4f, h * 0.2f);
+                break;
+            case browser::Category::sounds: // waveform bars
+                for (auto [k, a] : { std::pair { 0.1f, 0.3f }, { 0.3f, 0.8f }, { 0.5f, 0.5f }, { 0.7f, 0.95f }, { 0.9f, 0.4f } })
+                    line (k, 0.5f - a * 0.5f, k, 0.5f + a * 0.5f);
+                break;
+            case browser::Category::midiFiles: // a grid of notes
+                p.addRoundedRectangle (b.reduced (0.5f), 2.0f);
+                line (0.2f, 0.35f, 0.5f, 0.35f);
+                line (0.4f, 0.55f, 0.8f, 0.55f);
+                line (0.25f, 0.75f, 0.6f, 0.75f);
+                break;
+            case browser::Category::places: // a folder
+                p.startNewSubPath (x, y + h * 0.18f);
+                p.lineTo (x + w * 0.38f, y + h * 0.18f);
+                p.lineTo (x + w * 0.5f, y + h * 0.32f);
+                p.lineTo (x + w, y + h * 0.32f);
+                p.lineTo (x + w, y + h * 0.9f);
+                p.lineTo (x, y + h * 0.9f);
+                p.closeSubPath();
+                break;
+            case browser::Category::count: break;
+        }
+    juce::Path stroked;
+    juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (stroked, p);
+    return stroked;
 }
 
 bool sameNav (int kindA, int idxA, int kindB, int idxB) { return kindA == kindB && idxA == idxB; }
@@ -202,7 +272,7 @@ int BrowserPanel::navCount (const Nav& n) const
 
 juce::Rectangle<int> BrowserPanel::navRect (int index) const
 {
-    return { 6, navArea.getY() + index * kNavRowH, getWidth() - 12, kNavRowH - 1 };
+    return { 6, navArea.getY() + index * navRowH(), getWidth() - 12, navRowH() - 1 };
 }
 
 int BrowserPanel::navAt (juce::Point<int> p) const
@@ -322,10 +392,10 @@ int BrowserPanel::rowAt (juce::Point<int> p) const
 
 void BrowserPanel::resized()
 {
-    searchArea = { 10, 10, getWidth() - 20, 32 };
+    searchArea = { 10, 10, getWidth() - 20, theme().glass ? 34 : 32 };
     search.setBounds (searchArea.withTrimmedLeft (30).withTrimmedRight (8).reduced (0, 6));
     const int navTop = searchArea.getBottom() + 6;
-    const int navHeight = (int) navEntries().size() * kNavRowH;
+    const int navHeight = (int) navEntries().size() * navRowH();
     navArea = { 0, navTop, getWidth(), navHeight };
     bottomArea = { 0, getHeight() - kBottomH, getWidth(), kBottomH };
     listArea = { 0, navArea.getBottom() + 6, getWidth(), juce::jmax (0, bottomArea.getY() - navArea.getBottom() - 6) };
@@ -363,8 +433,19 @@ void BrowserPanel::paint (juce::Graphics& g)
     const auto& t = theme();
     g.fillAll (t.chrome);
 
-    fillCell (g, searchArea.toFloat(), t.panel);
-    strokeCell (g, searchArea.toFloat(), search.hasKeyboardFocus (true) ? t.accent : t.line);
+    if (t.glass)
+    {
+        const auto box = searchArea.toFloat();
+        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.75f : 0.6f));
+        g.fillRoundedRectangle (box, 9.0f);
+        g.setColour (search.hasKeyboardFocus (true) ? t.accent : t.line.withAlpha (0.6f));
+        g.drawRoundedRectangle (box.reduced (0.5f), 9.0f, search.hasKeyboardFocus (true) ? 1.5f : 1.0f);
+    }
+    else
+    {
+        fillCell (g, searchArea.toFloat(), t.panel);
+        strokeCell (g, searchArea.toFloat(), search.hasKeyboardFocus (true) ? t.accent : t.line);
+    }
     g.setColour (t.dimText);
     g.fillPath (icons::search (juce::Rectangle<float> (13.0f, 13.0f).withCentre ({ (float) searchArea.getX() + 17.0f, (float) searchArea.getCentreY() })));
 
@@ -376,6 +457,26 @@ void BrowserPanel::paint (juce::Graphics& g)
         const auto r = navRect (i);
         const auto& n = entries[(size_t) i];
         const bool selected = ! searching && sameNav (n.kind, n.index, current.kind, current.index);
+        if (t.glass && n.kind != Nav::label)
+        {
+            // glass: a line icon, a larger label, the selection a soft tinted pill
+            if (selected)
+            {
+                g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f));
+                g.fillRoundedRectangle (r.toFloat(), 8.0f);
+            }
+            else if (i == hoveredNav)
+            {
+                g.setColour (t.panel2.withAlpha (0.7f));
+                g.fillRoundedRectangle (r.toFloat(), 8.0f);
+            }
+            g.setColour (selected ? t.text : t.text.withAlpha (0.8f));
+            g.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
+            g.setColour (t.text);
+            g.setFont (t.uiFont (14.0f, selected ? 600 : 400));
+            g.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
+            continue;
+        }
         if (selected)
             fillCell (g, r.toFloat(), t.panel2, 0.8f);
         else if (i == hoveredNav)
@@ -438,7 +539,15 @@ void BrowserPanel::paint (juce::Graphics& g)
 
             const bool selected = i == selectedRow;
             const auto cell = box.reduced (6, 1);
-            if (selected)
+            if (t.glass)
+            {
+                if (selected || i == hoveredRow)
+                {
+                    g.setColour (selected ? t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f) : t.panel2.withAlpha (0.7f));
+                    g.fillRoundedRectangle (cell.toFloat(), 7.0f);
+                }
+            }
+            else if (selected)
             {
                 fillCell (g, cell.toFloat(), t.panel2, 0.8f);
                 g.setColour (t.accent);
@@ -452,6 +561,11 @@ void BrowserPanel::paint (juce::Graphics& g)
             {
                 g.setColour (labelColour (fav->second));
                 g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ (float) cell.getX() + 11.0f, (float) cell.getCentreY() }));
+            }
+            else if (t.glass) // glass: a small waveform mark in front of every item
+            {
+                g.setColour (t.dimText.withAlpha (0.8f));
+                g.fillPath (navIcon (1, (int) browser::Category::sounds, juce::Rectangle<float> (11.0f, 11.0f).withCentre ({ (float) cell.getX() + 11.0f, (float) cell.getCentreY() })));
             }
             g.setColour (r.item.placeholder ? t.dimText : t.text);
             g.setFont (t.uiFont (12.5f, selected ? 500 : 400));
@@ -475,9 +589,22 @@ void BrowserPanel::paint (juce::Graphics& g)
     g.fillRect (0, bottomArea.getY(), getWidth(), 1);
     const auto b = previewButtonRect();
     const bool on = settings.previewEnabled();
-    fillCell (g, b.toFloat(), on ? t.accent : t.panel);
-    strokeCell (g, b.toFloat(), on ? t.accent : t.line);
-    g.setColour (on ? t.clipInk : t.dimText);
+    if (t.glass)
+    {
+        if (on)
+            glass::accent (g, b.toFloat(), t.accentFill, b.getHeight() * 0.5f);
+        else
+            glass::surface (g, b.toFloat(), t.panel, b.getHeight() * 0.5f);
+        g.setColour (on ? t.accentFill : t.line);
+        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), b.getHeight() * 0.5f, 1.0f);
+        g.setColour (on ? t.inkOn (t.accentFill) : t.dimText);
+    }
+    else
+    {
+        fillCell (g, b.toFloat(), on ? t.accent : t.panel);
+        strokeCell (g, b.toFloat(), on ? t.accent : t.line);
+        g.setColour (on ? t.clipInk : t.dimText);
+    }
     g.fillPath (icons::headphones (juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) b.getX() + 18.0f, (float) b.getCentreY() })));
     g.setFont (t.uiFont (12.0f, 500));
     g.drawText (Strings::browser::previewToggle, b.withTrimmedLeft (34), juce::Justification::centredLeft, true);

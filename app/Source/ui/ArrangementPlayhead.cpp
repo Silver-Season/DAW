@@ -134,6 +134,15 @@ void ArrangementPlayhead::paint (juce::Graphics& g)
     lastX = x;
     const double beat = view.engine.getSongPositionBeats();
 
+    if (t.glass)
+    {
+        // glass: one clear line in the accent with a soft halo; the spectrum split would read as a smudge on pastel clips
+        g.setColour (t.accentFill.withAlpha (0.18f));
+        g.fillRect (x - 3.0f, kBeamTop, 6.0f, (float) getHeight() - kBeamTop);
+        g.setColour (t.accentFill.interpolatedWith (t.text, 0.15f));
+        g.fillRect (x - 1.0f, kBeamTop, 2.0f, (float) getHeight() - kBeamTop);
+        return;
+    }
     // where the beam crosses a clip it splits into the spectrum, like light through the prism of the logo
     for (const auto& row : view.layoutRows)
     {

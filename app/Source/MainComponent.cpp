@@ -124,6 +124,15 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     detail->chain().setBrowserActions (&browserActions);
     detail->chain().onDropped = [this] (const browser::DropResult& r, const browser::DragItem& item) { reportDrop (r, item); };
     arrangement = std::make_unique<ui::ArrangementView> (engine, model, actions, selection);
+    mixView = std::make_unique<ui::ComingSoonView> (Strings::transport::mixPlaceholderTitle, Strings::transport::mixPlaceholderText, Strings::transport::mixPlaceholderAction);
+    mixView->columns = [this] {
+        std::vector<ui::ComingSoonView::Column> list;
+        for (const auto& track : model.tracks())
+            list.push_back ({ track.name(), theme().palette (track.colour()) });
+        return list;
+    };
+    mixView->onAction = [this] { setArrangementShown (false); };
+    addChildComponent (*mixView);
     arrangement->setRecorder (&recorder);
     arrangement->setBrowserActions (&browserActions);
     arrangement->onOpenClip = [this] (int64_t trackId, int64_t aclipId) { openArrangementClip (trackId, aclipId); };
@@ -136,6 +145,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     };
     detail->pianoRoll().onClipExtended = [this] (double beats) { infoBar->showMessage (Strings::editor::loopExtended (beats), 3500); };
     topBar->onViewSwitched = [this] (bool toArrangement) { setArrangementShown (toArrangement); };
+    topBar->onMixClicked = [this] { setMixShown (true); };
     keyboardStrip = std::make_unique<ui::KeyboardStrip> (computerKeys);
     computerKeys.projectScale = [this] { return ui::ComputerKeys::ScaleInfo { model.scaleRoot(), model.scaleMode() }; };
     infoBar = std::make_unique<ui::InfoBar> (*this);
@@ -379,8 +389,19 @@ void MainComponent::setDetailVisible (bool visible)
     commandManager.commandStatusChanged();
 }
 
+void MainComponent::setMixShown (bool shown)
+{
+    mixShown = shown;
+    if (shown)
+        topBar->setMixShown();
+    else
+        topBar->setArrangementShown (arrangementShown);
+    resized();
+}
+
 void MainComponent::setArrangementShown (bool shown)
 {
+    mixShown = false;
     arrangementShown = shown;
     topBar->setArrangementShown (shown);
     resized();
@@ -796,6 +817,11 @@ void MainComponent::timerCallback()
 
     topBar->tick();
     topBar->setVersionText (doc.versionButtonText());
+    if (auto* device = engine.getDeviceManager().getCurrentAudioDevice())
+        infoBar->setStatus ({ Strings::transport::statusRate (device->getCurrentSampleRate()), Strings::transport::statusBuffer (device->getCurrentBufferSizeSamples()),
+                              device->getName() });
+    else
+        infoBar->setStatus ({ Strings::transport::statusNoDevice });
     if (arrangementShown)
         arrangement->tick();
     else
@@ -828,7 +854,7 @@ void MainComponent::resized()
     if (menuBar != nullptr)
         menuBar->setBounds (r.removeFromTop (kMenuBarHeight));
     topBar->setBounds (r.removeFromTop (ui::TopBar::kHeight));
-    infoBar->setBounds (r.removeFromBottom (kInfoBarHeight));
+    infoBar->setBounds (r.removeFromBottom (cards ? kInfoBarHeight + 6 : kInfoBarHeight));
     scanlines.setBounds (getLocalBounds());
     r = r.withTrimmedLeft (margin).withTrimmedRight (margin).withTrimmedTop (cards ? 2 : 0).withTrimmedBottom (cards ? 6 : 0);
 
@@ -853,9 +879,11 @@ void MainComponent::resized()
     browser->setVisible (browserVisible);
     const int browserRight = r.getX() - gap / 2;
     session->setBounds (r);
-    session->setVisible (! arrangementShown);
+    session->setVisible (! arrangementShown && ! mixShown);
     arrangement->setBounds (r);
-    arrangement->setVisible (arrangementShown);
+    arrangement->setVisible (arrangementShown && ! mixShown);
+    mixView->setBounds (r);
+    mixView->setVisible (mixShown);
     topBar->setLeftColumn (browserVisible ? browser->getRight() : 0);
 
     std::vector<juce::Rectangle<int>> areas;

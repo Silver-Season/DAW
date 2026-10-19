@@ -41,6 +41,7 @@ void ArrangementMinimap::paint (juce::Graphics& g)
     g.fillAll (t.chrome);
     g.setColour (t.line);
     g.fillRect (0, 0, getWidth(), 1);
+    const bool soft = t.glass; // glass: pastel clip rows, lighter bar lines
 
     const double total = view.totalBeats(), bar = view.beatsPerBar();
     const auto area = juce::Rectangle<float> ((float) kPad, (float) kTop, (float) (getWidth() - 2 * kPad), (float) (getHeight() - kTop - kBottom));
@@ -55,7 +56,7 @@ void ArrangementMinimap::paint (juce::Graphics& g)
     for (long long b = 0; (double) b * bar < total; b += stride)
     {
         const float x = (float) beatToX ((double) b * bar);
-        g.setColour (t.line);
+        g.setColour (soft ? t.line.withAlpha (0.5f) : t.line);
         g.fillRect (x, area.getY(), 1.0f, area.getHeight());
         g.setColour (t.dimText);
         g.drawText (juce::String (b + 1), juce::Rectangle<int> (juce::roundToInt (x) + 2, 0, 40, kTop), juce::Justification::centredLeft, false);
@@ -79,7 +80,7 @@ void ArrangementMinimap::paint (juce::Graphics& g)
             for (const auto& c : tracks[i].arrangementClips())
             {
                 const float x1 = (float) beatToX (c.start()), x2 = (float) beatToX (c.end());
-                g.setColour (t.palette (c.clip().isValid() ? c.clip().colour() : tracks[i].colour()).withAlpha (0.9f));
+                g.setColour (t.palette (c.clip().isValid() ? c.clip().colour() : tracks[i].colour()).withAlpha (soft ? 0.55f : 0.9f));
                 g.fillRect (x1, y + 0.5f, juce::jmax (1.0f, x2 - x1 - 0.5f), juce::jmax (1.5f, rowH - 1.0f));
             }
         }
@@ -97,6 +98,16 @@ void ArrangementMinimap::paint (juce::Graphics& g)
 
     // the frame of the lanes
     const auto frame = frameBounds();
+    if (t.glass)
+    {
+        // glass: a soft accent window with rounded corners instead of a dark frame with bars
+        const auto f = frame.toFloat().reduced (0.5f);
+        g.setColour (t.accentFill.withAlpha (0.12f));
+        g.fillRoundedRectangle (f, 4.0f);
+        g.setColour (t.accentFill.withAlpha (0.8f));
+        g.drawRoundedRectangle (f, 4.0f, 1.5f);
+        return;
+    }
     g.setColour (t.text.withAlpha (0.09f));
     g.fillRect (frame);
     g.setColour (t.text.withAlpha (0.75f));

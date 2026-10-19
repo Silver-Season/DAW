@@ -174,6 +174,28 @@ void DrumPads::paint (juce::Graphics& g)
         const auto& pad = state.pads[(size_t) i];
         const bool empty = pad.source.empty();
         const float flash = shown[(size_t) i];
+        if (t.glass)
+        {
+            // Glass: a light pad with a bar in its own colour of the spectrum along the top; it lights up in that
+            // colour when it plays; the name under the bar.
+            const auto tone = t.palette ((i * 5) % 16);
+            auto padFill = empty ? t.panel.interpolatedWith (t.panel2, 0.5f) : t.panel.interpolatedWith (tone, 0.10f + 0.6f * flash);
+            if (i == hoverDrop)
+                padFill = t.accentFill.withAlpha (0.35f).overlaidWith (t.panel);
+            glass::cell (g, b, padFill, 6.0f);
+            g.setColour (i == selected ? t.accent : t.line.withAlpha (0.6f));
+            g.drawRoundedRectangle (b.reduced (0.5f), 6.0f, i == selected ? 1.6f : 1.0f);
+            if (b.getHeight() >= 22.0f)
+            {
+                g.setColour (tone.withAlpha (empty ? 0.35f : 1.0f));
+                g.fillRoundedRectangle (b.getX() + 6.0f, b.getY() + 4.0f, b.getWidth() - 12.0f, 3.0f, 1.5f);
+            }
+            g.setColour (empty ? t.dimText : t.inkOn (padFill));
+            g.setFont (t.uiFont (10.5f, 500));
+            g.drawFittedText (empty ? juce::String (daw::drums::padMap()[(size_t) i].noteName) : juce::String (pad.name),
+                              b.toNearestInt().reduced (4).withTrimmedTop (b.getHeight() >= 22.0f ? 5 : 0), juce::Justification::centred, 2, 1.0f);
+            continue;
+        }
         auto fill = empty ? t.panel2 : t.panel2.interpolatedWith (colour, 0.35f + 0.6f * flash);
         if (i == hoverDrop)
             fill = t.accent.withAlpha (0.5f);

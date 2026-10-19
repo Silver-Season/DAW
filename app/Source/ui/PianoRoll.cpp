@@ -1,5 +1,6 @@
 #include "PianoRoll.h"
 
+#include "Chrome.h"
 #include "PianoRollParts.h"
 #include "QuantiseWindow.h"
 
@@ -24,6 +25,79 @@ std::vector<daw::engine::Note>& PianoRoll::clipboard()
 }
 
 //==============================================================================
+// The switch between the piano roll and the views drawn for later (score, step), with the clip's name on the left.
+class PianoRoll::ModeBar final : public juce::Component
+{
+public:
+    explicit ModeBar (PianoRoll& o) : owner (o) { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+    juce::Rectangle<float> segments() const { return { 10.0f, 5.0f, 300.0f, (float) getHeight() - 10.0f }; }
+    void paint (juce::Graphics& g) override
+    {
+        const auto& t = theme();
+        const auto r = segments();
+        const float pill = r.getHeight() * 0.5f, third = r.getWidth() / 3.0f;
+        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.85f : 0.7f));
+        g.fillRoundedRectangle (r, pill);
+        const auto active = juce::Rectangle<float> (r.getX() + third * (float) owner.editorMode, r.getY(), third, r.getHeight()).reduced (3.0f);
+        juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
+        glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
+        const juce::String labels[] { Strings::transport::modePianoRoll, Strings::transport::modeScore, Strings::transport::modeStep };
+        for (int i = 0; i < 3; ++i)
+        {
+            g.setColour (i == owner.editorMode ? t.text : t.dimText);
+            g.setFont (t.uiFont (13.0f, i == owner.editorMode ? 600 : 500));
+            g.drawText (labels[i], juce::Rectangle<float> (r.getX() + third * (float) i, r.getY(), third, r.getHeight()), juce::Justification::centred, false);
+        }
+    }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        const auto r = segments();
+        if (r.contains (e.position))
+            owner.setEditorMode (juce::jlimit (0, 2, (int) ((e.position.x - r.getX()) / (r.getWidth() / 3.0f))));
+    }
+
+private:
+    PianoRoll& owner;
+};
+
+namespace
+{
+// Faint pictures of the views to come.
+void drawScoreGhost (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto& t = theme();
+    g.setColour (t.text.withAlpha (0.35f));
+    for (int staff = 0; staff < 2; ++staff)
+    {
+        const float top = area.getY() + 30.0f + (float) staff * 120.0f;
+        for (int l = 0; l < 5; ++l)
+            g.fillRect (area.getX() + 20.0f, top + (float) l * 10.0f, area.getWidth() - 40.0f, 1.0f);
+        for (int n = 0; n < 24; ++n)
+        {
+            const float x = area.getX() + 70.0f + (float) n * (area.getWidth() - 110.0f) / 24.0f;
+            const float y = top + (float) ((n * 7 + staff * 3) % 9) * 5.0f - 5.0f;
+            g.fillEllipse (x, y, 9.0f, 7.0f);
+            g.fillRect (x + 8.0f, y - 22.0f, 1.2f, 25.0f);
+        }
+    }
+}
+void drawStepGhost (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto& t = theme();
+    const int rows = 8, steps = 16;
+    const float cw = (area.getWidth() - 40.0f) / (float) steps, ch = juce::jmin (26.0f, (area.getHeight() - 20.0f) / (float) rows);
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < steps; ++c)
+        {
+            const auto cell = juce::Rectangle<float> (area.getX() + 20.0f + (float) c * cw, area.getY() + 10.0f + (float) r * ch, cw - 4.0f, ch - 4.0f);
+            const bool on = ((r * 5 + c * 3) % 7) == 0 || (r == rows - 1 && c % 4 == 0);
+            g.setColour (on ? t.palette ((r * 2) % 16) : t.panel2);
+            g.fillRoundedRectangle (cell, 4.0f);
+        }
+}
+} // namespace
+
+//==============================================================================
 PianoRoll::PianoRoll (AudioEngine& e, ProjectModel& m, ProjectActions& a, SelectionState& s)
     : engine (e), model (m), actions (a), selectionState (s)
 {
@@ -37,6 +111,17 @@ PianoRoll::PianoRoll (AudioEngine& e, ProjectModel& m, ProjectActions& a, Select
     controllers = std::make_unique<ControllerStrip> (*this);
     for (auto* c : std::initializer_list<juce::Component*> { props.get(), ruler.get(), keys.get(), grid.get(), velocityLane.get(), controllers.get(), &hbar, &vbar })
         addAndMakeVisible (c);
+    modeBar = std::make_unique<ModeBar> (*this);
+    addChildComponent (*modeBar);
+    scoreSoon = std::make_unique<ComingSoonView> (Strings::transport::modeScore, Strings::transport::scoreSoonText, Strings::transport::backToPianoRoll);
+    stepSoon = std::make_unique<ComingSoonView> (Strings::transport::modeStep, Strings::transport::stepSoonText, Strings::transport::backToPianoRoll);
+    scoreSoon->ghost = drawScoreGhost;
+    stepSoon->ghost = drawStepGhost;
+    for (auto* soon : { scoreSoon.get(), stepSoon.get() })
+    {
+        soon->onAction = [this] { setEditorMode (0); };
+        addChildComponent (*soon);
+    }
     hbar.addListener (this);
     vbar.addListener (this);
     hbar.setAutoHide (false);
@@ -979,10 +1064,32 @@ void PianoRoll::resized()
     layoutParts();
 }
 
+void PianoRoll::setEditorMode (int mode)
+{
+    editorMode = juce::jlimit (0, 2, mode);
+    layoutParts();
+    modeBar->repaint();
+}
+
 void PianoRoll::layoutParts()
 {
     auto r = getLocalBounds();
     props->setBounds (r.removeFromLeft (kPropsWidth));
+    const bool glassBar = theme().glass;
+    modeBar->setVisible (glassBar);
+    if (glassBar)
+        modeBar->setBounds (r.removeFromTop (40));
+    else
+        editorMode = 0;
+    scoreSoon->setVisible (editorMode == 1);
+    stepSoon->setVisible (editorMode == 2);
+    scoreSoon->setBounds (r);
+    stepSoon->setBounds (r);
+    if (editorMode != 0)
+    {
+        scoreSoon->toFront (false);
+        stepSoon->toFront (false);
+    }
     auto ctrl = r.removeFromBottom (v.controllersOpen ? kControllerHeader + kControllerBody : kControllerHeader);
     controllers->setBounds (ctrl);
     auto vel = r.removeFromBottom (kVelocityHeight);
