@@ -109,12 +109,16 @@ public:
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
-            fill = role == Role::activator ? t.accent : (role == Role::solo ? t.accent2 : t.record);
-            ink = t.clipInk;
+            fill = role == Role::activator ? (t.glass ? t.accentFill : t.accent)
+                                           : (role == Role::solo ? (t.glass ? t.accentFill2 : t.accent2) : t.record);
+            ink = t.glass ? t.inkOn (fill) : t.clipInk;
         }
         else if (isMouseOver())
             fill = t.panel2.brighter (0.08f);
-        fillCell (g, r, fill, 0.7f);
+        if (t.glass && on)
+            glass::accent (g, r, fill, t.radius * 0.7f);
+        else
+            fillCell (g, r, fill, 0.7f);
         if (! on)
             strokeCell (g, r, t.line, 1.0f, 0.7f);
         g.setColour (ink);
@@ -177,12 +181,12 @@ public:
             if (! track.isValid())
                 continue;
             if (t.glass)
-                glass::accent (g, b.toFloat (), t.palette (track.colour ()), t.radius * 0.7f);
+                glass::accent (g, b.toFloat (), t.palette (track.colour ()), t.radius);
             else
                 fillCell (g, b.toFloat (), t.palette (track.colour ()));
             if (track.id() == selectedTrack)
                 strokeCell (g, b.toFloat(), t.text, 2.0f);
-            g.setColour (t.clipInk);
+            g.setColour (t.glass ? t.inkOn (t.palette (track.colour ())) : t.clipInk);
             g.setFont (t.uiFont (12.5f, 600));
             auto textArea = b.reduced (9, 0);
             if (track.isAudio())
@@ -477,7 +481,7 @@ public:
             SessionRecorder::Progress progress;
             const bool hasProgress = recScene >= 0 && view.recorder->getProgress (v.track.id(), progress);
             // empty slots carry a trace of the track colour, so neighbouring columns differ
-            const auto emptyFill = t.panel.interpolatedWith (t.palette (v.track.colour()), 0.08f);
+            const auto emptyFill = t.panel.interpolatedWith (t.palette (v.track.colour()), t.glass ? 0.05f : 0.08f);
 
             for (int s = 0; s < numScenes; ++s)
             {
@@ -497,7 +501,7 @@ public:
                         continue;
                     }
                     fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
-                    strokeCell (g, cell, dropTarget || selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
+                    strokeCell (g, cell, dropTarget || selected ? t.accent : (t.glass ? t.line.withAlpha (0.55f) : t.line), selected ? 1.5f : 1.0f);
                     const auto mark = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
                     g.setColour (live ? (armed ? t.record : t.record.withAlpha (0.6f)) : t.line);
                     if (live)
@@ -515,13 +519,10 @@ public:
                 if (audioClip)
                     audioSource = view.engine.peekAudioSource (clip.fileId());
                 const bool missing = audioClip && audioSource == nullptr;
-                const auto ink = missing ? t.dimText : (t.glass ? t.text : t.clipInk);
+                const auto glassFill = t.panel.interpolatedWith (colour, isPlaying ? 0.9f : 0.5f);
+                const auto ink = missing ? t.dimText : (t.glass ? t.inkOn (glassFill) : t.clipInk);
                 if (t.glass && !missing)
-                {
-                    fillCell (g, cell, t.panel.interpolatedWith (colour, isPlaying ? 0.65f : 0.28f), 0.7f);
-                    g.setColour (colour);
-                    g.fillRoundedRectangle (cell.reduced (4, 0).withHeight (2).translated (0, 2), 1.0f);
-                }
+                    fillCell (g, cell, glassFill);
                 else
                     fillCell (g,
                               cell,

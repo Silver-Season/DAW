@@ -18,32 +18,32 @@ namespace ui
 class TopBar final : public juce::Component
 {
 public:
-  static constexpr int kHeight = 104;
+    static constexpr int kHeight = 104;
 
-  TopBar (AudioEngine&, ProjectModel&);
-  ~TopBar () override;
+    TopBar (AudioEngine&, ProjectModel&);
+    ~TopBar () override;
 
-  // Called by the window's 30 Hz timer: refreshes the position, tempo, CPU and the lamps.
-  void tick ();
-  void setComputerKeysOn (bool on);
-  // The octave of the A key, shown in the KLAV lamp ("KEYS C3").
-  void setKeysOctave (const juce::String& octave);
+    // Called by the window's 30 Hz timer: refreshes the position, tempo, CPU and the lamps.
+    void tick ();
+    void setComputerKeysOn (bool on);
+    // The octave of the A key, shown in the KLAV lamp ("KEYS C3").
+    void setKeysOctave (const juce::String& octave);
 
-  // The recorder gives the ribbon its notes and the record lamp its state; the window decides what the buttons do
-  // (it knows the selection): record = Session Record from the selected scene, capture = the last phrase.
-  void setRecorder (SessionRecorder*);
-  std::function<void ()> onRecordClicked;
-  // The items of the record button's menu (right mouse button) that choose where the recording goes (task 3.4):
-  // the Arrangement timeline (F9) or a slot of Session View.
-  std::function<void ()> onRecordToArrangement, onRecordToSlot;
-  std::function<void ()> onCaptureClicked;
+    // The recorder gives the ribbon its notes and the record lamp its state; the window decides what the buttons do
+    // (it knows the selection): record = Session Record from the selected scene, capture = the last phrase.
+    void setRecorder (SessionRecorder*);
+    std::function<void ()> onRecordClicked;
+    // The items of the record button's menu (right mouse button) that choose where the recording goes (task 3.4):
+    // the Arrangement timeline (F9) or a slot of Session View.
+    std::function<void ()> onRecordToArrangement, onRecordToSlot;
+    std::function<void ()> onCaptureClicked;
 
-  std::function<void ()> onCpuClicked, onAppearanceClicked, onExportClicked;
-  void setProjectName (const juce::String& name)
-  {
-      projectName = name;
-      repaint ();
-  }
+    std::function<void ()> onCpuClicked, onAppearanceClicked, onExportClicked;
+    void setProjectName (const juce::String& name)
+    {
+        projectName = name;
+        repaint ();
+    }
     // The version button: shows "v14 · 5 min" and opens the history.
     std::function<void()> onVersionClicked;
     void setVersionText (const juce::String&);
@@ -81,7 +81,8 @@ private:
     uint32_t lastDiskMisses = 0;
     juce::uint32 diskShownUntil = 0;
 
-    juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea;
+    juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea, capsuleArea;
+    std::vector<int> separators; // thin lines between the groups of the transport capsule
     juce::String projectName;
     void paintRibbon (juce::Graphics&);
     void updateRibbon();

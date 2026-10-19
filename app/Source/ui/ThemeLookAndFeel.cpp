@@ -261,12 +261,16 @@ ThemeLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bo
         return;
     }
     const auto track = juce::Rectangle<float> (32.0f, 18.0f).withCentre ({ 19.0f, (float)b.getHeight () * 0.5f });
-    g.setColour (b.getToggleState () ? t.accentFill : t.line);
-    g.fillRoundedRectangle (track, 9.0f);
-    ui::glass::lens (g,
-                     juce::Rectangle<float> (18.0f, 18.0f)
-                       .withCentre ({ track.getX () + (b.getToggleState () ? 24.0f : 8.0f), track.getCentreY () }),
-                     t.accentFill);
+    if (b.getToggleState ())
+        ui::glass::accent (g, track, t.accentFill, 9.0f);
+    else
+    {
+        g.setColour (t.line);
+        g.fillRoundedRectangle (track, 9.0f);
+    }
+    ui::glass::thumb (g,
+                      juce::Rectangle<float> (16.0f, 16.0f)
+                        .withCentre ({ track.getX () + (b.getToggleState () ? 23.0f : 9.0f), track.getCentreY () }));
     g.setColour (b.isEnabled () ? t.text : t.dimText);
     g.setFont (t.uiFont (12.0f));
     g.drawFittedText (
@@ -276,4 +280,57 @@ ThemeLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bo
         g.setColour (t.accent);
         g.drawRoundedRectangle (b.getLocalBounds ().toFloat ().reduced (1.0f), t.radius, 2.0f);
     }
+}
+
+void
+ThemeLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool down, int buttonX, int buttonY,
+                                int buttonW, int buttonH, juce::ComboBox& box)
+{
+    const auto& t = theme ();
+    if (!t.glass)
+    {
+        LookAndFeel_V4::drawComboBox (g, width, height, down, buttonX, buttonY, buttonW, buttonH, box);
+        return;
+    }
+    const auto r = juce::Rectangle<float> ((float)width, (float)height).reduced (0.5f);
+    ui::glass::surface (g, r, box.findColour (juce::ComboBox::backgroundColourId), t.radius);
+    g.setColour (box.hasKeyboardFocus (true) ? t.accent : t.line);
+    g.drawRoundedRectangle (r, t.radius, 1.0f);
+    juce::Path arrow;
+    const auto centre = juce::Point<float> ((float)width - 15.0f, (float)height * 0.5f);
+    arrow.startNewSubPath (centre.x - 4.0f, centre.y - 2.0f);
+    arrow.lineTo (centre.x, centre.y + 2.0f);
+    arrow.lineTo (centre.x + 4.0f, centre.y - 2.0f);
+    g.setColour (box.findColour (juce::ComboBox::arrowColourId).withAlpha (box.isEnabled () ? 0.9f : 0.3f));
+    g.strokePath (arrow, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void
+ThemeLookAndFeel::fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& editor)
+{
+    const auto& t = theme ();
+    if (!t.glass)
+    {
+        LookAndFeel_V4::fillTextEditorBackground (g, width, height, editor);
+        return;
+    }
+    g.setColour (editor.findColour (juce::TextEditor::backgroundColourId));
+    g.fillRoundedRectangle (juce::Rectangle<float> ((float)width, (float)height).reduced (0.5f), t.radius * 0.8f);
+}
+
+void
+ThemeLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int height, juce::TextEditor& editor)
+{
+    const auto& t = theme ();
+    if (!t.glass)
+    {
+        LookAndFeel_V4::drawTextEditorOutline (g, width, height, editor);
+        return;
+    }
+    if (!editor.isEnabled ())
+        return;
+    const bool focused = editor.hasKeyboardFocus (true) && !editor.isReadOnly ();
+    g.setColour (editor.findColour (focused ? juce::TextEditor::focusedOutlineColourId : juce::TextEditor::outlineColourId));
+    g.drawRoundedRectangle (juce::Rectangle<float> ((float)width, (float)height).reduced (focused ? 1.0f : 0.5f),
+                            t.radius * 0.8f, focused ? 2.0f : 1.0f);
 }

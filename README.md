@@ -7,28 +7,22 @@ Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ![Session View, Prism theme](media/session-prism.png)
 
-## Packaging a macOS preview
+## Glass appearance
 
-Build the Release app and all Prisma formats first, then run:
+Glass · Light and Glass · Dark sit alongside the original four themes. **Appearance** in the top bar sets two accent colours, the gradient and its angle, glass depth, playback glow and an opaque fallback (Reduce transparency). The choice is kept in the app settings, not in the project; record, play and track colours keep their meaning.
 
-```sh
-./scripts/package-mac.sh /absolute/path/to/build /absolute/path/to/Prisma-DAW.dmg
-```
+- **Top bar in two rows.** Above: the mark and project name, the Session/Arrangement switch, version, export and appearance. Below: one glass capsule with the transport in groups (play/stop/record, position/tempo/metre, scale/metronome/loop/punch/follow), the capture ribbon, the spectrum, the lamps and CPU. Buttons inside the capsule are just their icons until they are lit or under the mouse.
+- **A lens over the spectrum.** The master spectrum is drawn into an image and a glass lens refracts it: magnified in the middle, bent at the rim, red and blue parting at the edge, light on the upper rim. Drag it along the spectrum; a double-click puts it back. Fader and slider thumbs are smaller lenses over their own track.
+- **Calm grids.** Clip slots and fields are flat with a soft top light and no rim; clips are tinted with the track colour, with the label colour chosen for contrast.
 
-The DMG includes DAW.app, Prisma AU/VST3/Standalone, installation instructions, license notices and BUILD-INFO.txt with the source commit and actual CPU architectures. The script signs the staged copies, verifies the compressed image and signatures from a read-only mount, and writes a SHA-256 sidecar. It does not install plugins locally. These previews are ad-hoc signed and are not notarized.
-
-CI uses the same packager; branch builds upload the DMG and checksum as workflow artifacts. The existing nightly release is updated only by a successful main build. The local glass preview is Apple Silicon (`arm64`); CI's normal configuration builds both arm64 and x86_64.
-
-## Configurable glass appearance
-
-Glass · Light and Glass · Dark add a shared material for controls and panels, alongside the original four themes. **Appearance** in the top bar opens two custom accent colours, gradients and their angle, glass depth, playback glow and an opaque fallback. Choices are remembered separately from projects; record/play and track colours retain their musical meaning.
-
-The two-row top bar keeps navigation above transport and provides direct access to the existing export dialog. The latest main’s prism, beam, six spectrum tracks and app icon are retained and follow the theme. The built-in Prisma editor follows the host's theme; external plugins retain their own interface.
-
-The native lens refracts its own control track. Full-window backdrop refraction and pointer-following highlights from the HTML optics study remain a separate rendering step. [Rendering details and verification](docs/design/GLASS-UI.md) · [Native captures in all six themes](media/ui-glass/index.html).
+[Rendering details and verification](docs/design/GLASS-UI.md) · [Captures in all six themes](media/ui-glass/index.html)
 
 ![Session in Glass Light](media/ui-glass/glass-light-session.png)
-![Session in Glass Dark](media/ui-glass/glass-dark-session.png)
+![Arrangement in Glass Dark](media/ui-glass/glass-dark-arrangement.png)
+
+## Packaging a macOS build
+
+`./scripts/package-mac.sh /absolute/build /absolute/out/DAW.dmg` packages DAW.app and Prisma AU/VST3/Standalone with the install notes, licence notices and BUILD-INFO.txt (source commit, architectures), signs the staged copies ad hoc, verifies the image from a read-only mount and writes a SHA-256 file. CI uses the same script; the nightly release is updated only from `main`.
 
 ## Window, themes and menus (stage 1b)
 

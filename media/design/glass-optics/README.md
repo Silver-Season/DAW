@@ -1,42 +1,26 @@
-# Prisma — оптический прототип
+# Prisma optics study
 
-Открыть index.html в современном браузере. Все ресурсы локальные; интернет не требуется.
-Во время сессии также доступен http://127.0.0.1:8773/ (локальный сервер только на loopback).
+Open `index.html` in a current browser. Everything is local; no network is needed.
 
-## Проверить глазами
+This is the reference for the glass look of the app: a lens that refracts a spectrum bar, a glass capsule transport, light and dark modes.
 
-- Перетаскивать большую линзу над спектром, мелкими рисками и волной. Стрелки клавиатуры перемещают; Home возвращает в центр.
-- Двигать мышь вокруг линзы: блик меняет положение с плавным догоняющим движением.
-- Сравнить «Преломление» и «Только blur» при одинаковом положении линзы.
-- Переключить светлую/тёмную тему, менять глубину, блик и акцент.
-- Двигать нижний Wet/dry: его прозрачный бегунок преломляет цветную полосу.
-- «Движение» включает медленное автоматическое перемещение линзы. При перетаскивании оно отключается.
+## What to try
 
-## Что реализовано
+- Drag the large lens over the spectrum, the ticks and the wave. Arrow keys move it; Home centres it.
+- Move the mouse around the lens: the highlight follows with a little lag.
+- Compare "refraction" and "blur only" with the lens in the same place.
+- Switch light/dark, change depth, highlight and accent.
+- Drag the Wet/dry slider: its clear thumb refracts the coloured track.
+- "Motion" moves the lens slowly on its own; dragging stops it.
 
-WebGL 1 fragment shader. Backdrop рисуется в отдельный 2D canvas, затем используется как текстура.
-Форма линзы задана signed-distance rounded rectangle. Локальная нормаль смещает выборку backdrop;
-к ней добавлены увеличение, слабая дисперсия каналов на краю, направленные блики и мягкая тень.
-Текст и интерактивные HTML-контролы находятся на отдельном чётком переднем плане.
-Blur comparison использует тот же backdrop, но без изменения координат выборки.
-Это реальная перерисовка изображения под линзой, а не замена готовой картинки и не один CSS backdrop-filter.
+## How it works
 
-Это приближённая модель, не трассировка лучей и не физически точная симуляция настоящей призмы.
-Это также не системный Apple Liquid Glass. Убедительность, форма края и спокойствие бликов ещё требуют художественной настройки.
+A WebGL 1 fragment shader. The backdrop is drawn into a separate 2D canvas and used as a texture. The lens shape is a signed-distance rounded rectangle; its local normal shifts the backdrop lookup, with magnification, slight channel dispersion at the rim, directional highlights and a soft shadow. Text and controls stay sharp on a separate foreground layer. It is an approximation, not ray tracing.
 
-## Производительность и границы
+## In the app
 
-- DPR ограничен 1.5. Исходная текстура обновляется только при изменении цвета/темы/размера/ползунка.
-- Без движения/взаимодействия requestAnimationFrame останавливается после завершения сглаживания.
-- Скрытая вкладка не анимируется. Учитывается prefers-reduced-motion.
-- При отсутствии WebGL явно показывается fallback с размытием. Его нельзя считать проверкой преломления.
-- Проверен браузерный WebGL в текущей среде, light/dark, blur toggle, Wet/dry28%, клавиатурный Home для линзы.
-- Показанные BPM/sample-rate — иллюстративный контекст. Аудио в этом прототипе нет.
-- Перенос на JUCE, профилирование на целевых GPU, GPU-context loss и разные браузеры ещё требуют проверки.
-- Это proof-of-concept оптики. Он не завершает перенос всего интерфейса приложения, начатый в ветке codex/glass-ui.
+The native app follows the same model on the CPU: the top-bar spectrum is drawn into an image and a draggable lens refracts it (magnified middle, bent rim, red/blue parting at the edge, rim light). Faders and sliders use smaller lenses that refract an analytic copy of their own track. See [docs/design/GLASS-UI.md](../../../docs/design/GLASS-UI.md).
 
-## Логотип и шрифты
+## Logo and fonts
 
-prisma.png — копия утверждённого media/brand/app-icon-liquid-glass-v1.png, с призмой, белым лучом и шестью дорожками.
-Onest Regular/SemiBold из ресурсов приложения; лицензия SIL OFL приложена в OFL-Onest.txt.
-
+`prisma.png` is an earlier icon study; the app's own icon is `app/Resources/brand/AppIcon-1024.png` (sources in `media/brand/`). Onest Regular/SemiBold come from the app's resources; the SIL OFL licence is in `OFL-Onest.txt`.

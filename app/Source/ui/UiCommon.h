@@ -63,7 +63,7 @@ bool textFieldHasFocus();
 inline void fillCell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c, float radiusScale = 1.0f)
 {
     if (theme ().glass)
-        glass::surface (g, r, c, theme ().radius * radiusScale);
+        glass::cell (g, r, c, theme ().radius * radiusScale);
     else
     {
         g.setColour (c);

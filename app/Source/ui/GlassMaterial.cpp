@@ -50,6 +50,64 @@ surface (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float r
 }
 
 void
+cell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float radius)
+{
+    const auto& t = theme ();
+    if (!t.glass || t.material <= 0.0f || base.getAlpha () < 255)
+    {
+        g.setColour (base);
+        g.fillRoundedRectangle (r, radius);
+        return;
+    }
+    const auto top = base.interpolatedWith (t.highlight (), (t.isLight () ? 0.30f : 0.05f) * t.material);
+    g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), base, 0.0f, r.getBottom (), false));
+    g.fillRoundedRectangle (r, radius);
+}
+
+void
+capsule (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& t = theme ();
+    const float radius = r.getHeight () * 0.5f;
+    if (!t.glass || t.material <= 0.0f)
+    {
+        g.setColour (t.panel);
+        g.fillRoundedRectangle (r, radius);
+        g.setColour (t.line);
+        g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+        return;
+    }
+    // A soft drop shadow, a frosted body lighter at the top, a bright upper rim and a darker lower one.
+    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.10f : 0.35f), 14, { 0, 4 })
+      .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (r, radius); return p; } ());
+    const auto body = t.panel;
+    g.setGradientFill (juce::ColourGradient (body.interpolatedWith (t.highlight (), t.isLight () ? 0.55f : 0.08f),
+                                             0.0f, r.getY (),
+                                             body.interpolatedWith (t.background, 0.35f), 0.0f, r.getBottom (), false));
+    g.fillRoundedRectangle (r, radius);
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha (t.isLight () ? 0.95f : 0.30f), 0.0f, r.getY (),
+                                             t.highlight ().withAlpha (0.0f), 0.0f, r.getCentreY (), false));
+    g.drawRoundedRectangle (r.reduced (0.75f), radius - 0.75f, 1.5f);
+    g.setColour (t.line.withAlpha (t.isLight () ? 0.75f : 0.6f));
+    g.drawRoundedRectangle (r, radius, 1.0f);
+}
+
+void
+thumb (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    const auto& t = theme ();
+    const float radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
+    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.22f : 0.5f), 4, { 0, 1 })
+      .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (r, radius); return p; } ());
+    const auto body = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.75f);
+    g.setGradientFill (juce::ColourGradient (body, 0.0f, r.getY (), body.interpolatedWith (t.line, 0.25f), 0.0f,
+                                             r.getBottom (), false));
+    g.fillRoundedRectangle (r, radius);
+    g.setColour (t.line.withAlpha (0.7f));
+    g.drawRoundedRectangle (r.reduced (0.5f), radius - 0.5f, 1.0f);
+}
+
+void
 lens (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour track, bool vertical)
 {
     const auto& t = theme ();
@@ -106,6 +164,7 @@ lens (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour track, bool vert
     }
     g.setColour (t.shadow ().withAlpha (t.isLight () ? 0.10f : 0.30f));
     g.fillRoundedRectangle (r.translated (0.0f, 1.5f), r.getHeight () * 0.5f);
+    g.setOpacity (1.0f); // drawImage takes the context's opacity, which the shadow colour just set
     g.drawImage (it->second, r);
 }
 

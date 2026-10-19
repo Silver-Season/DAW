@@ -28,6 +28,7 @@ public:
     Role role = Role::normal;
     bool on = false;
     bool accentInk = false; // the label in the accent colour (the scale button while a scale is set)
+    bool framed = false;    // glass themes: a button of its own (top row), not one of the capsule's row
     std::function<void()> onClick;
     std::function<void()> onPopup; // right mouse button
 
@@ -72,10 +73,29 @@ public:
             ink = t.dimText.withAlpha (0.6f);
             border = border.withMultipliedAlpha (0.6f);
         }
-        fillCell (g, r, fill);
-        if (t.glass && on)
-            glass::accent (g, r, fill, t.radius);
-        strokeCell (g, r, border);
+        if (t.glass)
+        {
+            // Inside the transport capsule a button is only its icon until it is lit or under the mouse.
+            const float pill = r.getHeight () * 0.5f;
+            if (on)
+                glass::accent (g, r, fill, pill);
+            else if (framed)
+            {
+                glass::surface (g, r, fill, pill);
+                g.setColour (border.withMultipliedAlpha (0.8f));
+                g.drawRoundedRectangle (r, pill, 1.0f);
+            }
+            else if (isMouseOver () && isEnabled ())
+            {
+                g.setColour (t.panel2.withAlpha (0.8f));
+                g.fillRoundedRectangle (r, pill);
+            }
+        }
+        else
+        {
+            fillCell (g, r, fill);
+            strokeCell (g, r, border);
+        }
 
         g.setColour (ink);
         if (icon)
@@ -371,6 +391,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     tempo.setDragSensitivity (0.5);
     tempo.setWheelStep (0.1);
     tempo.setHelpText (Strings::help::tempo);
+    tempo.setBoxedInGlass (false);
     tempo.onGestureStart = [this] { model.undo.beginNewTransaction (Strings::undoTempo); };
     tempo.onValueChange = [this] (double) { model.setTempo (tempo.getValue()); };
     addAndMakeVisible (tempo);
@@ -612,7 +633,12 @@ void TopBar::paint (juce::Graphics& g)
     g.fillRect (0, getHeight() - 1, getWidth(), 1);
 
     if (t.glass)
-        glass::surface (g, getLocalBounds ().toFloat ().withTrimmedTop (53.0f).reduced (8.0f, 5.0f), t.panel, 12.0f);
+    {
+        glass::capsule (g, capsuleArea.toFloat ());
+        g.setColour (t.line.withAlpha (0.8f));
+        for (const int x : separators)
+            g.fillRect ((float) x, (float) capsuleArea.getY () + 11.0f, 1.0f, (float) capsuleArea.getHeight () - 22.0f);
+    }
     ui::drawLogo (g, logoArea.toFloat());
     g.setColour (t.text);
     g.setFont (t.uiFont (22.0f, 600));
@@ -625,8 +651,11 @@ void TopBar::paint (juce::Graphics& g)
                       1);
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
-        fillCell (g, area.toFloat(), t.panel);
-        strokeCell (g, area.toFloat(), t.line);
+        if (! t.glass)
+        {
+            fillCell (g, area.toFloat(), t.panel);
+            strokeCell (g, area.toFloat(), t.line);
+        }
         g.setColour (t.text);
         g.setFont (t.numFont (13.0f));
         g.drawText (text, area, juce::Justification::centred, false);
@@ -677,8 +706,11 @@ void TopBar::paintRibbon (juce::Graphics& g)
     // stroke in the colour of its track, as tall as it was loud; the red line is "now".
     const auto& t = theme();
     const auto r = ribbonArea.toFloat();
-    fillCell (g, r, t.panel);
-    strokeCell (g, r, t.line);
+    if (! t.glass)
+    {
+        fillCell (g, r, t.panel);
+        strokeCell (g, r, t.line);
+    }
     g.setColour (t.dimText);
     g.setFont (t.uiFont (10.5f, 500));
     g.drawText (Strings::transport::capture10.toUpperCase(), ribbonArea.withTrimmedLeft (9).withWidth (46), juce::Justification::centredLeft, false);
@@ -712,68 +744,89 @@ void TopBar::paintRibbon (juce::Graphics& g)
 
 void TopBar::resized()
 {
-    constexpr int h = 30, gap = 7, cy = 77;
+    // Two rows. The upper one: the mark and the project name, the Session/Arrangement switch in the middle, the version,
+    // export and appearance on the right. The lower one is a capsule holding the transport, left to right in groups,
+    // with the lamps and the CPU on its right end; the ribbon and the spectrum take the room left in between.
+    constexpr int h = 30, gap = 6, groupGap = 15, cy = 77;
     logoArea = { 17, 7, 38, 38 };
     tabs->setBounds (getWidth () / 2 - 112, 10, 224, 32);
-    exportButton->setBounds (getWidth () - 214, 10, 103, 32);
-    appearanceButton->setBounds (getWidth () - 104, 10, 90, 32);
-    version->setBounds (getWidth () - 323, 10, 100, 32);
-    int x = 22;
+    appearanceButton->setBounds (getWidth () - 14 - 104, 11, 104, 30);
+    exportButton->setBounds (appearanceButton->getX () - 8 - 96, 11, 96, 30);
+    version->setBounds (exportButton->getX () - 8 - 100, 11, 100, 30);
+    for (auto* b : { appearanceButton.get (), exportButton.get (), version.get (), capture.get () })
+        b->framed = true;
+
+    capsuleArea = { 10, cy - 21, getWidth () - 20, 42 };
+    separators.clear ();
+    int x = capsuleArea.getX () + 10;
     auto place = [&] (juce::Component& c, int width)
     {
         c.setBounds (x, cy - h / 2, width, h);
         x += width + gap;
     };
-    place (*stop, 32);
-    place (*play, 32);
-    place (*record, 32);
+    auto separate = [&]
+    {
+        x += groupGap - gap;
+        separators.push_back (x - groupGap / 2 - 1);
+    };
+    place (*stop, h);
+    place (*play, h);
+    place (*record, h);
     place (*overdub, 40);
+    separate ();
     positionArea = { x, cy - h / 2, 90, h };
-    x += 104;
-    place (tempo, 82);
+    x += 90 + gap;
+    place (tempo, 76);
     signatureArea = { x, cy - h / 2, 54, h };
-    x += 61;
-    place (*scaleButton, 104);
-    place (*metronome, 30);
-    place (*loop, 30);
+    x += 54 + gap;
+    separate ();
+    place (*scaleButton, 100);
+    place (*metronome, h);
+    place (*loop, h);
     place (*punchIn, 28);
     place (*punchOut, 28);
-    place (*follow, 30);
-    place (*backToArrangement, 30);
-    auto right = getWidth () - 16;
+    place (*follow, h);
+    place (*backToArrangement, h);
+    separate ();
+
+    auto right = capsuleArea.getRight () - 12;
     auto take = [&] (juce::Component& c, int width)
     {
         right -= width;
-        c.setBounds (right, cy - h / 2, width, h);
+        c.setBounds (right, cy - 10, width, 20);
         right -= gap;
     };
     take (*cpu, 80);
     take (*diskLamp, 20);
     take (*keysLamp, 78);
     take (*midiLamp, 48);
+    right -= gap;
+
     ribbonArea = {};
     ribbonStripArea = {};
     capture->setVisible (false);
     morph->setVisible (false);
     spectrum->setVisible (false);
-    if (right - x >= 290)
+    if (right - x >= 286 + 90 + groupGap)
     {
         ribbonArea = { x, cy - h / 2, 286, h };
-        ribbonStripArea = { x + 58, cy - 12, 130, 24 };
+        ribbonStripArea = { x + 58, cy - 10, 130, 20 };
         capture->setVisible (true);
-        capture->setBounds (x + 196, cy - 12, 82, 24);
-        x += 296;
+        capture->setBounds (x + 198, cy - 13, 82, 26);
+        x += 286;
+        separate ();
     }
-    else if (right - x >= 82)
+    else if (right - x >= 82 + 90 + groupGap)
     {
         capture->setVisible (true);
-        capture->setBounds (x, cy - 12, 82, 24);
-        x += 89;
+        capture->setBounds (x, cy - 13, 82, 26);
+        x += 82;
+        separate ();
     }
-    if (right - x >= 100)
+    if (right - x >= 90)
     {
         spectrum->setVisible (true);
-        spectrum->setBounds (x, cy - 17, juce::jmin (right - x, 260), 34);
+        spectrum->setBounds (x, cy - 15, juce::jmin (right - x, 260), 30);
     }
 }
 } // namespace ui

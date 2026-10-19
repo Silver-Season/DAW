@@ -18,6 +18,7 @@
 #include "../app/Source/ui/ArrangementPlayhead.h"
 #include "../app/Source/ui/Theme.h"
 #include "../app/Source/ui/TopBar.h"
+#include "../app/Source/ui/Spectrum.h"
 
 #include <array>
 #include <atomic>
@@ -1164,6 +1165,61 @@ void testTransportBar()
             check (! f.model.undo.canUndo(), "(they are transport switches, not edits of the music)");
             check (punchIn->getHelpText().contains ("Punch-in") && punchOut->getHelpText().contains ("Punch-out"), "both explain themselves");
         }
+    }
+
+    // Glass: the same layout fits, and a lens sits on the spectrum, can be dragged along it and refracts what is under it.
+    auto& themes = ThemeManager::get();
+    for (const auto* id : { "glass-light", "glass-dark" })
+    {
+        themes.setCurrent (id);
+        ui::TopBar bar (f.engine, f.model);
+        bar.setBounds (0, 0, 1210, ui::TopBar::kHeight);
+        bool inside = true;
+        ui::Spectrum* spectrum = nullptr;
+        for (auto* c : bar.getChildren())
+            if (c->isVisible())
+            {
+                inside = inside && bar.getLocalBounds().contains (c->getBounds());
+                if (auto* s = dynamic_cast<ui::Spectrum*> (c))
+                    spectrum = s;
+            }
+        check (inside, juce::String (id) + ": every control fits at 1210 px");
+        bar.setBounds (0, 0, 1600, ui::TopBar::kHeight);
+        check (spectrum != nullptr && spectrum->isVisible(), juce::String (id) + ": the spectrum is shown");
+        if (spectrum == nullptr)
+            continue;
+        const auto lens = spectrum->lensBounds();
+        check (! lens.isEmpty() && spectrum->getLocalBounds().toFloat().contains (lens), "the lens lies inside the spectrum");
+        auto source = juce::Desktop::getInstance().getMainMouseSource();
+        const auto at = [&] (float x) {
+            const auto t = juce::Time::getCurrentTime();
+            const juce::Point<float> p (x, lens.getCentreY());
+            return juce::MouseEvent (source, p, juce::ModifierKeys::leftButtonModifier, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                     spectrum, spectrum, t, p, t, 1, false);
+        };
+        spectrum->mouseDown (at (lens.getCentreX()));
+        spectrum->mouseDrag (at (12.0f));
+        check (spectrum->lensBounds().getX() < lens.getX() && spectrum->lensBounds().getX() >= 0.0f,
+               "dragging moves the lens and keeps it inside");
+        spectrum->mouseDoubleClick (at (12.0f));
+        check (spectrum->lensBounds() == lens, "a double-click puts it back");
+        check (spectrum->helpAt (lens.getCentre().toInt()) == Strings::help::spectrumLens
+                   && spectrum->helpAt ({ 2, 2 }) == Strings::help::spectrum,
+               "the lens explains itself in the info bar");
+        // Rendered at double density, the lens differs from the plain spectrum under it (the bent rim catches light).
+        const auto image = spectrum->createComponentSnapshot (spectrum->getLocalBounds(), true, 2.0f);
+        const auto rimPoint = juce::Point<int> (juce::roundToInt (lens.getCentreX() * 2.0f), juce::roundToInt (lens.getY() * 2.0f) + 2);
+        const auto outside = juce::Point<int> (juce::roundToInt ((lens.getX() - 6.0f) * 2.0f), rimPoint.y);
+        check (image.getPixelAt (rimPoint.x, rimPoint.y) != image.getPixelAt (outside.x, outside.y),
+               "the lens is drawn over the spectrum");
+    }
+    themes.setCurrent ("prism");
+    {
+        ui::TopBar bar (f.engine, f.model);
+        bar.setBounds (0, 0, 1600, ui::TopBar::kHeight);
+        for (auto* c : bar.getChildren())
+            if (auto* s = dynamic_cast<ui::Spectrum*> (c))
+                check (s->lensBounds().isEmpty(), "the other themes keep the plain spectrum");
     }
 }
 

@@ -683,7 +683,7 @@ public:
         g.fillPath (dashed);
         g.setColour (t.dimText);
         g.setFont (t.uiFont (12.0f));
-        g.drawFittedText (Strings::detail::dropHere, dropZone.reduced (14), juce::Justification::centred, 4);
+        g.drawFittedText (Strings::detail::dropHere, dropZone.reduced (14), juce::Justification::centred, 4, 1.0f);
 
         if (dropMarker >= 0)
         {

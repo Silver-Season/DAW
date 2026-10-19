@@ -406,7 +406,7 @@ void NumberField::paint (juce::Graphics& g)
 {
     const auto& t = theme();
     auto r = getLocalBounds().toFloat();
-    if (boxed)
+    if (boxed && (boxedInGlass || ! t.glass))
     {
         fillCell (g, r, t.panel);
         strokeCell (g, r, t.line);

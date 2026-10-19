@@ -15,7 +15,11 @@ class DawApplication final
 public:
     const juce::String getApplicationName() override { return "DAW"; }
     const juce::String getApplicationVersion() override { return "0.1.0"; }
-    bool moreThanOneInstanceAllowed() override { return false; }
+    // Snapshot runs may happen next to a running copy of the app.
+    bool moreThanOneInstanceAllowed() override
+    {
+        return juce::SystemStats::getEnvironmentVariable ("DAW_UI_SNAPSHOTS", {}).isNotEmpty ();
+    }
 
     void initialise (const juce::String&) override
     {
@@ -184,7 +188,9 @@ private:
         {
             const auto save = [this] (juce::Component& component, const juce::String& name)
             {
-                auto image = component.createComponentSnapshot (component.getLocalBounds ());
+                const auto scale = juce::jlimit (1.0f, 3.0f,
+                  juce::SystemStats::getEnvironmentVariable ("DAW_UI_SNAPSHOT_SCALE", "1").getFloatValue ());
+                auto image = component.createComponentSnapshot (component.getLocalBounds (), true, scale);
                 const auto file = snapshotDirectory.getChildFile (name + ".png");
                 file.deleteFile ();
                 juce::FileOutputStream stream (file);
