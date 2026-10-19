@@ -61,6 +61,8 @@ public:
     // The Session / Arrangement tabs. The window switches the views; this only draws which one is shown.
     std::function<void (bool arrangement)> onViewSwitched;
     void setArrangementShown (bool);
+    void setMixShown();
+    std::function<void()> onMixClicked;
 
     void paint (juce::Graphics&) override;
     void resized() override;

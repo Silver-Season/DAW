@@ -160,7 +160,7 @@ private:
     {
         static const char* themes[]{ "prism", "neon", "studio", "paper", "glass-light", "glass-dark" };
         auto* content = dynamic_cast<MainComponent*> (mainWindow->getContentComponent ());
-        if (snapshotStep >= 44)
+        if (snapshotStep >= 48)
         {
             stopTimer ();
             quit ();
@@ -184,7 +184,9 @@ private:
             else
             {
                 ThemeManager::get ().setCurrent (capture % 2 == 0 ? "glass-light" : "glass-dark");
-                if (capture < 20)
+                if (capture >= 22)
+                    content->showMixView ();
+                else if (capture < 20)
                 {
                     auto window =
                       std::make_unique<ui::SettingsWindow> (*engine, *settings, ui::SettingsWindow::Hooks ());
@@ -213,6 +215,8 @@ private:
             }
             else if (capture < 20)
                 save (*snapshotWindow->getContentComponent (), theme ().id + "-appearance");
+            else if (capture >= 22)
+                save (*content, theme ().id + "-mix");
             else
             {
                 PrismaProcessor processor;

@@ -413,6 +413,22 @@ inline const juce::String keysOn = tr ("KEYS", "КЛАВ");
 inline const juce::String midi = utf8 ("MIDI");
 inline const juce::String scaleOff = tr ("Scale: off", "Лад: выкл");
 inline const juce::String library = tr ("Library", "Библиотека");
+inline const juce::String mixTab = tr ("Mix", "Микшер");
+// The status bar: the device on the left, the main shortcuts on the right.
+inline juce::String statusRate (double hz) { return juce::String (hz / 1000.0, hz == std::floor (hz / 1000.0) * 1000.0 ? 0 : 1) + tr (" kHz", " кГц"); }
+inline juce::String statusBuffer (int samples) { return juce::String (samples) + tr (" samples", " сэмплов"); }
+inline const juce::String statusNoDevice = tr ("No audio device", "Нет аудиоустройства");
+inline const juce::String keyUndo = tr ("Undo", "Отменить");
+inline const juce::String keyRedo = tr ("Redo", "Повторить");
+inline const juce::String keyPlay = tr ("Play/Stop", "Старт/стоп");
+inline const juce::String keyRecord = tr ("Record", "Запись");
+inline const juce::String keyBrowser = tr ("Browser", "Браузер");
+// Placeholders of views that are drawn already but not built yet.
+inline const juce::String comingSoon = tr ("Coming soon", "Скоро");
+inline const juce::String mixPlaceholderTitle = tr ("Mixer", "Микшер");
+inline const juce::String mixPlaceholderText = tr ("Every track at full height with inserts, sends, meters and a routing matrix. Until it is here, the mixer sits under the clips in Session.",
+                                                   "Все дорожки во всю высоту: вставки, посылы, индикаторы и матрица маршрутизации. Пока его нет, микшер живёт под клипами в Session.");
+inline const juce::String mixPlaceholderAction = tr ("Open the Session mixer", "Открыть микшер в Session");
 inline const juce::String exportShort = tr ("Export", "Экспорт");
 } // namespace transport
 
@@ -1173,6 +1189,7 @@ inline const juce::String controllerLane = make (tr ("Controller lane", "Пол�
 inline const juce::String morph = make (tr ("Morph A ↔ B", "Морф A ↔ B"), tr ("Smooth transition between knob snapshots. ", "Плавный переход между снимками ручек. ") + soon6);
 inline const juce::String tabSession = make (utf8 ("Session"), tr ("A grid of clips for live playing. Tab switches between Session and Arrangement.", "Сетка клипов для живой игры. Tab переключает Session и Arrangement."));
 inline const juce::String tabArrangement = make (utf8 ("Arrangement"), tr ("A linear timeline: clips by bar, markers, loop. Drag a clip from Session here. Tab switches between Session and Arrangement.", "Линейная шкала времени: клипы по тактам, маркеры, петля. Клип из Session можно перетащить сюда. Tab переключает Session и Arrangement."));
+inline const juce::String tabMix = make (tr ("Mix", "Микшер"), tr ("The mixer at full height: inserts, sends and routing. Coming soon; meanwhile the mixer sits under the clips in Session.", "Микшер во всю высоту: вставки, посылы и маршрутизация. Скоро; пока микшер живёт под клипами в Session."));
 inline const juce::String undoButton = make (tr ("Undo", "Отменить"), tr ("Takes back the last change. Cmd+Z", "Отменяет последнее изменение. Cmd+Z"));
 inline const juce::String redoButton = make (tr ("Redo", "Повторить"), tr ("Brings back what was undone. Cmd+Shift+Z", "Возвращает отменённое. Cmd+Shift+Z"));
 inline const juce::String settingsButton = make (tr ("Settings", "Настройки"), tr ("Audio, MIDI, recording, appearance and library. Cmd+,", "Звук, MIDI, запись, оформление и библиотека. Cmd+,"));

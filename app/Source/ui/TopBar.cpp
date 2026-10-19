@@ -1,5 +1,7 @@
 #include "TopBar.h"
 
+#include <optional>
+
 #include "../Strings.h"
 #include "Chrome.h"
 #include "ScalePicker.h"
@@ -86,6 +88,8 @@ public:
     bool framed = false;    // glass themes: a button of its own (top row), not one of the capsule's row
     float iconSize = 0.0f;  // 0: the default size
     bool leftAligned = false; // icon and label start at the left edge (the Library button)
+    std::optional<juce::Colour> iconColour; // the icon in its own colour (the red dot of Capture)
+    bool chevron = false; // glass: a small down arrow after the label (the button opens a list)
     std::function<void()> onClick;
     std::function<void()> onPopup; // right mouse button
 
@@ -178,7 +182,10 @@ public:
             const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
             const float groupWidth = s + 9.0f + textWidth;
             const float x0 = leftAligned ? r.getX() + 12.0f : r.getCentreX() - groupWidth * 0.5f;
+            if (iconColour)
+                g.setColour (isEnabled() ? *iconColour : iconColour->withAlpha (0.4f));
             g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre ({ x0 + s * 0.5f, r.getCentreY() })));
+            g.setColour (ink);
             g.setFont (font);
             g.drawText (text, juce::Rectangle<float> (x0 + s + 9.0f, r.getY(), textWidth + 4.0f, r.getHeight()), juce::Justification::centredLeft, false);
             return;
@@ -192,6 +199,20 @@ public:
         {
             g.setFont (font);
             const int iconRoom = icon ? juce::roundToInt (s + 12.0f) : 0;
+            if (chevron && t.glass)
+            {
+                const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
+                const float x0 = r.getCentreX() - (textWidth + 14.0f) * 0.5f;
+                g.drawText (text, juce::Rectangle<float> (x0, r.getY(), textWidth + 2.0f, r.getHeight()), juce::Justification::centredLeft, false);
+                g.setColour (ink.withAlpha (0.8f));
+                juce::Path v;
+                const auto c = juce::Point<float> (x0 + textWidth + 10.0f, r.getCentreY() + 1.0f);
+                v.startNewSubPath (c.x - 3.5f, c.y - 2.0f);
+                v.lineTo (c.x, c.y + 1.8f);
+                v.lineTo (c.x + 3.5f, c.y - 2.0f);
+                g.strokePath (v, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                return;
+            }
             g.drawText (text, getLocalBounds().withTrimmedLeft (iconRoom), juce::Justification::centred, false);
         }
     }
@@ -372,6 +393,9 @@ public:
 class TopBar::Tabs final : public juce::Component, public HelpProvider, public juce::DragAndDropTarget, private juce::Timer
 {
 public:
+    // Session | Arrangement | Mix. The window switches the views; this only draws which one is shown.
+    enum View { session = 0, arrangementView = 1, mix = 2 };
+
     Tabs() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
 
     // A Session View clip dragged onto "Arrangement" switches the view after a short hold; the drag then goes on over the
@@ -385,7 +409,7 @@ public:
     void itemDragEnter (const SourceDetails& d) override { itemDragMove (d); }
     void itemDragMove (const SourceDetails& d) override
     {
-        const bool overArrangement = d.localPosition.x >= getWidth() / 2 && ! arrangement;
+        const bool overArrangement = segmentAt (d.localPosition.x) == arrangementView && view != arrangementView;
         if (overArrangement != hovering)
         {
             hovering = overArrangement;
@@ -406,36 +430,40 @@ public:
         stopTimer();
         hovering = false;
         if (onSwitch)
-            onSwitch (true);
+            onSwitch (arrangementView);
     }
 
-    std::function<void (bool arrangement)> onSwitch;
+    std::function<void (int view)> onSwitch;
 
-    void setArrangement (bool a)
+    void setView (int v)
     {
-        if (a != arrangement)
+        if (v != view)
         {
-            arrangement = a;
+            view = v;
             repaint();
         }
     }
 
     juce::String helpAt (juce::Point<int> p) const override
     {
-        return p.x < getWidth() / 2 ? Strings::help::tabSession : Strings::help::tabArrangement;
+        const int s = segmentAt (p.x);
+        return s == session ? Strings::help::tabSession : (s == arrangementView ? Strings::help::tabArrangement : Strings::help::tabMix);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        const bool right = e.x >= getWidth() / 2;
-        if (right != arrangement && onSwitch)
-            onSwitch (right);
+        const int s = segmentAt (e.x);
+        if (s != view && onSwitch)
+            onSwitch (s);
     }
 
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat().reduced (0.5f);
+        const float third = r.getWidth() / 3.0f;
+        const auto segment = [&] (int i) { return juce::Rectangle<float> (r.getX() + third * (float) i, r.getY(), third, r.getHeight()); };
+        const juce::String labels[] { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab };
         if (t.glass)
         {
             // A sunken pill track; the shown view is a raised glass pill in it.
@@ -444,29 +472,28 @@ public:
             g.fillRoundedRectangle (r, pill);
             g.setColour (t.line.withAlpha (0.6f));
             g.drawRoundedRectangle (r, pill, 1.0f);
-            const auto half = r.getWidth() * 0.5f;
-            const auto active = (arrangement ? r.withTrimmedLeft (half) : r.withWidth (half)).reduced (3.0f);
+            const auto active = segment (view).reduced (3.0f);
             juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
             glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
-            for (int i = 0; i < 2; ++i)
+            for (int i = 0; i < 3; ++i)
             {
-                const bool on = (i == 1) == arrangement;
-                g.setColour (on ? t.text : t.dimText);
-                g.setFont (t.uiFont (14.0f, on ? 600 : 500));
-                g.drawText (i == 0 ? Strings::transport::sessionTab : Strings::transport::arrangementTab,
-                            (i == 0 ? r.withWidth (half) : r.withTrimmedLeft (half)).toNearestInt(), juce::Justification::centred, false);
+                g.setColour (i == view ? t.text : t.dimText);
+                g.setFont (t.uiFont (14.0f, i == view ? 600 : 500));
+                g.drawText (labels[i], segment (i).toNearestInt(), juce::Justification::centred, false);
             }
             if (hovering)
             {
                 g.setColour (t.accent.withAlpha (0.2f));
-                g.fillRoundedRectangle (r.withTrimmedLeft (half), pill);
+                g.fillRoundedRectangle (segment (arrangementView), pill);
             }
             return;
         }
         g.setColour (t.panel);
         g.fillRoundedRectangle (r, t.radius);
-        auto left = r.removeFromLeft (r.getWidth() * 0.5f);
-        const auto drawTab = [&] (juce::Rectangle<float> area, const juce::String& text, bool active) {
+        for (int i = 0; i < 3; ++i)
+        {
+            auto area = segment (i);
+            const bool active = i == view;
             if (active)
             {
                 g.setColour (t.panel2);
@@ -476,20 +503,20 @@ public:
             }
             g.setColour (active ? t.text : t.dimText);
             g.setFont (t.uiFont (12.0f, 500));
-            g.drawText (text, area.toNearestInt(), juce::Justification::centred, false);
-        };
-        drawTab (left, Strings::transport::sessionTab, ! arrangement);
-        drawTab (r, Strings::transport::arrangementTab, arrangement);
+            g.drawText (labels[i], area.toNearestInt(), juce::Justification::centred, false);
+        }
         if (hovering) // a clip is held over the Arrangement tab
         {
             g.setColour (t.accent.withAlpha (0.25f));
-            g.fillRoundedRectangle (r, t.radius);
+            g.fillRoundedRectangle (segment (arrangementView), t.radius);
         }
         strokeCell (g, getLocalBounds().toFloat(), t.line);
     }
 
 private:
-    bool arrangement = false, hovering = false;
+    int segmentAt (int x) const { return juce::jlimit (0, 2, x * 3 / juce::jmax (1, getWidth())); }
+    int view = session;
+    bool hovering = false;
 };
 
 //==============================================================================
@@ -643,9 +670,14 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     spectrum = std::make_unique<Spectrum> (engine);
     addChildComponent (*spectrum);
     tabs = std::make_unique<Tabs>();
-    tabs->onSwitch = [this] (bool arrangement) {
-        if (onViewSwitched)
-            onViewSwitched (arrangement);
+    tabs->onSwitch = [this] (int view) {
+        if (view == Tabs::mix)
+        {
+            if (onMixClicked)
+                onMixClicked();
+        }
+        else if (onViewSwitched)
+            onViewSwitched (view == Tabs::arrangementView);
     };
     midiLamp = std::make_unique<Lamp> (Strings::transport::midi, Strings::help::midiIn);
     keysLamp = std::make_unique<Lamp> (Strings::transport::keysOn, Strings::help::keysIndicator);
@@ -678,7 +710,12 @@ void TopBar::setVersionText (const juce::String& text)
 
 void TopBar::setArrangementShown (bool shown)
 {
-    tabs->setArrangement (shown);
+    tabs->setView (shown ? Tabs::arrangementView : Tabs::session);
+}
+
+void TopBar::setMixShown()
+{
+    tabs->setView (Tabs::mix);
 }
 
 void TopBar::setRecorder (SessionRecorder* r)
@@ -918,7 +955,7 @@ void TopBar::resized()
     // spectrum take the room left in between.
     constexpr int h = 30, gap = 6, groupGap = 15, cy = 78;
     logoArea = { 16, 10, 34, 34 };
-    tabs->setBounds (getWidth () / 2 - 120, 9, 240, 34);
+    tabs->setBounds (getWidth () / 2 - 165, 9, 330, 34);
     settingsButton->setBounds (getWidth () - 14 - 34, 10, 34, 32);
     exportButton->setBounds (settingsButton->getX () - 8 - 104, 10, 104, 32);
     redoButton->setBounds (exportButton->getX () - 10 - 32, 10, 32, 32);
@@ -927,6 +964,15 @@ void TopBar::resized()
     appearanceButton->setBounds (version->getX (), 10, 0, 0);
     for (auto* b : { exportButton.get (), version.get (), capture.get (), libraryButton.get () })
         b->framed = true;
+    // glass: the capture button carries a red dot, as in the design
+    capture->icon = theme ().glass ? std::function<juce::Path (juce::Rectangle<float>)> ([] (juce::Rectangle<float> b) {
+        juce::Path p;
+        p.addEllipse (b.reduced (1.0f));
+        return p;
+    }) : nullptr;
+    capture->iconSize = theme ().glass ? 10.0f : 0.0f;
+    capture->iconColour = theme ().record;
+    scaleButton->chevron = version->chevron = true;
     // the top row's icons are plain until hovered
     for (auto* b : { undoButton.get (), redoButton.get (), settingsButton.get () })
         b->framed = false;
@@ -1000,14 +1046,14 @@ void TopBar::resized()
         x += 286;
         separate ();
     }
-    else if (right - x >= 82 + 90 + groupGap)
+    else if (right - x >= 82 + 60 + groupGap)
     {
         capture->setVisible (true);
         capture->setBounds (x, cy - 13, 82, 26);
         x += 82;
         separate ();
     }
-    if (right - x >= 90)
+    if (right - x >= 60)
     {
         spectrum->setVisible (true);
         spectrum->setBounds (x, cy - 15, juce::jmin (right - x, 300), 30);

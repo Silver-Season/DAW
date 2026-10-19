@@ -285,6 +285,23 @@ public:
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
         const bool missing = kind == "missing";
+        if (t.glass)
+        {
+            // glass: a rounded card with a soft shadow, no divider under the header, a power symbol for on/off
+            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.06f : 0.3f), 10, { 0, 2 }).drawForRectangle (g, getLocalBounds().reduced (3));
+            glass::surface (g, r.reduced (0.5f), missing ? t.panel2.withAlpha (0.6f) : t.panel, 12.0f);
+            g.setColour (isSelected ? t.accent : t.line.withAlpha (0.7f));
+            g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, isSelected ? 1.5f : 1.0f);
+            const auto symbol = powerRect().toFloat().withSizeKeepingCentre (12.0f, 12.0f);
+            juce::Path power;
+            power.addCentredArc (symbol.getCentreX(), symbol.getCentreY() + 0.5f, 5.5f, 5.5f, 0.0f, 0.65f, juce::MathConstants<float>::twoPi - 0.65f, true);
+            power.startNewSubPath (symbol.getCentreX(), symbol.getY() - 0.5f);
+            power.lineTo (symbol.getCentreX(), symbol.getCentreY());
+            g.setColour (missing ? t.dimText : (enabled ? t.accent : t.dimText.withAlpha (0.6f)));
+            g.strokePath (power, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        else
+        {
         fillCell (g, r, missing ? t.panel2.withAlpha (0.6f) : t.panel);
         strokeCell (g, r, isSelected ? t.accent : t.line, isSelected ? 1.5f : 1.0f);
 
@@ -302,6 +319,7 @@ public:
         }
         g.setColour (powerColour);
         g.fillEllipse (dot);
+        }
 
         if (folded)
         {
@@ -327,7 +345,7 @@ public:
         {
             const auto textArea = juce::Rectangle<int> (powerRect().getRight() + 2, 0, presetRect().getX() - powerRect().getRight() - 6, kDeviceHeaderHeight);
             g.setColour (missing ? t.dimText : t.text);
-            g.setFont (t.uiFont (12.0f, 600));
+            g.setFont (t.uiFont (t.glass ? 13.5f : 12.0f, 600));
             g.drawText (title, textArea, juce::Justification::centredLeft, true);
 
             auto drawIcon = [&] (juce::Rectangle<int> box, const juce::Path& icon, bool enabledIcon, bool hot, bool stroked) {
@@ -1119,10 +1137,11 @@ void DetailPanel::paint (juce::Graphics& g)
     const auto& t = theme();
     g.fillAll (t.chrome);
     g.setColour (t.line);
-    g.fillRect (0, 0, getWidth(), 1);
+    if (! t.glass) // glass: the card has its own rim
+        g.fillRect (0, 0, getWidth(), 1);
     if (editorShown)
         return;
-    g.fillRect (kInfoWidth - 1, 1, 1, getHeight() - 1);
+    g.fillRect (kInfoWidth - 1, t.glass ? 12 : 1, 1, getHeight() - (t.glass ? 24 : 1));
 
     auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (14, 12);
     const auto track = model.findTrackOrMaster (shownTrack);
@@ -1150,9 +1169,22 @@ void DetailPanel::paint (juce::Graphics& g)
     g.setColour (t.dimText);
     g.setFont (t.uiFont (10.5f, 500));
     g.drawText (Strings::detail::track.toUpperCase(), area.removeFromTop (16), juce::Justification::centredLeft, false);
-    g.setColour (t.textPalette (track.colour()));
-    g.setFont (t.uiFont (14.0f, 600));
-    g.drawText (track.name(), area.removeFromTop (22), juce::Justification::centredLeft, true);
+    if (t.glass)
+    {
+        // glass: a dot in the track colour and the name in the text colour, a size up
+        auto nameRow = area.removeFromTop (22);
+        g.setColour (t.palette (track.colour()));
+        g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ (float) nameRow.getX() + 6.0f, (float) nameRow.getCentreY() }));
+        g.setColour (t.text);
+        g.setFont (t.uiFont (16.0f, 600));
+        g.drawText (track.name(), nameRow.withTrimmedLeft (20), juce::Justification::centredLeft, true);
+    }
+    else
+    {
+        g.setColour (t.textPalette (track.colour()));
+        g.setFont (t.uiFont (14.0f, 600));
+        g.drawText (track.name(), area.removeFromTop (22), juce::Justification::centredLeft, true);
+    }
     area.removeFromTop (6);
 
     auto line = [&] (const juce::String& label, const juce::String& value) {
