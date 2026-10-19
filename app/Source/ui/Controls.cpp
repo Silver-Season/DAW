@@ -62,7 +62,7 @@ void Knob::paint (juce::Graphics& g)
     const auto& t = theme();
     auto area = getLocalBounds().toFloat();
     // Glass: a tall knob shows its value under the caption at all times, as the device cards of the design do.
-    const bool twoLines = t.glass && caption.isNotEmpty() && valueText && getHeight() >= 62;
+    const bool twoLines = t.glass && caption.isNotEmpty() && valueText && getHeight() >= 52;
     const float captionHeight = caption.isNotEmpty() ? (twoLines ? 26.0f : 13.0f) : 0.0f;
     auto captionArea = area.removeFromBottom (captionHeight);
     const float d = juce::jmin (area.getWidth(), area.getHeight());
@@ -461,7 +461,7 @@ void NumberField::paint (juce::Graphics& g)
         if (levelCentre > minimum && levelCentre < maximum)
             norm.setSkewForCentre (levelCentre);
         const float v = (float) norm.convertTo0to1 (juce::jlimit (minimum, maximum, value));
-        auto textArea = r.removeFromRight (52.0f);
+        auto textArea = r.removeFromRight (44.0f);
         const auto track = r.reduced (6.0f, 0.0f).withSizeKeepingCentre (r.getWidth() - 12.0f, 4.0f);
         g.setColour (t.isLight() ? t.line.withAlpha (0.8f) : t.shadow().withAlpha (0.45f));
         g.fillRoundedRectangle (track, 2.0f);
@@ -469,8 +469,8 @@ void NumberField::paint (juce::Graphics& g)
         g.fillRoundedRectangle (track.withWidth (juce::jmax (4.0f, track.getWidth() * v)), 2.0f);
         glass::thumb (g, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ track.getX() + track.getWidth() * v, track.getCentreY() }));
         g.setColour (t.dimText);
-        g.setFont (t.numFont (10.5f));
-        g.drawText (getDisplayText(), textArea.toNearestInt(), juce::Justification::centredRight, false);
+        g.setFont (t.numFont (10.0f));
+        g.drawText (getDisplayText().replace (" dB", ""), textArea.toNearestInt(), juce::Justification::centredRight, false);
         return;
     }
     if (boxed && (boxedInGlass || ! t.glass))
@@ -481,7 +481,7 @@ void NumberField::paint (juce::Graphics& g)
     if (editor != nullptr)
         return;
     g.setColour (t.text);
-    g.setFont (t.numFont (fontHeight));
+    g.setFont (interfaceFont && t.glass ? t.uiFont (fontHeight + 2.5f, 500) : t.numFont (fontHeight));
     g.drawText (getDisplayText(), r.toNearestInt().reduced (4, 0), justification, false);
 }
 

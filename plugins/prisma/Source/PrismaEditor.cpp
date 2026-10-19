@@ -114,7 +114,11 @@ Section::Section (juce::String t, juce::Colour c) : title (std::move (t)), accen
 void Section::addRow (std::vector<juce::Component*> items, std::vector<float> weights, float heightWeight)
 {
     for (auto* c : items)
+    {
         addAndMakeVisible (c);
+        if (auto* k = dynamic_cast<Knob*> (c)) // the knobs of a section in its colour
+            k->slider.setColour (juce::Slider::trackColourId, accentColour);
+    }
     if (weights.empty())
         weights.assign (items.size(), 1.0f);
     rows.push_back ({ std::move (items), std::move (weights), heightWeight });

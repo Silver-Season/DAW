@@ -2,6 +2,9 @@
 
 #include "../Strings.h"
 
+#include <BinaryData.h>
+#include <map>
+
 namespace ui
 {
 InfoBar::InfoBar (juce::Component& w) : window (w)
@@ -368,6 +371,27 @@ void ScanlineOverlay::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+void drawAppIcon (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    // Scaled down once per pixel size with good resampling; the 1024 px source would alias if drawn directly.
+    static juce::Image source = juce::ImageCache::getFromMemory (BinaryData::AppIcon1024_png, BinaryData::AppIcon1024_pngSize);
+    static std::map<int, juce::Image> scaled;
+    if (! source.isValid())
+        return;
+    const float density = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const int px = juce::jlimit (8, 512, juce::roundToInt (juce::jmin (area.getWidth(), area.getHeight()) * density));
+    auto& image = scaled[px];
+    if (! image.isValid())
+    {
+        image = source;
+        while (image.getWidth() / 2 >= px) // halve step by step, then the last step: smooth edges at any size
+            image = image.rescaled (image.getWidth() / 2, image.getHeight() / 2, juce::Graphics::highResamplingQuality);
+        image = image.rescaled (px, px, juce::Graphics::highResamplingQuality);
+    }
+    g.setOpacity (1.0f);
+    g.drawImage (image, area.withSizeKeepingCentre (juce::jmin (area.getWidth(), area.getHeight()), juce::jmin (area.getWidth(), area.getHeight())));
+}
+
 void drawLogo (juce::Graphics& g, juce::Rectangle<float> area)
 {
     // The same geometry as media/brand/*.svg: a glass prism, the incoming beam and six spectrum bars like tracks.

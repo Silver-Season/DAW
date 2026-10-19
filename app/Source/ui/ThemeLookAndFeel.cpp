@@ -1,5 +1,8 @@
 #include "ThemeLookAndFeel.h"
 #include "GlassMaterial.h"
+#include "Kit.h"
+
+namespace kit = ui::kit;
 
 ThemeLookAndFeel::ThemeLookAndFeel()
 {
@@ -159,6 +162,16 @@ void ThemeLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar&, int x
                                       int thumbStart, int thumbSize, bool isMouseOver, bool isMouseDown)
 {
     const auto& t = theme();
+    if (t.glass)
+    {
+        // glass: a slim translucent pill along the far edge, fuller under the mouse; it floats over the content
+        const float w = isMouseOver || isMouseDown ? 6.0f : 4.0f;
+        auto pill = isVertical ? juce::Rectangle<float> ((float) (x + width) - w - 2.0f, (float) (y + thumbStart) + 2.0f, w, (float) thumbSize - 4.0f)
+                               : juce::Rectangle<float> ((float) (x + thumbStart) + 2.0f, (float) (y + height) - w - 2.0f, (float) thumbSize - 4.0f, w);
+        g.setColour (t.text.withAlpha (isMouseDown ? 0.5f : (isMouseOver ? 0.38f : 0.22f)));
+        g.fillRoundedRectangle (pill, w * 0.5f);
+        return;
+    }
     auto thumb = isVertical ? juce::Rectangle<int> (x + 2, y + thumbStart, width - 4, thumbSize)
                             : juce::Rectangle<int> (x + thumbStart, y + 2, thumbSize, height - 4);
     g.setColour (t.dimText.withAlpha (isMouseDown ? 0.9f : (isMouseOver ? 0.7f : 0.45f)));
@@ -256,7 +269,7 @@ void ThemeLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, b
     if (t.glass && b.getProperties().contains ("primary"))
     {
         g.setColour (b.isEnabled() ? t.inkOn (t.accentFill) : t.dimText);
-        g.setFont (t.uiFont (13.0f, 600));
+        g.setFont (t.uiFont (t.metrics.text, 600));
         g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred, false);
         return;
     }
@@ -286,25 +299,24 @@ void ThemeLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b,
         g.drawRoundedRectangle (pic.expanded (b.getToggleState() ? 1.0f : 0.0f), 8.0f, b.getToggleState() ? 2.0f : 1.0f);
         return;
     }
-    if (t.glass && b.getProperties().contains ("primary"))
+    if (t.glass)
     {
-        // the main action of a dialog: accent-filled, with its own contrasting label
-        const auto r = b.getLocalBounds().toFloat().reduced (0.5f);
-        ui::glass::accent (g, r, b.isEnabled() ? t.accentFill : t.panel2, t.radius);
-        if (over || down)
+        // glass: from the kit; settings tabs are list rows, the main action of a dialog is filled
+        kit::State st;
+        st.on = b.getToggleState();
+        st.hover = over;
+        st.down = down;
+        st.enabled = b.isEnabled();
+        st.focus = b.hasKeyboardFocus (false);
+        if (b.getProperties().contains ("navIcon"))
+            kit::row (g, b.getLocalBounds().toFloat(), st);
+        else if (b.isColourSpecified (juce::TextButton::buttonColourId)) // a colour swatch: lit in its own colour
         {
-            g.setColour (t.highlight().withAlpha (down ? 0.18f : 0.1f));
-            g.fillRoundedRectangle (r, t.radius);
+            st.on = true;
+            kit::button (g, b.getLocalBounds().toFloat().reduced (0.5f), kit::Kind::toggle, st, background);
         }
-        return;
-    }
-    if (t.glass && b.getProperties().contains ("navIcon"))
-    {
-        if (b.getToggleState() || over)
-        {
-            g.setColour (b.getToggleState() ? t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f) : t.panel2.withAlpha (0.7f));
-            g.fillRoundedRectangle (b.getLocalBounds().toFloat(), 8.0f);
-        }
+        else
+            kit::button (g, b.getLocalBounds().toFloat().reduced (0.5f), b.getProperties().contains ("primary") ? kit::Kind::primary : kit::Kind::toggle, st);
         return;
     }
     auto r = b.getLocalBounds().toFloat().reduced (0.5f);
@@ -315,18 +327,8 @@ void ThemeLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b,
         fill = t.panel2.brighter (0.1f);
     else if (over)
         fill = background.interpolatedWith (t.panel2, 0.7f);
-    if (t.glass)
-    {
-        if (b.getToggleState ())
-            ui::glass::accent (g, r, fill, t.radius);
-        else
-            ui::glass::surface (g, r, fill.withMultipliedAlpha (b.isEnabled () ? 1.0f : 0.5f), t.radius);
-    }
-    else
-    {
-        g.setColour (fill.withMultipliedAlpha (b.isEnabled () ? 1.0f : 0.5f));
-        g.fillRoundedRectangle (r, t.radius);
-    }
+    g.setColour (fill.withMultipliedAlpha (b.isEnabled () ? 1.0f : 0.5f));
+    g.fillRoundedRectangle (r, t.radius);
     g.setColour (t.line);
     g.drawRoundedRectangle (r, t.radius, 1.0f);
     if (b.hasKeyboardFocus (false))
@@ -392,7 +394,8 @@ ThemeLookAndFeel::drawRotarySlider (juce::Graphics& g,
                      juce::Rectangle<float> (diameter, diameter)
                        .withCentre ({ (float)x + (float)w * 0.5f, (float)y + (float)h * 0.5f }),
                      pos,
-                     s.isEnabled () ? theme ().accentFill : theme ().dimText,
+                     ! s.isEnabled () ? theme ().dimText
+                                      : (s.isColourSpecified (juce::Slider::trackColourId) ? s.findColour (juce::Slider::trackColourId) : theme ().accentFill),
                      s.getMinimum () < 0.0 && s.getMaximum () > 0.0);
 }
 
@@ -405,26 +408,16 @@ ThemeLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bo
         LookAndFeel_V4::drawToggleButton (g, b, over, down);
         return;
     }
-    const auto track = juce::Rectangle<float> (32.0f, 18.0f).withCentre ({ 19.0f, (float)b.getHeight () * 0.5f });
-    if (b.getToggleState ())
-        ui::glass::accent (g, track, t.accentFill, 9.0f);
-    else
-    {
-        g.setColour (t.line);
-        g.fillRoundedRectangle (track, 9.0f);
-    }
-    ui::glass::thumb (g,
-                      juce::Rectangle<float> (16.0f, 16.0f)
-                        .withCentre ({ track.getX () + (b.getToggleState () ? 23.0f : 9.0f), track.getCentreY () }));
+    // glass: the kit's switch on the left, the label after it
+    kit::State st;
+    st.on = b.getToggleState ();
+    st.hover = over;
+    st.enabled = b.isEnabled ();
+    st.focus = b.hasKeyboardFocus (false);
+    kit::switchControl (g, juce::Rectangle<float> (2.0f, 0.0f, 34.0f, (float) b.getHeight ()), st);
     g.setColour (b.isEnabled () ? t.text : t.dimText);
-    g.setFont (t.uiFont (12.0f));
-    g.drawFittedText (
-      b.getButtonText (), b.getLocalBounds ().withTrimmedLeft (43), juce::Justification::centredLeft, 2);
-    if (b.hasKeyboardFocus (false))
-    {
-        g.setColour (t.accent);
-        g.drawRoundedRectangle (b.getLocalBounds ().toFloat ().reduced (1.0f), t.radius, 2.0f);
-    }
+    g.setFont (t.uiFont (t.metrics.text - 0.5f));
+    g.drawFittedText (b.getButtonText (), b.getLocalBounds ().withTrimmedLeft (43), juce::Justification::centredLeft, 2);
 }
 
 void
@@ -438,9 +431,12 @@ ThemeLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool d
         return;
     }
     const auto r = juce::Rectangle<float> ((float)width, (float)height).reduced (0.5f);
-    ui::glass::surface (g, r, box.findColour (juce::ComboBox::backgroundColourId), t.radius);
-    g.setColour (box.hasKeyboardFocus (true) ? t.accent : t.line);
-    g.drawRoundedRectangle (r, t.radius, 1.0f);
+    kit::State st;
+    st.hover = box.isMouseOver (true);
+    st.down = down;
+    st.enabled = box.isEnabled ();
+    st.focus = box.hasKeyboardFocus (true);
+    kit::button (g, r, kit::Kind::plain, st);
     juce::Path arrow;
     const auto centre = juce::Point<float> ((float)width - 15.0f, (float)height * 0.5f);
     arrow.startNewSubPath (centre.x - 4.0f, centre.y - 2.0f);
@@ -459,8 +455,10 @@ ThemeLookAndFeel::fillTextEditorBackground (juce::Graphics& g, int width, int he
         LookAndFeel_V4::fillTextEditorBackground (g, width, height, editor);
         return;
     }
-    g.setColour (editor.findColour (juce::TextEditor::backgroundColourId));
-    g.fillRoundedRectangle (juce::Rectangle<float> ((float)width, (float)height).reduced (0.5f), t.radius * 0.8f);
+    if (editor.findColour (juce::TextEditor::backgroundColourId).isTransparent ())
+        return; // an editor drawn inside another control (the browser search)
+    kit::field (g, juce::Rectangle<float> ((float)width, (float)height).reduced (0.5f),
+                { false, false, false, editor.hasKeyboardFocus (true) && ! editor.isReadOnly (), editor.isEnabled () });
 }
 
 void
@@ -472,10 +470,5 @@ ThemeLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int heigh
         LookAndFeel_V4::drawTextEditorOutline (g, width, height, editor);
         return;
     }
-    if (!editor.isEnabled ())
-        return;
-    const bool focused = editor.hasKeyboardFocus (true) && !editor.isReadOnly ();
-    g.setColour (editor.findColour (focused ? juce::TextEditor::focusedOutlineColourId : juce::TextEditor::outlineColourId));
-    g.drawRoundedRectangle (juce::Rectangle<float> ((float)width, (float)height).reduced (focused ? 1.0f : 0.5f),
-                            t.radius * 0.8f, focused ? 2.0f : 1.0f);
+    juce::ignoreUnused (editor); // the kit's field draws its own outline
 }

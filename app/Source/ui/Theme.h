@@ -36,6 +36,19 @@ struct Theme
     bool glass = false, gradients = false;
     float material = 0.0f, gradientAngle = 25.0f;
     juce::Colour accentFill, accentFill2;
+    // Sizes of the interface (docs/design/UI-KIT.md). Optional in a theme file ("metrics": { ... }); the defaults are
+    // the sizes the classic skins always had, with the corner radius taken from "radius".
+    struct Metrics
+    {
+        float gap = 6.0f;            // between controls of a group
+        float padding = 10.0f;       // inside a panel or card
+        float controlHeight = 26.0f; // buttons, fields, combo boxes
+        float compactHeight = 22.0f; // the same in dense places (mixer strips, headers)
+        float controlRadius = 6.0f;  // buttons and fields
+        float panelRadius = 6.0f;    // cards and panels
+        bool pill = false;           // buttons with fully rounded ends
+        float text = 12.5f, small = 11.0f, title = 14.0f, number = 13.0f;
+    } metrics;
     bool isLight () const
     {
         return background.getPerceivedBrightness () > 0.5f;

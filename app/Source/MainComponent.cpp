@@ -100,6 +100,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar->onRedoClicked = [this] { commandManager.invokeDirectly (ui::commands::redo, false); };
     topBar->onSettingsClicked = [this] { showSettings (ui::SettingsWindow::appearance); };
     topBar->onLibraryClicked = [this] { setBrowserVisible (! browserVisible); };
+    topBar->onProjectClicked = [this] { commandManager.invokeDirectly (ui::commands::projectProperties, false); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources);
     sources.onChanged = [this] { browser->sourcesChanged(); };
     browser->onActivate = [this] (const browser::DragItem& item) {

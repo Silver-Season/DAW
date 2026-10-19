@@ -155,6 +155,9 @@ private:
     juce::Rectangle<int> card;
 };
 
+// The app icon (the glass tile with the prism), as the glass themes show it beside the name in the top bar.
+void drawAppIcon (juce::Graphics&, juce::Rectangle<float> area);
+
 // The triangle and six spectrum rays of the concept, drawn in code.
 void drawLogo (juce::Graphics&, juce::Rectangle<float> area);
 } // namespace ui

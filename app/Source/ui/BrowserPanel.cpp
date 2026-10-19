@@ -4,6 +4,7 @@
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "Dialogs.h"
+#include "Kit.h"
 
 #include "daw/synth/PrismaParams.h"
 
@@ -163,6 +164,7 @@ void BrowserPanel::lookAndFeelChanged()
     search.setTextToShowWhenEmpty (Strings::browser::searchPlaceholder, t.dimText);
     search.applyFontToAllText (t.uiFont (12.5f));
     search.setFont (t.uiFont (12.5f));
+    resized(); // glass rows are taller
 }
 
 void BrowserPanel::visibilityChanged()
@@ -434,13 +436,7 @@ void BrowserPanel::paint (juce::Graphics& g)
     g.fillAll (t.chrome);
 
     if (t.glass)
-    {
-        const auto box = searchArea.toFloat();
-        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.75f : 0.6f));
-        g.fillRoundedRectangle (box, 9.0f);
-        g.setColour (search.hasKeyboardFocus (true) ? t.accent : t.line.withAlpha (0.6f));
-        g.drawRoundedRectangle (box.reduced (0.5f), 9.0f, search.hasKeyboardFocus (true) ? 1.5f : 1.0f);
-    }
+        kit::field (g, searchArea.toFloat(), { false, false, false, search.hasKeyboardFocus (true) });
     else
     {
         fillCell (g, searchArea.toFloat(), t.panel);
@@ -460,16 +456,7 @@ void BrowserPanel::paint (juce::Graphics& g)
         if (t.glass && n.kind != Nav::label)
         {
             // glass: a line icon, a larger label, the selection a soft tinted pill
-            if (selected)
-            {
-                g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f));
-                g.fillRoundedRectangle (r.toFloat(), 8.0f);
-            }
-            else if (i == hoveredNav)
-            {
-                g.setColour (t.panel2.withAlpha (0.7f));
-                g.fillRoundedRectangle (r.toFloat(), 8.0f);
-            }
+            kit::row (g, r.toFloat(), { i == hoveredNav, false, selected });
             g.setColour (selected ? t.text : t.text.withAlpha (0.8f));
             g.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
             g.setColour (t.text);
@@ -540,13 +527,7 @@ void BrowserPanel::paint (juce::Graphics& g)
             const bool selected = i == selectedRow;
             const auto cell = box.reduced (6, 1);
             if (t.glass)
-            {
-                if (selected || i == hoveredRow)
-                {
-                    g.setColour (selected ? t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f) : t.panel2.withAlpha (0.7f));
-                    g.fillRoundedRectangle (cell.toFloat(), 7.0f);
-                }
-            }
+                kit::row (g, cell.toFloat(), { i == hoveredRow, false, selected });
             else if (selected)
             {
                 fillCell (g, cell.toFloat(), t.panel2, 0.8f);
@@ -590,15 +571,7 @@ void BrowserPanel::paint (juce::Graphics& g)
     const auto b = previewButtonRect();
     const bool on = settings.previewEnabled();
     if (t.glass)
-    {
-        if (on)
-            glass::accent (g, b.toFloat(), t.accentFill, b.getHeight() * 0.5f);
-        else
-            glass::surface (g, b.toFloat(), t.panel, b.getHeight() * 0.5f);
-        g.setColour (on ? t.accentFill : t.line);
-        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), b.getHeight() * 0.5f, 1.0f);
-        g.setColour (on ? t.inkOn (t.accentFill) : t.dimText);
-    }
+        g.setColour (kit::button (g, b.toFloat(), kit::Kind::toggle, { false, false, on }));
     else
     {
         fillCell (g, b.toFloat(), on ? t.accent : t.panel);

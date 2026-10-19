@@ -2,6 +2,10 @@
 
 This file is updated at every notable step. A new chat, Codex or a person continues from here: what is done, what is in progress, what the next step is. The state lives in the repository, not in a chat.
 
+## UI kit (2026-10-19, in progress)
+
+The owner agreed to lay the interface down once instead of restyling screens one by one: tokens for sizes, one set of control painters (`ui::kit`), then the screens moved onto them, then a GPU glass backdrop. Plan and progress: [UI-KIT.md](design/UI-KIT.md). Branch `claude/project-thread-ayt3r1`; round three (glossy material, sphere knobs) went out as a bundle for its own PR.
+
 ## Glass round two (2026-10-19, after PR #27)
 
 Branch `claude/project-thread-ayt3r1` again, from main `e151afe`. The owner asked to bring the whole UI to the ten design sheets (`media/design/prisma-glass-system/`, local only: they name other products), with placeholders "in their ideal look" where a feature does not exist yet. Stage 1 done (main window): Session/Arrangement/Mix switch with a Mix placeholder (`ui::ComingSoonView`), status bar, browser icons, marker section bands, glass device cards, knob values, Capture dot, chevrons. Stage 2 done: piano roll (Score/Step placeholders), settings (icon tabs, theme thumbnails), export (details card), versions (cards), synth editor (envelope/LFO/filter pictures, coloured wavetables), drum pads. Not built from the sheets: a real Mix view with inserts and a routing matrix (05), the expanded library with tags and preview (08), sampler/sequencer/Touch inside the drum rack (07), the audio take comping and Voice panel (04): these are features, not restyling.

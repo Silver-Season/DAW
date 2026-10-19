@@ -2,6 +2,7 @@
 
 // The parts of the PianoRoll (private to the editor): declared here so that each can be defined in its own file.
 #include "PianoRoll.h"
+#include "Kit.h"
 
 #include "../Strings.h"
 
@@ -35,46 +36,24 @@ public:
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
-        auto r = getLocalBounds().toFloat().reduced (0.5f);
-        const bool lit = isToggle && on;
+        const auto r = getLocalBounds().toFloat().reduced (0.5f);
+        kit::State st;
+        st.on = isToggle && on;
+        st.hover = isMouseOver() && isEnabled();
+        st.enabled = isEnabled();
         if (t.glass && isToggle)
         {
-            // glass: a switch, the label on its left, no box
-            if (isMouseOver() && isEnabled())
-            {
-                g.setColour (t.panel2.withAlpha (0.6f));
-                g.fillRoundedRectangle (r, 6.0f);
-            }
-            const auto track = juce::Rectangle<float> (24.0f, 14.0f).withCentre ({ r.getRight() - 14.0f, r.getCentreY() });
-            if (lit)
-                glass::accent (g, track, t.accentFill, 7.0f);
-            else
-            {
-                g.setColour (t.line);
-                g.fillRoundedRectangle (track, 7.0f);
-            }
-            glass::thumb (g, juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ lit ? track.getRight() - 7.0f : track.getX() + 7.0f, track.getCentreY() }));
+            // glass: a switch with its label on the left, no box
+            kit::row (g, r, { st.hover });
+            kit::switchControl (g, r.withTrimmedRight (2.0f), st);
             g.setColour (isEnabled() ? t.text : t.dimText);
-            g.setFont (t.uiFont (11.5f, lit ? 500 : 400));
-            g.drawText (text, getLocalBounds().withTrimmedLeft (4).withTrimmedRight (30), juce::Justification::centredLeft, true);
-            if (! isEnabled())
-            {
-                g.setColour (t.chrome.withAlpha (0.5f));
-                g.fillRect (getLocalBounds());
-            }
+            g.setFont (t.uiFont (t.metrics.small, st.on ? 500 : 400));
+            g.drawText (text, getLocalBounds().withTrimmedLeft (4).withTrimmedRight (36), juce::Justification::centredLeft, true);
             return;
         }
-        const auto litFill = t.glass ? t.accentFill : t.accent;
-        auto fill = lit ? litFill : (isMouseOver() && isEnabled() ? t.panel2.brighter (0.08f) : t.panel2);
-        if (! isEnabled())
-            fill = fill.withMultipliedAlpha (0.5f);
-        if (t.glass && lit)
-            glass::accent (g, r, fill, t.radius * 0.8f);
-        else
-            fillCell (g, r, fill, 0.8f);
-        strokeCell (g, r, lit ? litFill : t.line, 1.0f, 0.8f);
-        g.setColour (lit ? (t.glass ? t.inkOn (litFill) : t.clipInk) : (isEnabled() ? t.text : t.dimText));
-        g.setFont (t.uiFont (11.5f, lit ? 600 : 500));
+        const auto ink = kit::button (g, r, isToggle ? kit::Kind::toggle : kit::Kind::plain, st);
+        g.setColour (ink);
+        g.setFont (t.uiFont (11.5f, st.on ? 600 : 500));
         g.drawText (text, getLocalBounds().reduced (3, 0), juce::Justification::centred, true);
     }
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
@@ -100,6 +79,7 @@ public:
 
     // Copies the state of the clip and the editor into the widgets (not while one is being dragged).
     void refresh();
+    void lookAndFeelChanged() override;
     void resized() override;
     void paint (juce::Graphics&) override;
 
