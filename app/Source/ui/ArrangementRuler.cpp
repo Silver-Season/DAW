@@ -46,7 +46,7 @@ juce::Rectangle<int> ArrangementRuler::markerBounds (int64_t markerId) const
                         found = true;
                     }
                 const int x2 = juce::roundToInt (view.beatToX (next));
-                return { x + 1, 2, juce::jmax (juce::jmax (14, w), x2 - x - 3), ArrangementView::kMarkerLaneHeight - 4 };
+                return { x + 1, 2, juce::jmax (juce::jmax (14, w), x2 - x - 2), ArrangementView::kMarkerLaneHeight - 4 };
             }
             return { x, 1, juce::jmax (14, w), ArrangementView::kMarkerLaneHeight - 2 };
         }
