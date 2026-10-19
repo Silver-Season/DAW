@@ -37,12 +37,16 @@ public:
         const auto& t = theme();
         auto r = getLocalBounds().toFloat().reduced (0.5f);
         const bool lit = isToggle && on;
-        auto fill = lit ? t.accent : (isMouseOver() && isEnabled() ? t.panel2.brighter (0.08f) : t.panel2);
+        const auto litFill = t.glass ? t.accentFill : t.accent;
+        auto fill = lit ? litFill : (isMouseOver() && isEnabled() ? t.panel2.brighter (0.08f) : t.panel2);
         if (! isEnabled())
             fill = fill.withMultipliedAlpha (0.5f);
-        fillCell (g, r, fill, 0.8f);
-        strokeCell (g, r, lit ? t.accent : t.line, 1.0f, 0.8f);
-        g.setColour (lit ? t.clipInk : (isEnabled() ? t.text : t.dimText));
+        if (t.glass && lit)
+            glass::accent (g, r, fill, t.radius * 0.8f);
+        else
+            fillCell (g, r, fill, 0.8f);
+        strokeCell (g, r, lit ? litFill : t.line, 1.0f, 0.8f);
+        g.setColour (lit ? (t.glass ? t.inkOn (litFill) : t.clipInk) : (isEnabled() ? t.text : t.dimText));
         g.setFont (t.uiFont (11.5f, lit ? 600 : 500));
         g.drawText (text, getLocalBounds().reduced (3, 0), juce::Justification::centred, true);
     }

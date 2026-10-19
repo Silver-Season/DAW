@@ -237,7 +237,7 @@ void testStringsAndSettings()
     juce::TemporaryFile file (".settings");
     {
         Settings s (file.getFile());
-        check (s.theme() == "prism" && juce::exactlyEqual (s.uiScale(), 1.0) && s.animations(), "defaults");
+        check (s.theme () == "glass-dark" && juce::exactlyEqual (s.uiScale (), 1.0) && s.animations (), "defaults");
         check (std::abs (s.previewVolumeDb() + 12.0) < 1e-9, "preview volume defaults to -12 dB");
         s.setTheme ("neon");
         s.setUiScale (2.5); // clamped to 1.5

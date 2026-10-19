@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "GlassMaterial.h"
 #include "Theme.h"
 
 namespace ui
@@ -61,8 +62,13 @@ bool textFieldHasFocus();
 // Fills a rounded rectangle with the theme's corner radius (0 for the sharp Neon skin).
 inline void fillCell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c, float radiusScale = 1.0f)
 {
-    g.setColour (c);
-    g.fillRoundedRectangle (r, theme().radius * radiusScale);
+    if (theme ().glass)
+        glass::cell (g, r, c, theme ().radius * radiusScale);
+    else
+    {
+        g.setColour (c);
+        g.fillRoundedRectangle (r, theme ().radius * radiusScale);
+    }
 }
 inline void strokeCell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c, float thickness = 1.0f, float radiusScale = 1.0f)
 {

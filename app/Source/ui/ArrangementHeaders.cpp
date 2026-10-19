@@ -68,15 +68,18 @@ public:
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
-            fill = style == Style::arm ? t.record : (style == Style::solo ? t.accent2 : t.accent);
-            ink = t.clipInk;
+            fill = style == Style::arm ? t.record : (style == Style::solo ? (t.glass ? t.accentFill2 : t.accent2) : (t.glass ? t.accentFill : t.accent));
+            ink = t.glass ? t.inkOn (fill) : t.clipInk;
         }
         else if (isMouseOver())
         {
             fill = t.panel2.brighter (0.08f);
             ink = t.text;
         }
-        fillCell (g, r, fill, 0.7f);
+        if (t.glass && on)
+            glass::accent (g, r, fill, t.radius * 0.7f);
+        else
+            fillCell (g, r, fill, 0.7f);
         if (! on)
             strokeCell (g, r, t.line, 1.0f, 0.7f);
         g.setColour (ink);
@@ -135,7 +138,7 @@ public:
         g.setColour (t.dimText.withAlpha (0.5f));
         g.fillRect (r.getCentreX() - 0.5f, r.getY() + 3.0f, 1.0f, r.getHeight() - 6.0f);
         const float x = r.getCentreX() + (float) value * (r.getWidth() * 0.5f - 6.0f);
-        g.setColour (t.accent);
+        g.setColour (t.glass ? t.accentFill : t.accent);
         g.fillRoundedRectangle (juce::Rectangle<float> (3.0f, r.getHeight() - 6.0f).withCentre ({ x, r.getCentreY() }), 1.5f);
         g.setColour (t.text);
         g.setFont (t.numFont (10.5f));
@@ -224,6 +227,7 @@ public:
         volume.setDragSensitivity (0.2);
         volume.setWheelStep (0.0); // the wheel scrolls the tracks: a volume changed by scrolling past it was a misclick
         volume.setHelpText (Strings::help::arrHeaderVolume);
+        volume.setLevelBarInGlass (true, -12.0);
         volume.onGestureStart = [this] { view.model.undo.beginNewTransaction (isMaster() ? Strings::undoMasterVolume : Strings::undoTrackVolume); };
         volume.onValueChange = [this] (double db) {
             if (auto track = view.model.findTrackOrMaster (trackId); track.isValid())

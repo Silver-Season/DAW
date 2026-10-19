@@ -7,6 +7,25 @@ Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ![Session View, Prism theme](media/session-prism.png)
 
+## Glass appearance
+
+Glass · Light and Glass · Dark sit alongside the original four themes. **Appearance** in the top bar sets two accent colours, the gradient and its angle, glass depth, playback glow and an opaque fallback (Reduce transparency). The choice is kept in the app settings, not in the project; record, play and track colours keep their meaning.
+
+- **Floating cards.** The browser, the Session/Arrangement area and the bottom panel are rounded glass cards with gaps between them on the window background.
+- **Top bar in two rows.** Above: the mark and project name, the Session/Arrangement switch, version, undo/redo, export and settings. Below: the Library button over the browser column and one glass capsule with the transport in groups (stop, a round green play, record; position, tempo, metre; scale, metronome, loop, punch, follow), the capture ribbon, the spectrum, the lamps and CPU. Buttons inside the capsule are just their icons until they are lit or under the mouse.
+- **A lens over the spectrum.** The master spectrum is drawn into an image and a glass lens refracts it: magnified in the middle, bent at the rim, red and blue parting at the edge, light on the upper rim. Drag it along the spectrum; a double-click puts it back. Fader and slider thumbs are smaller lenses over their own track.
+- **Clips in pastel.** Session cells and Arrangement clips are tinted with the track colour; notes and waveforms are drawn in the deeper track colour, and a Session clip shows a miniature of its notes under its name. Empty slots are neutral.
+- **Mixer and headers.** Faders are thin tracks with a frosted thumb and a dB scale beside them; meters are two thin bars. Arrangement headers show the volume as a green level slider.
+
+[Rendering details and verification](docs/design/GLASS-UI.md) · [Captures in all six themes](media/ui-glass/index.html)
+
+![Session in Glass Light](media/ui-glass/glass-light-session.png)
+![Arrangement in Glass Dark](media/ui-glass/glass-dark-arrangement.png)
+
+## Packaging a macOS build
+
+`./scripts/package-mac.sh /absolute/build /absolute/out/DAW.dmg` packages DAW.app and Prisma AU/VST3/Standalone with the install notes, licence notices and BUILD-INFO.txt (source commit, architectures), signs the staged copies ad hoc, verifies the image from a read-only mount and writes a SHA-256 file. CI uses the same script; the nightly release is updated only from `main`.
+
 ## Window, themes and menus (stage 1b)
 
 - **Window**: top bar (tempo, time signature, play/stop, position, MIDI and computer-keyboard lamps, CPU), browser on the left (see below), Session View, a bottom panel with the device chain (8 Prisma knobs, drag to reorder devices, on/off, collapse), and an info bar with help for whatever is under the mouse. Browser width, bottom panel height and panel visibility are remembered.

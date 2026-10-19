@@ -1,8 +1,7 @@
 set(PRISMA_FORMATS VST3 Standalone)
-set(PRISMA_COPY_AFTER_BUILD FALSE)
+option(PRISMA_COPY_AFTER_BUILD "Install Prisma plugin after building" OFF)
 if(APPLE)
     list(PREPEND PRISMA_FORMATS AU)
-    set(PRISMA_COPY_AFTER_BUILD TRUE) # installs into ~/Library/Audio/Plug-Ins
 endif()
 
 juce_add_plugin(Prisma

@@ -12,19 +12,19 @@ class SessionRecorder;
 
 namespace ui
 {
-// The 52 px bar on top of the window: logo, tempo, time signature, project scale, metronome, transport with record
-// and overdub, the loop of the arrangement, follow-the-playhead and "Back to arrangement", the "10 min" capture ribbon
-// and its button, version, CPU. The morph slider belongs to a later stage and is drawn inactive.
+// The two-row 104 px bar on top of the window: logo, tempo, time signature, project scale, metronome, transport with
+// record and overdub, the loop of the arrangement, follow-the-playhead and "Back to arrangement", the "10 min" capture
+// ribbon and its button, version, CPU. The morph slider belongs to a later stage and is drawn inactive.
 class TopBar final : public juce::Component
 {
 public:
-    static constexpr int kHeight = 52;
+    static constexpr int kHeight = 104;
 
     TopBar (AudioEngine&, ProjectModel&);
-    ~TopBar() override;
+    ~TopBar () override;
 
     // Called by the window's 30 Hz timer: refreshes the position, tempo, CPU and the lamps.
-    void tick();
+    void tick ();
     void setComputerKeysOn (bool on);
     // The octave of the A key, shown in the KLAV lamp ("KEYS C3").
     void setKeysOctave (const juce::String& octave);
@@ -32,13 +32,28 @@ public:
     // The recorder gives the ribbon its notes and the record lamp its state; the window decides what the buttons do
     // (it knows the selection): record = Session Record from the selected scene, capture = the last phrase.
     void setRecorder (SessionRecorder*);
-    std::function<void()> onRecordClicked;
+    std::function<void ()> onRecordClicked;
     // The items of the record button's menu (right mouse button) that choose where the recording goes (task 3.4):
     // the Arrangement timeline (F9) or a slot of Session View.
-    std::function<void()> onRecordToArrangement, onRecordToSlot;
-    std::function<void()> onCaptureClicked;
+    std::function<void ()> onRecordToArrangement, onRecordToSlot;
+    std::function<void ()> onCaptureClicked;
 
-    std::function<void()> onCpuClicked;
+    std::function<void ()> onCpuClicked, onAppearanceClicked, onExportClicked, onUndoClicked, onRedoClicked,
+      onSettingsClicked, onLibraryClicked;
+    // The right edge of the browser column (0 when it is hidden): the Library button above it takes its width.
+    void setLeftColumn (int right)
+    {
+        if (right != leftColumn)
+        {
+            leftColumn = right;
+            resized ();
+        }
+    }
+    void setProjectName (const juce::String& name)
+    {
+        projectName = name;
+        repaint ();
+    }
     // The version button: shows "v14 · 5 min" and opens the history.
     std::function<void()> onVersionClicked;
     void setVersionText (const juce::String&);
@@ -68,7 +83,9 @@ private:
     bool tempoMapped = false; // the master has a tempo envelope: the field shows its tempo and scales it
     std::vector<std::pair<juce::ValueTree, double>> tempoScalePoints; // during a gesture on the field: the points and their BPM
     double tempoScaleFrom = 0.0;
-    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, punchIn, punchOut, follow, backToArrangement, capture, version, scaleButton;
+    std::unique_ptr<IconButton> metronome, play, stop, record, overdub, loop, punchIn, punchOut, follow,
+      backToArrangement, capture, version, scaleButton, appearanceButton, exportButton, undoButton, redoButton,
+      settingsButton, libraryButton;
     std::unique_ptr<FakeSlider> morph; // the A <-> B morph waits for snapshots; the spectrum has its place meanwhile
     std::unique_ptr<Spectrum> spectrum;
     std::unique_ptr<Tabs> tabs;
@@ -78,8 +95,10 @@ private:
     uint32_t lastDiskMisses = 0;
     juce::uint32 diskShownUntil = 0;
 
-    juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea;
-    bool compact = false;
+    juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea, capsuleArea;
+    std::vector<int> separators; // thin lines between the groups of the transport capsule
+    int leftColumn = 0;
+    juce::String projectName;
     void paintRibbon (juce::Graphics&);
     void updateRibbon();
     juce::String scaleText;

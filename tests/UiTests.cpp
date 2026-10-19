@@ -27,11 +27,11 @@ juce::String hex (juce::Colour c)
 //==============================================================================
 void testThemes()
 {
-    std::printf ("[test 12] themes: four JSON files, all tokens, 16-colour palette\n");
+    std::printf ("[test 12] themes: six JSON files, all tokens, 16-colour palette\n");
     auto& manager = ThemeManager::get();
     const auto problems = manager.reload();
     check (problems.isEmpty(), "all built-in theme files parse");
-    check (manager.all().size() == 4, "four built-in themes");
+    check (manager.all ().size () == 6, "six built-in themes");
 
     struct Expected
     {
@@ -100,7 +100,8 @@ void testThemes()
     dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"prism\"", "\"id\": \"mine\"").replace ("\"name\": \"Prism\"", "\"name\": \"Mine\""));
     dir.getChildFile ("broken.json").replaceWithText ("{ \"id\": \"broken\" }");
     const auto userProblems = manager.reload (dir);
-    check (manager.all().size() == 5 && manager.all().back().id == "mine", "a theme from User Library/Themes appears in the list");
+    check (manager.all ().size () == 7 && manager.all ().back ().id == "mine",
+           "a theme from User Library/Themes appears in the list");
     check (userProblems.size() == 1 && userProblems[0].startsWith ("broken.json"), "a broken user theme is reported, the others load");
     manager.setCurrent ("mine");
     check (theme().id == "mine", "current theme can be switched");
@@ -118,6 +119,81 @@ void testThemes()
     check (std::abs (juce::GlyphArrangement::getStringWidth (mono, "1111") - juce::GlyphArrangement::getStringWidth (mono, "8888")) < 0.01f, "digits of the number font have equal widths");
     manager.setCurrent ("neon");
     check (theme().uiFont (13.0f).getTypefacePtr()->getName().startsWith ("JetBrains Mono"), "Neon uses the monospace font for the UI");
+    manager.setCurrent ("prism");
+}
+
+void
+testAppearance ()
+{
+    std::printf ("[test glass] appearance persistence, validation, contrast and logo resources\n");
+    Appearance a;
+    a.customAccent = true;
+    a.primary = juce::Colours::yellow;
+    a.secondary = juce::Colours::magenta;
+    a.angle = 137;
+    a.glow = 0.72f;
+    a.glass = 0.45f;
+    Appearance loaded;
+    check (Appearance::fromJson (a.toJson (), loaded) && loaded.primary == a.primary &&
+             loaded.secondary == a.secondary && loaded.customAccent && std::abs (loaded.angle - 137) < 0.001f,
+           "appearance round-trip preserves chosen colours and gradient");
+    check (!Appearance::fromJson ("{\"primary\":\"oops\"}", loaded), "invalid saved colour rejected");
+    check (Appearance::fromJson ("{\"angle\":900,\"glow\":-2,\"glass\":10}", loaded) && loaded.angle <= 360 &&
+             loaded.glow >= 0 && loaded.glass <= 1,
+           "saved material parameters bounded");
+    auto& manager = ThemeManager::get ();
+    for (const auto* id : { "glass-light", "glass-dark" })
+    {
+        manager.setCurrent (id);
+        const auto record = theme ().record, play = theme ().play;
+        for (const auto fill :
+             { juce::Colours::black, juce::Colours::white, juce::Colours::yellow, juce::Colours::purple })
+            check (Theme::contrast (theme ().inkOn (fill), fill) >= 4.5f,
+                   "glass labels stay readable with extreme custom colours");
+        manager.setAppearance (a);
+        check (theme ().glass && theme ().accentFill == a.primary, "raw accent preserved for glass fill");
+        check (Theme::contrast (theme ().accent, theme ().panel) >= 4.5f &&
+                 Theme::contrast (theme ().accent, theme ().chrome) >= 4.5f,
+               "accent text contrast protected on both surfaces");
+        check (theme ().record == record && theme ().play == play, "custom accent does not recolour record or play");
+        a.reduceTransparency = true;
+        manager.setAppearance (a);
+        check (theme ().material <= 0 && theme ().glow <= 0, "reduced transparency disables lens and glow");
+        a.reduceTransparency = false;
+        manager.setAppearance (a);
+        manager.reload ();
+        check (manager.appearance ().primary == a.primary && theme ().accentFill == a.primary,
+               "custom colours survive theme reload");
+    }
+    auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                  .getNonexistentChildFile ("prisma-appearance", ".settings");
+    {
+        Settings settings (file);
+        settings.setAppearance (a.toJson ());
+        settings.setTheme ("glass-light");
+        settings.save ();
+    }
+    {
+        Settings settings (file);
+        Appearance restored;
+        check (Appearance::fromJson (settings.appearance (), restored) && restored.primary == a.primary &&
+                 settings.theme () == "glass-light",
+               "appearance survives settings file reopen");
+    }
+    file.deleteFile ();
+    for (const auto* id : { "glass-light", "glass-dark" })
+    {
+        manager.setCurrent (id);
+        juce::Image mark (juce::Image::ARGB, 128, 128, true);
+        juce::Graphics graphics (mark);
+        ui::drawLogo (graphics, { 0.0f, 0.0f, 128.0f, 128.0f });
+        int pixels = 0;
+        for (int y = 0; y < mark.getHeight(); ++y)
+            for (int x = 0; x < mark.getWidth(); ++x)
+                pixels += mark.getPixelAt (x, y).getAlpha() > 0 ? 1 : 0;
+        check (pixels > 100, "current native prism mark renders in both glass themes");
+    }
+    manager.setAppearance (Appearance ());
     manager.setCurrent ("prism");
 }
 
@@ -747,6 +823,7 @@ void tests::runUiTests()
     testComputerKeys();
     testRecordingUi();
     testThemes();
+    testAppearance ();
     testActionTransactions();
     testActionsWithEngine();
     testEditCommands();

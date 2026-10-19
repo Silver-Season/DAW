@@ -106,6 +106,22 @@ private:
     int tileGeneration = -1;
 };
 
+// Glass themes: the main areas (browser, Session/Arrangement, bottom panel) float as rounded cards on the window
+// background. The views keep painting their own rectangles; this overlay, on top of everything and transparent to the
+// mouse, rounds their corners with the background colour, draws a soft shadow into the gaps and a light rim.
+class CardFrames final : public juce::Component
+{
+public:
+    CardFrames() { setInterceptsMouseClicks (false, false); }
+    void setCards (std::vector<juce::Rectangle<int>> areas);
+    const std::vector<juce::Rectangle<int>>& getCards() const { return cards; }
+    void paint (juce::Graphics&) override;
+    static constexpr float kRadius = 12.0f;
+
+private:
+    std::vector<juce::Rectangle<int>> cards;
+};
+
 // The triangle and six spectrum rays of the concept, drawn in code.
 void drawLogo (juce::Graphics&, juce::Rectangle<float> area);
 } // namespace ui

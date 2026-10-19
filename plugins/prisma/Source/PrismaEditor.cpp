@@ -7,6 +7,7 @@ namespace prisma_ui
 PrismaLookAndFeel::PrismaLookAndFeel()
 {
     setColour (juce::ResizableWindow::backgroundColourId, colours::background);
+    setColour (juce::TextEditor::textColourId, colours::text);
     setColour (juce::Slider::textBoxTextColourId, colours::text);
     setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     setColour (juce::Slider::trackColourId, colours::accent);
@@ -108,11 +109,13 @@ void Section::addRow (std::vector<juce::Component*> items, std::vector<float> we
 void Section::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (3.0f);
-    g.setColour (colours::panel);
+    g.setColour (findColour (juce::PopupMenu::backgroundColourId));
     g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (colours::panelEdge);
+    g.setColour (findColour (juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle (r, 6.0f, 1.0f);
-    g.setColour (accentColour);
+    g.setColour (dynamic_cast<PrismaLookAndFeel*> (&getLookAndFeel ()) != nullptr
+                   ? accentColour
+                   : findColour (juce::ComboBox::arrowColourId));
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
     g.drawText (title.toUpperCase(), r.reduced (10.0f, 4.0f).removeFromTop (16.0f), juce::Justification::centredLeft);
 }
@@ -169,7 +172,7 @@ void WavetableView::timerCallback()
 void WavetableView::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (2.0f);
-    g.setColour (colours::background);
+    g.setColour (findColour (juce::ResizableWindow::backgroundColourId));
     g.fillRoundedRectangle (r, 4.0f);
 
     const auto* table = processor.getTable ((int) std::lround (tableParam->load()));
@@ -205,15 +208,16 @@ void WavetableView::paint (juce::Graphics& g)
     for (int f = frames - 1; f >= 0; f -= 2)
     {
         const float t = (float) f / (float) juce::jmax (1, frames - 1);
-        g.setColour (colours::dimText.withAlpha (0.18f));
+        g.setColour (findColour (juce::Label::textColourId).withAlpha (0.18f));
         g.strokePath (pathFor (f, t * depthX, t * depthY, -1.0f), juce::PathStrokeType (1.0f));
     }
 
     const float t = (float) active / (float) juce::jmax (1, frames - 1);
-    g.setColour ((on ? colours::accent : colours::dimText).withAlpha (on ? 1.0f : 0.6f));
+    g.setColour ((on ? findColour (juce::Slider::trackColourId) : findColour (juce::Label::textColourId))
+                   .withAlpha (on ? 1.0f : 0.6f));
     g.strokePath (pathFor (active, t * depthX, t * depthY, pos), juce::PathStrokeType (2.0f));
 
-    g.setColour (colours::dimText);
+    g.setColour (findColour (juce::Label::textColourId));
     g.setFont (juce::FontOptions (10.0f));
     g.drawText (juce::String (table->name()) + "  " + juce::String (active + 1) + "/" + juce::String (frames),
                 r.reduced (6.0f, 3.0f), juce::Justification::topLeft);
@@ -225,7 +229,8 @@ KeyboardPanel::KeyboardPanel (juce::MidiKeyboardState& s)
 {
     heldNote.fill (-1);
     keyboard.setAvailableRange (24, 108);
-    keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId, colours::accent.withAlpha (0.7f));
+    keyboard.setColour (juce::MidiKeyboardComponent::keyDownOverlayColourId,
+                        findColour (juce::Slider::trackColourId).withAlpha (0.7f));
     keyboard.setWantsKeyboardFocus (false); // keys are handled here, for any focused child of the owner
     addAndMakeVisible (keyboard);
 
@@ -255,7 +260,8 @@ void KeyboardPanel::updateLabel()
                                    : juce::MidiMessage::getMidiNoteName (baseNote, true, true, 3) + "\nvel " + juce::String (velocity),
                   juce::dontSendNotification);
     // Shade the keys the computer keyboard reaches.
-    keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, colours::panelEdge);
+    keyboard.setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId,
+                        findColour (juce::ComboBox::outlineColourId));
     keyboard.setKeyPressBaseOctave (baseNote / 12);
     keyboard.setLowestVisibleKey (juce::jlimit (24, 108, baseNote - 24));
 }
@@ -379,7 +385,9 @@ void KeyboardPanel::resized()
 using namespace prisma_ui;
 
 PrismaEditor::PrismaEditor (PrismaProcessor& p)
-    : AudioProcessorEditor (p), processor (p), keyboard (p.keyboardState)
+  : AudioProcessorEditor (p)
+  , synthProcessor (p)
+  , keyboard (p.keyboardState)
 {
     setLookAndFeel (&lnf);
     auto& s = p.apvts;
@@ -387,9 +395,7 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     for (int i = 0; i < p.getNumPrograms(); ++i)
         presetBox.addItem (p.getProgramName (i), i + 1);
     presetBox.setSelectedId (p.getCurrentProgram() + 1, juce::dontSendNotification);
-    presetBox.onChange = [this] {
-        processor.setCurrentProgram (presetBox.getSelectedId() - 1);
-    };
+    presetBox.onChange = [this] { synthProcessor.setCurrentProgram (presetBox.getSelectedId () - 1); };
     addAndMakeVisible (presetBox);
 
     voicesLabel.setJustificationType (juce::Justification::centredRight);
@@ -398,13 +404,13 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     oscA = &makeOscSection (0);
     oscB = &makeOscSection (1);
 
-    filter = &make<Section> ("Filter", colours::accent2);
+    filter = &make<Section> ("Filter", findColour (juce::ComboBox::arrowColourId));
     filter->addRow ({ &make<Toggle> (s, "flt_on", "On"), &make<Choice> (s, "flt_type") }, { 1.0f, 2.0f }, 0.45f);
     filter->addRow ({ &make<Knob> (s, "flt_cutoff", "Cutoff"), &make<Knob> (s, "flt_res", "Reso"), &make<Knob> (s, "flt_drive", "Drive"),
                       &make<Knob> (s, "flt_key", "Key"), &make<Knob> (s, "flt_env", "Env 2") });
     addAndMakeVisible (filter);
 
-    subNoise = &make<Section> ("Sub / Noise", colours::accent2);
+    subNoise = &make<Section> ("Sub / Noise", findColour (juce::ComboBox::arrowColourId));
     subNoise->addRow ({ &make<Toggle> (s, "sub_on", "Sub"), &make<Choice> (s, "sub_oct"), &make<Knob> (s, "sub_level", "Sub"),
                         &make<Knob> (s, "noise_level", "Noise") },
                       { 1.0f, 1.4f, 1.0f, 1.0f });
@@ -413,7 +419,9 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     for (int e = 1; e <= 3; ++e)
     {
         const juce::String pre = "env" + juce::String (e) + "_";
-        auto& sec = make<Section> (e == 1 ? "Amp Env" : "Env " + juce::String (e), e == 1 ? colours::accent : colours::accent2);
+        auto& sec = make<Section> (e == 1 ? "Amp Env" : "Env " + juce::String (e),
+                                   e == 1 ? findColour (juce::Slider::trackColourId)
+                                          : findColour (juce::ComboBox::arrowColourId));
         sec.addRow ({ &make<Knob> (s, pre + "a", "A"), &make<Knob> (s, pre + "d", "D"), &make<Knob> (s, pre + "s", "S"), &make<Knob> (s, pre + "r", "R") });
         addAndMakeVisible (sec);
         envs.push_back (&sec);
@@ -422,7 +430,7 @@ PrismaEditor::PrismaEditor (PrismaProcessor& p)
     for (int l = 1; l <= 2; ++l)
     {
         const juce::String pre = "lfo" + juce::String (l) + "_";
-        auto& sec = make<Section> ("LFO " + juce::String (l), colours::accent2);
+        auto& sec = make<Section> ("LFO " + juce::String (l), findColour (juce::ComboBox::arrowColourId));
         sec.addRow ({ &make<Choice> (s, pre + "shape"), &make<Choice> (s, pre + "div") }, {}, 0.55f);
         sec.addRow ({ &make<Knob> (s, pre + "rate", "Rate"), &make<Toggle> (s, pre + "sync", "Sync"), &make<Toggle> (s, pre + "retrig", "Retrig") },
                     { 1.0f, 1.0f, 1.2f });
@@ -471,11 +479,11 @@ PrismaEditor::~PrismaEditor()
 
 Section& PrismaEditor::makeOscSection (int osc)
 {
-    auto& s = processor.apvts;
+    auto& s = synthProcessor.apvts;
     const juce::String pre = osc == 0 ? "oscA_" : "oscB_";
     auto& sec = make<Section> (osc == 0 ? "Oscillator A" : "Oscillator B");
     sec.addRow ({ &make<Toggle> (s, pre + "on", "On"), &make<Choice> (s, pre + "table") }, { 0.7f, 2.3f }, 0.6f);
-    sec.addRow ({ &make<WavetableView> (processor, osc) }, {}, 1.5f);
+    sec.addRow ({ &make<WavetableView> (synthProcessor, osc) }, {}, 1.5f);
     sec.addRow ({ &make<Knob> (s, pre + "pos", "WT Pos"), &make<Knob> (s, pre + "level", "Level"), &make<Knob> (s, pre + "pan", "Pan"),
                   &make<Knob> (s, pre + "oct", "Oct"), &make<Knob> (s, pre + "semi", "Semi"), &make<Knob> (s, pre + "fine", "Fine") });
     sec.addRow ({ &make<Knob> (s, pre + "unison", "Unison"), &make<Knob> (s, pre + "detune", "Detune"), &make<Knob> (s, pre + "spread", "Spread"),
@@ -486,19 +494,19 @@ Section& PrismaEditor::makeOscSection (int osc)
 
 void PrismaEditor::timerCallback()
 {
-    voicesLabel.setText ("voices " + juce::String (processor.getNumActiveVoices()), juce::dontSendNotification);
-    if (presetBox.getSelectedId() != processor.getCurrentProgram() + 1)
-        presetBox.setSelectedId (processor.getCurrentProgram() + 1, juce::dontSendNotification);
+    voicesLabel.setText ("voices " + juce::String (synthProcessor.getNumActiveVoices ()), juce::dontSendNotification);
+    if (presetBox.getSelectedId () != synthProcessor.getCurrentProgram () + 1)
+        presetBox.setSelectedId (synthProcessor.getCurrentProgram () + 1, juce::dontSendNotification);
 }
 
 void PrismaEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (colours::background);
+    g.fillAll (findColour (juce::ResizableWindow::backgroundColourId));
     auto header = getLocalBounds().removeFromTop (46).reduced (14, 0);
-    g.setColour (colours::text);
+    g.setColour (findColour (juce::TextEditor::textColourId));
     g.setFont (juce::FontOptions (24.0f, juce::Font::bold));
     g.drawText ("PRISMA", header, juce::Justification::centredLeft);
-    g.setColour (colours::dimText);
+    g.setColour (findColour (juce::Label::textColourId));
     g.setFont (juce::FontOptions (12.0f));
     g.drawText ("wavetable synthesizer", header.withTrimmedLeft (118), juce::Justification::centredLeft);
 }
@@ -513,14 +521,14 @@ void PrismaEditor::resized()
     keyboard.setBounds (r.removeFromBottom (70));
 
     const int h = r.getHeight();
-    auto top = r.removeFromTop ((int) (h * 0.40f));
-    auto mid = r.removeFromTop ((int) (h * 0.25f));
+    auto top = r.removeFromTop ((int)((float)h * 0.40f));
+    auto mid = r.removeFromTop ((int)((float)h * 0.25f));
     auto bottom = r;
 
     const int w = top.getWidth();
-    oscA->setBounds (top.removeFromLeft ((int) (w * 0.34f)));
-    oscB->setBounds (top.removeFromLeft ((int) (w * 0.34f)));
-    filter->setBounds (top.removeFromTop ((int) (top.getHeight() * 0.62f)));
+    oscA->setBounds (top.removeFromLeft ((int)((float)w * 0.34f)));
+    oscB->setBounds (top.removeFromLeft ((int)((float)w * 0.34f)));
+    filter->setBounds (top.removeFromTop ((int)((float)top.getHeight () * 0.62f)));
     subNoise->setBounds (top);
 
     const int sw = mid.getWidth() / 5;
@@ -529,6 +537,6 @@ void PrismaEditor::resized()
     for (size_t i = 0; i < lfos.size(); ++i)
         lfos[i]->setBounds (i + 1 == lfos.size() ? mid : mid.removeFromLeft (sw));
 
-    matrix->setBounds (bottom.removeFromLeft ((int) (bottom.getWidth() * 0.66f)));
+    matrix->setBounds (bottom.removeFromLeft ((int)((float)bottom.getWidth () * 0.66f)));
     master->setBounds (bottom);
 }

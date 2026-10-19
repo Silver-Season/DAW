@@ -412,6 +412,8 @@ inline const juce::String cpu = utf8 ("CPU");
 inline const juce::String keysOn = tr ("KEYS", "КЛАВ");
 inline const juce::String midi = utf8 ("MIDI");
 inline const juce::String scaleOff = tr ("Scale: off", "Лад: выкл");
+inline const juce::String library = tr ("Library", "Библиотека");
+inline const juce::String exportShort = tr ("Export", "Экспорт");
 } // namespace transport
 
 // Browser panel (frame only; the sources come with task 1.5)
@@ -1171,6 +1173,11 @@ inline const juce::String controllerLane = make (tr ("Controller lane", "Пол�
 inline const juce::String morph = make (tr ("Morph A ↔ B", "Морф A ↔ B"), tr ("Smooth transition between knob snapshots. ", "Плавный переход между снимками ручек. ") + soon6);
 inline const juce::String tabSession = make (utf8 ("Session"), tr ("A grid of clips for live playing. Tab switches between Session and Arrangement.", "Сетка клипов для живой игры. Tab переключает Session и Arrangement."));
 inline const juce::String tabArrangement = make (utf8 ("Arrangement"), tr ("A linear timeline: clips by bar, markers, loop. Drag a clip from Session here. Tab switches between Session and Arrangement.", "Линейная шкала времени: клипы по тактам, маркеры, петля. Клип из Session можно перетащить сюда. Tab переключает Session и Arrangement."));
+inline const juce::String undoButton = make (tr ("Undo", "Отменить"), tr ("Takes back the last change. Cmd+Z", "Отменяет последнее изменение. Cmd+Z"));
+inline const juce::String redoButton = make (tr ("Redo", "Повторить"), tr ("Brings back what was undone. Cmd+Shift+Z", "Возвращает отменённое. Cmd+Shift+Z"));
+inline const juce::String settingsButton = make (tr ("Settings", "Настройки"), tr ("Audio, MIDI, recording, appearance and library. Cmd+,", "Звук, MIDI, запись, оформление и библиотека. Cmd+,"));
+inline const juce::String libraryButton = make (tr ("Library", "Библиотека"), tr ("Shows or hides the browser of sounds, instruments, effects and files.", "Показывает или прячет браузер звуков, инструментов, эффектов и файлов."));
+inline const juce::String exportButton = make (tr ("Export", "Экспорт"), tr ("Renders the song or the selected time to an audio file.", "Сводит песню или выделенное время в аудиофайл."));
 inline const juce::String version = make (tr ("Version history", "История версий"), tr ("Version number and time since the last save. Click to open the list: labels, return to a version.", "Номер версии и время с последнего сохранения. Щелчок открывает список: метки, возврат к версии."));
 inline const juce::String cpu = make (tr ("CPU load", "Нагрузка процессора"), tr ("Click to open audio settings.", "Щелчок открывает настройки звука."));
 inline const juce::String midiIn = make (tr ("MIDI input", "MIDI-вход"), tr ("Blinks when events arrive from MIDI devices.", "Мигает, когда приходят события с MIDI-устройств."));
@@ -1201,6 +1208,7 @@ inline const juce::String audioOriginalTempo = make (tr ("File tempo", "Темп
 inline const juce::String audioTempoDouble = make (tr ("Tempo ×2", "Темп ×2"), tr ("The file tempo is double the detected one.", "Темп звука вдвое больше найденного."));
 inline const juce::String audioTempoHalve = make (tr ("Tempo ÷2", "Темп ÷2"), tr ("The file tempo is half the detected one.", "Темп звука вдвое меньше найденного."));
 inline const juce::String spectrum = make (tr ("Master spectrum", "Спектр мастера"), tr ("What plays at the output: from bass on the left to air on the right, tilted +4.5 dB per octave the way the ear hears. Ticks show recent peaks.", "Что звучит на выходе: от баса слева до воздуха справа, наклон +4,5 дБ на октаву, как слышит ухо. Чёрточки показывают недавние пики."));
+inline const juce::String spectrumLens = make (tr ("Lens", "Линза"), tr ("A glass lens over the master spectrum: it magnifies the band under it. Drag it along the spectrum; double-click puts it back.", "Стеклянная линза над спектром мастера: увеличивает полосу под собой. Тяните её вдоль спектра; двойной щелчок возвращает на место."));
 inline const juce::String sendKnob = make (tr ("Send", "Посыл"), tr ("Sends part of the post-fader signal to return track A (reverb) or B (delay). The first touch creates the return track if there is none. Double-click to turn off.", "Отправляет часть звука после фейдера на возвратную дорожку A (ревер) или B (дилей). Первое касание создаёт возвратную дорожку, если её нет. Двойной щелчок выключает."));
 inline const juce::String cueKnob = make (tr ("Cue", "Прослушивание"), tr ("Preview volume. ", "Громкость предпрослушивания. ") + soon6);
 inline const juce::String meter = make (tr ("Level", "Уровень"), tr ("Peak level of the track signal.", "Пиковый уровень сигнала дорожки."));
@@ -1423,4 +1431,21 @@ inline const juce::String showDetail = tr ("Show bottom panel (Cmd+Alt+L)", "П�
 inline const juce::String hideMixer = tr ("Hide mixer (Cmd+Alt+M)", "Скрыть микшер (Cmd+Alt+M)");
 inline const juce::String showMixer = tr ("Show mixer (Cmd+Alt+M)", "Показать микшер (Cmd+Alt+M)");
 } // namespace tips
+namespace appearance
+{
+inline const juce::String custom = tr ("Custom accent", "Свой акцент");
+inline const juce::String primary = tr ("Primary colour", "Основной · HEX");
+inline const juce::String secondary = tr ("Secondary colour", "Второй · HEX");
+inline const juce::String gradient = tr ("Gradient", "Градиент");
+inline const juce::String angle = tr ("Gradient angle", "Направление");
+inline const juce::String glow = tr ("Glow", "Подсветка");
+inline const juce::String glass = tr ("Glass depth", "Глубина стекла");
+inline const juce::String opaque = tr ("Reduce transparency", "Уменьшить прозрачность");
+inline const juce::String reset = tr ("Reset appearance", "Сбросить оформление");
+inline const juce::String colourHelp =
+  tr ("Enter a HEX colour, e.g. #16BDDD. Enter applies it. Track and recording colours keep their meaning.",
+      "Шесть цифр HEX, например #16BDDD. Enter применяет цвет. Цвета дорожек и записи сохраняют своё значение.");
+inline const juce::String preview = tr ("CHANGES APPLY IMMEDIATELY", "ИЗМЕНЕНИЯ ПРИМЕНЯЮТСЯ СРАЗУ");
+
+}
 } // namespace Strings

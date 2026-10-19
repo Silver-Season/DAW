@@ -19,3 +19,6 @@ Installing DAW
    Prisma.app in the same folder is the synth as a standalone app.
 
 4. In DAW, click "▶ Scene 1" on the right to hear the demo. The audio interface is chosen in "Audio/MIDI".
+
+5. Glass appearance: open Appearance in the top bar and select Glass · Light or Glass · Dark.
+   An existing installation retains its saved theme. BUILD-INFO.txt lists the package architecture and source commit.

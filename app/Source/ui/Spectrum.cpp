@@ -26,7 +26,46 @@ Spectrum::Spectrum (AudioEngine& e) : engine (e), samples ((size_t) kFftSize), w
     setInterceptsMouseClicks (true, false);
 }
 
-juce::String Spectrum::helpAt (juce::Point<int>) const { return Strings::help::spectrum; }
+juce::String Spectrum::helpAt (juce::Point<int> p) const
+{
+    return lensBounds().contains (p.toFloat()) ? Strings::help::spectrumLens : Strings::help::spectrum;
+}
+
+juce::Rectangle<float> Spectrum::lensBounds() const
+{
+    const auto& t = theme();
+    if (! t.glass || t.material <= 0.0f || getWidth() < 60)
+        return {};
+    const float h = (float) getHeight() - 4.0f, w = juce::jmin (46.0f, (float) getWidth() * 0.3f);
+    const float x = juce::jlimit (w * 0.5f + 2.0f, (float) getWidth() - w * 0.5f - 2.0f, lensPosition * (float) getWidth());
+    return juce::Rectangle<float> (w, h).withCentre ({ x, (float) getHeight() * 0.5f });
+}
+
+void Spectrum::mouseDown (const juce::MouseEvent& e)
+{
+    const auto lens = lensBounds();
+    dragOffset = lens.contains (e.position) ? e.position.x - lens.getCentreX() : 0.0f;
+    mouseDrag (e);
+}
+
+void Spectrum::mouseDrag (const juce::MouseEvent& e)
+{
+    if (lensBounds().isEmpty() || getWidth() <= 0)
+        return;
+    lensPosition = juce::jlimit (0.0f, 1.0f, (e.position.x - dragOffset) / (float) getWidth());
+    repaint();
+}
+
+void Spectrum::mouseMove (const juce::MouseEvent& e)
+{
+    setMouseCursor (lensBounds().contains (e.position) ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
+void Spectrum::mouseDoubleClick (const juce::MouseEvent&)
+{
+    lensPosition = kLensHome;
+    repaint();
+}
 
 void Spectrum::tick()
 {
@@ -74,10 +113,124 @@ void Spectrum::tick()
 
 void Spectrum::paint (juce::Graphics& g)
 {
+    if (lensBounds().isEmpty())
+    {
+        paintContent (g);
+        return;
+    }
+    // Draw the spectrum into an image at the screen's pixel density, show it, then refract it under the lens.
+    const float scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const int w = juce::roundToInt ((float) getWidth() * scale), h = juce::roundToInt ((float) getHeight() * scale);
+    if (backdrop.getWidth() != w || backdrop.getHeight() != h)
+        backdrop = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+    else
+        backdrop.clear (backdrop.getBounds());
+    {
+        juce::Graphics offscreen (backdrop);
+        offscreen.addTransform (juce::AffineTransform::scale (scale));
+        paintContent (offscreen);
+    }
+    g.setOpacity (1.0f);
+    g.drawImage (backdrop, getLocalBounds().toFloat());
+    paintLens (g, scale);
+}
+
+void Spectrum::paintLens (juce::Graphics& g, float scale)
+{
+    const auto& t = theme();
+    const auto lens = lensBounds();
+    const int lw = juce::roundToInt (lens.getWidth() * scale), lh = juce::roundToInt (lens.getHeight() * scale);
+    if (lw < 4 || lh < 4)
+        return;
+    if (lensImage.getWidth() != lw || lensImage.getHeight() != lh)
+        lensImage = juce::Image (juce::Image::ARGB, lw, lh, true, juce::SoftwareImageType());
+
+    const float strength = t.material;
+    const float originX = lens.getX() * scale, originY = lens.getY() * scale;
+    const float hx = (float) lw * 0.5f - 1.0f, hy = (float) lh * 0.5f - 1.0f;
+    const float radius = juce::jmin (hx, hy);
+    const float bend = 7.0f * scale * strength, spread = 2.0f * scale * strength;
+    const float shine = t.isLight() ? 1.0f : 0.55f;
+    {
+        const juce::Image::BitmapData src (backdrop, juce::Image::BitmapData::readOnly);
+        juce::Image::BitmapData dst (lensImage, juce::Image::BitmapData::writeOnly);
+        const auto sample = [&] (float x, float y) {
+            // bilinear, clamped to the image
+            x = juce::jlimit (0.0f, (float) src.width - 1.001f, x);
+            y = juce::jlimit (0.0f, (float) src.height - 1.001f, y);
+            const int x0 = (int) x, y0 = (int) y;
+            const float fx = x - (float) x0, fy = y - (float) y0;
+            const auto top = src.getPixelColour (x0, y0).interpolatedWith (src.getPixelColour (x0 + 1, y0), fx);
+            const auto bottom = src.getPixelColour (x0, y0 + 1).interpolatedWith (src.getPixelColour (x0 + 1, y0 + 1), fx);
+            return top.interpolatedWith (bottom, fy);
+        };
+        for (int y = 0; y < lh; ++y)
+            for (int x = 0; x < lw; ++x)
+            {
+                const float px = (float) x + 0.5f - (float) lw * 0.5f, py = (float) y + 0.5f - (float) lh * 0.5f;
+                // signed distance to the capsule, negative inside
+                const float qx = std::abs (px) - hx + radius, qy = std::abs (py) - hy + radius;
+                const float ox = juce::jmax (qx, 0.0f), oy = juce::jmax (qy, 0.0f);
+                const float distance = std::sqrt (ox * ox + oy * oy) + juce::jmin (juce::jmax (qx, qy), 0.0f) - radius;
+                if (distance >= 0.5f)
+                {
+                    dst.setPixelColour (x, y, juce::Colours::transparentBlack);
+                    continue;
+                }
+                const float nx = px - juce::jlimit (-hx + radius, hx - radius, px);
+                const float ny = py - juce::jlimit (-hy + radius, hy - radius, py);
+                const float length = juce::jmax (0.01f, std::sqrt (nx * nx + ny * ny));
+                const float ux = nx / length, uy = ny / length;
+                const float inset = juce::jmax (-distance, 0.0f);
+                const float edge = std::pow (juce::jmax (0.0f, 1.0f - inset / juce::jmax (radius, 1.0f)), 2.0f);
+                // magnified in the middle, the outside pulled in at the rim; red and blue part a little at the edge
+                const float mx = originX + (float) lw * 0.5f + px * 0.72f + ux * edge * bend;
+                const float my = originY + (float) lh * 0.5f + py * 0.72f + uy * edge * bend;
+                const auto red = sample (mx + ux * edge * spread, my + uy * edge * spread);
+                const auto mid = sample (mx, my);
+                const auto blue = sample (mx - ux * edge * spread, my - uy * edge * spread);
+                auto colour = juce::Colour::fromFloatRGBA (red.getFloatRed(), mid.getFloatGreen(), blue.getFloatBlue(), 1.0f)
+                                .interpolatedWith (t.panel, 1.0f - mid.getFloatAlpha());
+                colour = colour.interpolatedWith (t.panel, 0.08f * strength); // a touch of frost
+                const float light = juce::jlimit (0.0f, 1.0f, -ux * 0.45f - uy * 0.9f);
+                const float rim = std::exp (-inset / (1.4f * scale));
+                const float glint = std::pow (light, 6.0f) * edge;
+                colour = colour.interpolatedWith (t.highlight(), juce::jlimit (0.0f, 1.0f, (rim * 0.35f + glint * 0.55f) * strength * shine));
+                if (uy > 0.0f) // the lower rim catches a little shade
+                    colour = colour.interpolatedWith (t.shadow(), rim * uy * 0.12f * strength);
+                dst.setPixelColour (x, y, colour.withAlpha (juce::jlimit (0.0f, 1.0f, 0.5f - distance)));
+            }
+    }
+    const float r = lens.getHeight() * 0.5f;
+    juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.10f : 0.40f), juce::roundToInt (4.0f * strength) + 2, { 0, 1 })
+        .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (lens, r); return p; }());
+    g.setOpacity (1.0f); // the shadow left its own colour in the context
+    g.drawImage (lensImage, lens);
+    g.setColour (t.line.withAlpha (t.isLight() ? 0.55f : 0.7f));
+    g.drawRoundedRectangle (lens.reduced (0.25f), r, 0.75f);
+}
+
+void Spectrum::paintContent (juce::Graphics& g)
+{
     const auto& t = theme();
     auto r = getLocalBounds().toFloat();
     fillCell (g, r, t.panel);
     auto area = r.reduced (6.0f, 4.0f);
+    if (! lensBounds().isEmpty())
+    {
+        // Glass: a faint band of the palette lies under the curve, so the lens always has light to bend.
+        const auto band = r.reduced (3.0f, 3.0f);
+        juce::ColourGradient prism (t.palette (0), band.getX(), 0.0f, t.palette (7), band.getRight(), 0.0f, false);
+        for (int i = 1; i < 7; ++i)
+            prism.addColour (i / 7.0, t.palette (i));
+        g.setGradientFill (prism);
+        g.setOpacity (t.isLight() ? 0.55f : 0.45f);
+        g.fillRoundedRectangle (band, band.getHeight() * 0.5f);
+        g.setGradientFill (juce::ColourGradient (t.panel.withAlpha (0.6f), 0.0f, band.getY(),
+                                                 t.panel.withAlpha (0.0f), 0.0f, band.getBottom(), false));
+        g.fillRoundedRectangle (band, band.getHeight() * 0.5f);
+        g.setOpacity (1.0f);
+    }
     const auto yOf = [&] (float db) { return area.getBottom() - juce::jlimit (0.0f, 1.0f, (db - kFloorDb) / (kTopDb - kFloorDb)) * area.getHeight(); };
     const auto xOf = [&] (int band) { return area.getX() + area.getWidth() * ((float) band + 0.5f) / (float) kBands; };
 

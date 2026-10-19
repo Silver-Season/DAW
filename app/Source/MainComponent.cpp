@@ -94,6 +94,12 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar->onCaptureClicked = [this] { captureClicked(); };
     topBar->onCpuClicked = [this] { showSettings (ui::SettingsWindow::sound); };
     topBar->onVersionClicked = [this] { commandManager.invokeDirectly (ui::commands::versionHistory, false); };
+    topBar->onAppearanceClicked = [this] { showSettings (ui::SettingsWindow::appearance); };
+    topBar->onExportClicked = [this] { commandManager.invokeDirectly (ui::commands::exportAudio, false); };
+    topBar->onUndoClicked = [this] { commandManager.invokeDirectly (ui::commands::undo, false); };
+    topBar->onRedoClicked = [this] { commandManager.invokeDirectly (ui::commands::redo, false); };
+    topBar->onSettingsClicked = [this] { showSettings (ui::SettingsWindow::appearance); };
+    topBar->onLibraryClicked = [this] { setBrowserVisible (! browserVisible); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources);
     sources.onChanged = [this] { browser->sourcesChanged(); };
     browser->onActivate = [this] (const browser::DragItem& item) {
@@ -144,7 +150,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     arrangement->setVisible (false);
     keyboardStrip->setVisible (false);
     for (auto* c : std::initializer_list<juce::Component*> { topBar.get(), browser.get(), session.get(), arrangement.get(), keyboardStrip.get(), detail.get(), infoBar.get(),
-                                                              &browserSplitter, &detailSplitter, &browserTab, &detailTab, &scanlines })
+                                                              &browserSplitter, &detailSplitter, &browserTab, &detailTab, &cardFrames, &scanlines })
         addAndMakeVisible (c);
 
     browserSplitter.setHelpText (Strings::help::splitterBrowser);
@@ -251,9 +257,10 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     doc.onWriteFailed = [this] (const juce::String& error) { infoBar->showMessage (error, 10000); };
     ThemeManager::get().addChangeListener (this);
     applyTheme();
+    topBar->setProjectName (windowTitle ());
 
     setWantsKeyboardFocus (true);
-    setSize (1440, 880);
+    setSize (1440, 940);
     startTimerHz (30);
     juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
         if (safe != nullptr)
@@ -306,7 +313,8 @@ void MainComponent::updateTitle()
     const auto title = windowTitle();
     if (title != lastTitle)
     {
-            lastTitle = title;
+        lastTitle = title;
+        topBar->setProjectName (title);
         if (onTitleChanged)
             onTitleChanged (title);
     }
@@ -344,6 +352,12 @@ void MainComponent::applyTheme()
         lnf->refresh();
     scanlines.setVisible (theme().scanlines);
     sendLookAndFeelChange();
+    resized(); // the glass themes lay the areas out as cards with gaps
+    for (auto& entry : editorWindows)
+    {
+        entry.second->sendLookAndFeelChange ();
+        entry.second->repaint ();
+    }
     repaint();
 }
 
@@ -807,40 +821,65 @@ void MainComponent::paint (juce::Graphics& g)
 
 void MainComponent::resized()
 {
+    // Glass themes leave a margin round the window and gaps between the areas, which float as rounded cards.
+    const bool cards = theme().glass;
+    const int margin = cards ? 10 : 0, gap = cards ? 8 : 0;
     auto r = getLocalBounds();
     if (menuBar != nullptr)
         menuBar->setBounds (r.removeFromTop (kMenuBarHeight));
     topBar->setBounds (r.removeFromTop (ui::TopBar::kHeight));
     infoBar->setBounds (r.removeFromBottom (kInfoBarHeight));
     scanlines.setBounds (getLocalBounds());
-    scanlines.toFront (false);
+    r = r.withTrimmedLeft (margin).withTrimmedRight (margin).withTrimmedTop (cards ? 2 : 0).withTrimmedBottom (cards ? 6 : 0);
 
     const int stripHeight = juce::roundToInt (stripFraction * ui::KeyboardStrip::kHeight);
     keyboardStrip->setBounds (r.removeFromBottom (stripHeight));
+    if (stripHeight > 0)
+        r.removeFromBottom (gap);
     if (detailVisible)
     {
         const int h = juce::jmin (currentDetailHeight(), juce::jmax (ui::DetailPanel::kMinHeight, r.getHeight() - 200));
         detail->setBounds (r.removeFromBottom (h));
+        r.removeFromBottom (gap);
     }
     detail->setVisible (detailVisible);
-    const int detailTop = r.getBottom();
+    const int detailTop = r.getBottom() + gap / 2;
 
     if (browserVisible)
+    {
         browser->setBounds (r.removeFromLeft (browserWidth));
+        r.removeFromLeft (gap);
+    }
     browser->setVisible (browserVisible);
-    const int browserRight = r.getX();
+    const int browserRight = r.getX() - gap / 2;
     session->setBounds (r);
     session->setVisible (! arrangementShown);
     arrangement->setBounds (r);
     arrangement->setVisible (arrangementShown);
+    topBar->setLeftColumn (browserVisible ? browser->getRight() : 0);
+
+    std::vector<juce::Rectangle<int>> areas;
+    if (cards)
+    {
+        if (browserVisible)
+            areas.push_back (browser->getBounds());
+        areas.push_back (r);
+        if (detailVisible)
+            areas.push_back (detail->getBounds());
+        if (stripHeight > 0)
+            areas.push_back (keyboardStrip->getBounds());
+    }
+    cardFrames.setBounds (getLocalBounds());
+    cardFrames.setCards (std::move (areas));
 
     // Splitters sit on the borders without taking room; the tabs sit in the padding of the Session View.
     browserSplitter.setVisible (browserVisible);
     browserSplitter.setBounds (browserRight - ui::Splitter::kThickness / 2 - 1, topBar->getBottom(), ui::Splitter::kThickness, detailTop - topBar->getBottom());
     detailSplitter.setVisible (detailVisible);
     detailSplitter.setBounds (0, detailTop - ui::Splitter::kThickness / 2, getWidth(), ui::Splitter::kThickness);
-    browserTab.setBounds (browserRight, topBar->getBottom() + (detailTop - topBar->getBottom()) / 2 - 14, 10, 28);
-    detailTab.setBounds (browserRight + r.getWidth() / 2 - 14 - 90, detailTop - 10, 28, 10);
+    browserTab.setBounds (browserRight - (cards ? 5 : 0), topBar->getBottom() + (detailTop - topBar->getBottom()) / 2 - 14, 10, 28);
+    detailTab.setBounds (browserRight + r.getWidth() / 2 - 14 - 90, detailTop - (cards ? 5 : 10), 28, 10);
+    cardFrames.toFront (false);
     browserTab.toFront (false);
     detailTab.toFront (false);
     scanlines.toFront (false);
@@ -1302,6 +1341,8 @@ void MainComponent::openInstrumentEditor (int64_t deviceId)
     juce::AudioProcessorEditor* editor = processor->hasEditor() ? processor->createEditorIfNeeded() : nullptr;
     if (editor == nullptr)
         editor = new juce::GenericAudioProcessorEditor (*processor);
+    if (dynamic_cast<PrismaEditor*> (editor) != nullptr)
+        editor->setLookAndFeel (&juce::LookAndFeel::getDefaultLookAndFeel ());
     auto window = std::make_unique<PluginWindow> (editor, processor->getName(), [this, deviceId] {
         // Defer deletion: this runs from the window's own close button.
         juce::MessageManager::callAsync ([this, alive = juce::Component::SafePointer<MainComponent> (this), deviceId] {

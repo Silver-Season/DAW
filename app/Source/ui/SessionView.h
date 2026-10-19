@@ -25,7 +25,7 @@ class SessionView final : public juce::Component,
 {
 public:
     static constexpr int kPad = 10, kTopPad = 8, kGap = 5;
-    static constexpr int kHeaderHeight = 30, kSlotHeight = 34, kStopHeight = 22, kMasterWidth = 128;
+    static constexpr int kHeaderHeight = 36, kSlotHeight = 40, kStopHeight = 22, kMasterWidth = 128;
     static constexpr int kMixerMinHeight = 190, kMixerMaxHeight = 320, kMixerGap = 14;
 
     SessionView (AudioEngine&, ProjectModel&, ProjectActions&, SelectionState&, EditCommands&);

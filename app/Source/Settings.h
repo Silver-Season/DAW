@@ -38,6 +38,8 @@ public:
     void setUiScale (double scale);
     bool animations() const;
     void setAnimations (bool);
+    juce::String appearance () const;
+    void setAppearance (const juce::String& json);
 
     // Window layout (task 1.4): panel sizes and visibility, position of the main window
     int browserWidth() const;  // 180 .. 420

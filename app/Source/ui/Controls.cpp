@@ -65,6 +65,25 @@ void Knob::paint (juce::Graphics& g)
     auto captionArea = area.removeFromBottom (captionHeight);
     const float d = juce::jmin (area.getWidth(), area.getHeight());
     const auto knob = juce::Rectangle<float> (d, d).withCentre (area.getCentre());
+    if (t.glass)
+    {
+        glass::knob (g,
+                     knob.reduced (1.0f),
+                     (float)value,
+                     isEnabled () ? ringColour.value_or (t.accentFill) : t.dimText.withAlpha (0.5f),
+                     bipolar);
+        if (caption.isNotEmpty ())
+        {
+            const bool showValue = (hover || gestureOpen) && valueText && isEnabled ();
+            g.setColour (showValue ? t.text : t.dimText);
+            g.setFont (showValue ? t.numFont (10.0f) : t.uiFont (10.5f));
+            g.drawText (showValue ? valueText (value) : caption,
+                        captionArea.toNearestInt ().expanded (6, 0),
+                        juce::Justification::centred,
+                        false);
+        }
+        return;
+    }
     const float thickness = juce::jmax (3.0f, d * 0.16f);
     const float radius = d * 0.5f - thickness * 0.5f;
     const float alpha = isEnabled() ? 1.0f : 0.4f;
@@ -201,6 +220,26 @@ void Meter::paint (juce::Graphics& g)
 {
     const auto& t = theme();
     auto r = getLocalBounds().toFloat();
+    if (t.glass)
+    {
+        // Glass: two thin rounded bars, the level in green rising to amber and red.
+        const float w = juce::jmin (5.0f, (r.getWidth() - 2.0f) * 0.5f);
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            auto bar = juce::Rectangle<float> (w, r.getHeight()).withX (r.getCentreX() + (ch == 0 ? -w - 1.0f : 1.0f));
+            g.setColour (t.isLight() ? t.line.withAlpha (0.45f) : t.shadow().withAlpha (0.4f));
+            g.fillRoundedRectangle (bar, w * 0.5f);
+            const float db = juce::Decibels::gainToDecibels (ch == 0 ? levelL : levelR, -60.0f);
+            const float norm = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 66.0f);
+            if (norm <= 0.0f)
+                continue;
+            juce::ColourGradient grad (t.play, 0.0f, bar.getBottom(), t.record, 0.0f, bar.getY(), false);
+            grad.addColour (0.75, t.warning);
+            g.setGradientFill (grad);
+            g.fillRoundedRectangle (bar.removeFromBottom (bar.getHeight() * norm), w * 0.5f);
+        }
+        return;
+    }
     g.setColour (t.panel2);
     g.fillRoundedRectangle (r, 2.0f);
     r = r.reduced (1.5f);
@@ -249,11 +288,40 @@ void Fader::paint (juce::Graphics& g)
 {
     const auto& t = theme();
     const auto bounds = getLocalBounds().toFloat();
-    const float cx = bounds.getCentreX();
     const float travel = bounds.getHeight() - 10.0f;
+    if (t.glass)
+    {
+        // Glass: a thin sunken track, a frosted capsule thumb, and a dB scale on the right when there is room.
+        const bool scale = bounds.getWidth() >= 40.0f;
+        const float x = scale ? bounds.getX() + 13.0f : bounds.getCentreX();
+        const auto track = juce::Rectangle<float> (4.0f, bounds.getHeight() - 6.0f).withCentre ({ x, bounds.getCentreY() });
+        g.setColour (t.isLight() ? t.line.withAlpha (0.75f) : t.shadow().withAlpha (0.45f));
+        g.fillRoundedRectangle (track, 2.0f);
+        g.setColour (t.text.withAlpha (t.isLight() ? 0.55f : 0.65f));
+        const auto yOf = [&] (double db) { return bounds.getBottom() - 5.0f - (float) dbToNorm (db) * travel; };
+        g.fillRoundedRectangle (track.withTop (yOf (valueDb)), 2.0f);
+        if (scale)
+        {
+            g.setFont (t.numFont (9.5f));
+            for (const double db : { 6.0, 0.0, -6.0, -12.0, -24.0, -48.0 })
+            {
+                const float y = yOf (db);
+                g.setColour (t.dimText);
+                g.drawText (db > 0.0 ? "+" + juce::String ((int) db) : juce::String ((int) db),
+                            juce::Rectangle<float> (x + 12.0f, y - 6.0f, bounds.getRight() - x - 12.0f, 12.0f),
+                            juce::Justification::centredLeft, false);
+            }
+        }
+        const auto thumb = juce::Rectangle<float> (22.0f, 13.0f).withCentre ({ x, thumbArea().getCentreY() });
+        glass::thumb (g, thumb);
+        g.setColour (t.dimText.withAlpha (0.8f));
+        g.fillRect (juce::Rectangle<float> (10.0f, 1.0f).withCentre (thumb.getCentre()));
+        return;
+    }
+    const float cx = bounds.getWidth() >= 40.0f ? bounds.getX() + 12.0f : bounds.getCentreX(); // a wide fader keeps its track on the left
 
     g.setColour (t.panel2);
-    g.fillRoundedRectangle (juce::Rectangle<float> (4.0f, bounds.getHeight() - 4.0f).withCentre (bounds.getCentre()), 2.0f);
+    g.fillRoundedRectangle (juce::Rectangle<float> (4.0f, bounds.getHeight() - 4.0f).withCentre ({ cx, bounds.getCentreY() }), 2.0f);
 
     // 0 dB tick
     const float zeroY = bounds.getBottom() - 5.0f - (float) dbToNorm (0.0) * travel;
@@ -262,9 +330,9 @@ void Fader::paint (juce::Graphics& g)
 
     const auto thumb = thumbArea();
     g.setColour (t.text);
-    g.fillRoundedRectangle (juce::Rectangle<float> (juce::jmin (bounds.getWidth(), 22.0f), thumb.getHeight()).withCentre (thumb.getCentre()), 3.0f);
+    g.fillRoundedRectangle (juce::Rectangle<float> (22.0f, thumb.getHeight()).withCentre ({ cx, thumb.getCentreY() }), 3.0f);
     g.setColour (t.chrome.withAlpha (0.55f));
-    g.fillRect (juce::Rectangle<float> (juce::jmin (bounds.getWidth(), 22.0f) - 6.0f, 1.0f).withCentre (thumb.getCentre()));
+    g.fillRect (juce::Rectangle<float> (16.0f, 1.0f).withCentre ({ cx, thumb.getCentreY() }));
 }
 
 void Fader::beginGesture()
@@ -375,7 +443,25 @@ void NumberField::paint (juce::Graphics& g)
 {
     const auto& t = theme();
     auto r = getLocalBounds().toFloat();
-    if (boxed)
+    if (levelBar && t.glass && editor == nullptr && r.getWidth() >= 90.0f)
+    {
+        juce::NormalisableRange<double> norm (minimum, maximum);
+        if (levelCentre > minimum && levelCentre < maximum)
+            norm.setSkewForCentre (levelCentre);
+        const float v = (float) norm.convertTo0to1 (juce::jlimit (minimum, maximum, value));
+        auto textArea = r.removeFromRight (52.0f);
+        const auto track = r.reduced (6.0f, 0.0f).withSizeKeepingCentre (r.getWidth() - 12.0f, 4.0f);
+        g.setColour (t.isLight() ? t.line.withAlpha (0.8f) : t.shadow().withAlpha (0.45f));
+        g.fillRoundedRectangle (track, 2.0f);
+        g.setGradientFill (juce::ColourGradient (t.play.interpolatedWith (t.highlight(), 0.25f), track.getX(), 0.0f, t.play, track.getRight(), 0.0f, false));
+        g.fillRoundedRectangle (track.withWidth (juce::jmax (4.0f, track.getWidth() * v)), 2.0f);
+        glass::thumb (g, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ track.getX() + track.getWidth() * v, track.getCentreY() }));
+        g.setColour (t.dimText);
+        g.setFont (t.numFont (10.5f));
+        g.drawText (getDisplayText(), textArea.toNearestInt(), juce::Justification::centredRight, false);
+        return;
+    }
+    if (boxed && (boxedInGlass || ! t.glass))
     {
         fillCell (g, r, t.panel);
         strokeCell (g, r, t.line);
@@ -435,7 +521,8 @@ void NumberField::mouseDrag (const juce::MouseEvent& e)
     if (! gestureOpen && e.getDistanceFromDragStart() < 3)
         return;
     beginGesture();
-    const int dy = lastDragPosition.y - e.y;
+    // up and right both raise the value (the glass level bar reads as a horizontal slider)
+    const int dy = (lastDragPosition.y - e.y) + (levelBar && theme().glass ? e.x - lastDragPosition.x : 0);
     lastDragPosition = e.getPosition();
     dragAccumulator += (double) dy * sensitivity * (e.mods.isShiftDown() ? 0.1 : 1.0);
     // Accumulate sub-interval movement so that Shift-drag still moves the value, slowly.

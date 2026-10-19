@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prisma — оптика стекла</title>
+<style>
+@font-face{font-family:Onest;src:url('Onest-Regular.ttf')}@font-face{font-family:Onest;src:url('Onest-SemiBold.ttf');font-weight:600}
+:root{font-family:Onest,system-ui,sans-serif;color-scheme:light;--bg:#e6e8e8;--surface:#f5f6f4;--text:#26343e;--dim:#5e6b75;--line:#c6cdd0;--accent:#12bde0;--focus:#007993;--field:#ffffff9c;--shadow:#27364c16}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);transition:background .4s,color .4s}body.dark{color-scheme:dark;--bg:#0c111a;--surface:#151f2d;--text:#e8edf3;--dim:#a0aec0;--line:#334052;--field:#1e2a3dc9;--focus:#80eaff;--shadow:#00000055}
+button,input,select{font:inherit}button{color:inherit;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer}button:disabled{opacity:.45;cursor:default}button[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}button:hover:not([aria-pressed="true"]){border-color:var(--dim)}:focus-visible{outline:3px solid var(--focus);outline-offset:4px}input[type=range]{accent-color:var(--focus);width:132px;cursor:ew-resize}input[type=color]{width:31px;height:31px;border:0;padding:0;background:none;cursor:pointer}
+.page{max-width:1290px;margin:auto;padding:30px 32px 24px}.masthead{display:flex;align-items:center;gap:15px}.mark{width:46px;height:46px;object-fit:contain}.brand{font-size:25px;font-weight:600;letter-spacing:-1px}.caption{color:var(--dim);font-size:12px;letter-spacing:.06em}.masthead .caption{margin-left:auto;text-align:right}.controls{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin:26px 0 20px}.segmented{display:flex;gap:4px}.control{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}.control output{width:33px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}.control label{white-space:nowrap}.spacer{flex:1}.viewport{position:relative;height:560px;isolation:isolate;border-radius:22px;overflow:hidden;box-shadow:0 24px 65px var(--shadow),0 1px 0 #ffffff40 inset;touch-action:pan-y}canvas{position:absolute;inset:0;width:100%;height:100%;display:block}.front{position:absolute;inset:0;pointer-events:none}.topline{height:54px;position:absolute;left:28px;right:28px;top:23px;display:flex;align-items:center;gap:18px;color:var(--text);font-size:13px}.topline strong{font-weight:600}.transport{display:flex;gap:15px;align-items:center;margin:auto;font-variant-numeric:tabular-nums}.transport button{pointer-events:auto;background:none;border:0;padding:9px 4px;border-radius:7px;font-size:16px;line-height:1}.transport .play{color:#0d9b6c}.topline .tiny{font-size:11px;color:var(--dim)}.lens-handle{position:absolute;pointer-events:auto;border:0;background:transparent!important;padding:0;border-radius:52px;cursor:grab;touch-action:none;user-select:none;color:var(--text)}.lens-handle:active{cursor:grabbing}.lens-handle span{font-size:11px;letter-spacing:.04em;background:var(--field);padding:4px 8px;border-radius:8px;position:absolute;top:-29px;left:50%;transform:translateX(-50%);white-space:nowrap}.lens-handle span:before{content:'↔';margin-right:5px}.scene-label{position:absolute;left:30px;top:113px;font-size:10px;letter-spacing:.15em;color:var(--dim)}.scene-label strong{display:block;font-size:17px;font-weight:400;letter-spacing:-.5px;color:var(--text);margin-top:6px}.mini-label{position:absolute;right:32px;top:118px;font-size:11px;color:var(--dim);text-align:right}.bottomline{position:absolute;bottom:18px;left:30px;right:30px;display:flex;gap:12px;align-items:center;font-size:11px;color:var(--dim)}.bottomline output{color:var(--text);font-variant-numeric:tabular-nums;width:35px}.optical-slider{flex:1;position:relative;height:34px}.optical-slider input{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:auto;cursor:ew-resize;margin:0}.optical-slider:focus-within{outline:2px solid var(--focus);border-radius:12px;outline-offset:5px}.bottomline .monitor{pointer-events:auto;border:0;background:transparent;padding:6px;font-size:11px;white-space:nowrap;color:var(--text)}.bottomline .monitor[aria-pressed=true]{background:transparent;color:var(--focus)}.notes{display:flex;align-items:start;gap:20px;justify-content:space-between;margin-top:21px;line-height:1.6;font-size:12px;color:var(--dim)}.notes p{margin:0;max-width:650px}.status{font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#1bbb88;margin-right:7px}.fallback{position:absolute;left:25px;right:25px;top:260px;background:var(--surface);padding:14px;border-radius:12px;font-size:13px;z-index:5}.fallback[hidden]{display:none}.fallback-lens{position:absolute;pointer-events:none;border:1px solid #ffffff90;background:#ffffff18;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:55px;box-shadow:0 8px 22px #0002}.dark .fallback-lens{background:#ffffff0a}
+@media(max-width:760px){.page{padding:18px 14px}.masthead .caption{max-width:150px}.controls{gap:12px}.control{gap:5px}.control input[type=range]{width:86px}.viewport{height:520px;border-radius:16px}.topline{left:18px;right:18px;gap:9px}.topline>.tiny{display:none}.transport{gap:11px}.notes{display:block}.status{margin-top:10px}.mini-label{display:none}.scene-label{left:20px}.bottomline{left:20px;right:20px}.bottomline>.tiny{display:none}}
+@media(prefers-reduced-motion:reduce){body{transition:none}}
+</style>
+</head>
+<body>
+<main class="page">
+ <header class="masthead"><img class="mark" src="prisma.png" alt="Призма, белый луч и шесть дорожек спектра"><div><div class="brand">Prisma</div><div class="caption">LIGHT / IN MOTION</div></div><div class="caption">Оптический прототип<br>До переноса в JUCE</div></header>
+ <div class="controls" aria-label="Настройки оптического прототипа">
+  <div class="segmented" aria-label="Тема"><button id="light" aria-pressed="true">Светлая</button><button id="dark" aria-pressed="false">Тёмная</button></div>
+  <div class="segmented" aria-label="Способ отображения"><button id="optics" aria-pressed="true">Преломление</button><button id="blur" aria-pressed="false">Только blur</button></div>
+  <div class="control"><label for="depth">Глубина</label><input id="depth" type="range" min="0" max="100" value="62"><output id="depth-value" for="depth">62%</output></div>
+  <div class="control"><label for="light-power">Блик</label><input id="light-power" type="range" min="0" max="100" value="52"><output id="light-value" for="light-power">52%</output></div>
+  <div class="control"><label for="accent">Акцент</label><input id="accent" type="color" value="#12bde0"></div>
+  <button id="motion" aria-pressed="true">Движение</button>
+ </div>
+ <section class="viewport" id="viewport" aria-label="Интерактивная линза над спектром и звуковой волной">
+  <canvas id="glass" aria-label="Преломление спектра и фоновых линий в стеклянной линзе"></canvas>
+  <div class="front">
+   <div class="topline"><strong>Afterlight</strong><span class="tiny">SESSION</span><div class="transport"><span>124.00</span><span class="tiny">4 / 4</span><button id="play" class="play" aria-label="Анимация движения света" aria-pressed="true">▶</button><span>33.1.1</span></div><span class="tiny">48 kHz · 256 samples</span></div>
+   <div class="scene-label">OPTICAL FIELD<strong>Свет сквозь форму.</strong></div>
+   <div class="mini-label">Цвет находится под линзой.<br>Текст управления — над ней.</div>
+   <button id="lens" class="lens-handle" aria-label="Положение стеклянной линзы; стрелки перемещают" aria-describedby="instructions"><span>Тяни линзу</span></button>
+   <div class="bottomline"><span>Wet / dry</span><div class="optical-slider" id="wet-track"><input id="wet" aria-label="Положение стеклянного бегунка Wet/dry" type="range" min="0" max="100" value="61"></div><output id="wet-value" for="wet">61%</output><button id="monitor" class="monitor" aria-pressed="true">● Подсветка</button><span class="tiny">Линза над цветной полосой</span></div>
+  </div>
+  <div id="fallback" class="fallback" hidden role="status">WebGL недоступен. Здесь показано обычное размытие, а не оптическое преломление.</div>
+ </section>
+ <div class="notes"><p id="instructions">Перетаскивай линзу над спектром и волной, двигай мышь вокруг неё. В режиме «Только blur» видно, что даёт одно размытие без преломления. Нижний бегунок тоже стеклянный.</p><div class="status" id="status" aria-live="polite"><span class="dot"></span>Инициализация…</div></div>
+</main>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const viewport = $('viewport'), canvas = $('glass'), handle = $('lens');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+const state = { dark:false, optical:true, depth:.62, highlight:.52, wet:.61, accent:'#12bde0', moving:!reduced.matches, glow:true, x:.51, y:220, tx:.51, ty:220, px:.62, py:.15, mx:.62, my:.15, drag:false, dragX:0, dragY:0, time:0 };
+let width=1, height=1, dpr=1, dirty=true, lastTime=0, frame=0, alive=true, visible=true, lost=false;
+const source=document.createElement('canvas'), ctx=source.getContext('2d');
+const gl=canvas.getContext('webgl',{alpha:false,antialias:false,preserveDrawingBuffer:false,powerPreference:'low-power'});
+let program, texture, uniforms={}, drawFallback;
+const fragment=`
+precision highp float;
+uniform sampler2D u_scene;
+uniform vec2 u_size;
+uniform vec2 u_resolution;
+uniform vec2 u_pointer;
+uniform vec4 u_boxes[3];
+uniform vec3 u_radii;
+uniform float u_depth;
+uniform float u_highlight;
+uniform float u_dark;
+uniform float u_optical;
+uniform float u_glow;
+vec3 scene(vec2 p){return texture2D(u_scene,clamp(p/u_size,vec2(0.001),vec2(.999))).rgb;}
+float sd(vec2 p,vec2 b,float r){vec2 q=abs(p)-b+vec2(r);return length(max(q,0.))+min(max(q.x,q.y),0.)-r;}
+vec3 blur(vec2 p,float amount){
+ vec3 c=scene(p)*.28;
+ c+=(scene(p+vec2(amount,0.))+scene(p-vec2(amount,0.))+scene(p+vec2(0.,amount))+scene(p-vec2(0.,amount)))*.12;
+ c+=(scene(p+vec2(amount,amount))+scene(p-vec2(amount,amount))+scene(p+vec2(amount,-amount))+scene(p+vec2(-amount,amount)))*.06;
+ return c;
+}
+void main(){
+ vec2 p=vec2(gl_FragCoord.x/u_resolution.x,1.-gl_FragCoord.y/u_resolution.y)*u_size;
+ vec3 col=scene(p);
+ for(int i=0;i<3;i++){
+  vec4 box=u_boxes[i];float radius=i==0?u_radii.x:(i==1?u_radii.y:u_radii.z);
+  vec2 local=p-box.xy;float dist=sd(local,box.zw,radius);
+  float shadowDist=sd(local-vec2(0.,5.),box.zw,radius);
+  float shade=exp(-max(shadowDist,0.)/9.)*.11*(1.-smoothstep(-.2,1.,-dist));
+  col*=1.-shade;
+  if(dist<1.){
+   float coverage=1.-smoothstep(-.65,.65,dist);
+   vec2 grad=vec2(sd(local+vec2(.4,0.),box.zw,radius)-sd(local-vec2(.4,0.),box.zw,radius),sd(local+vec2(0.,.4),box.zw,radius)-sd(local-vec2(0.,.4),box.zw,radius));
+   vec2 normal=grad/max(length(grad),.0001);
+   float inset=max(-dist,0.);
+   float edge=1.-smoothstep(0.,min(radius*.9,34.),inset);
+   float curve=pow(edge,1.65);
+   vec2 shift=normal*(3.+u_depth*22.)*curve;
+   vec2 zoom=local*(.025+u_depth*.07)*(1.-edge);
+   vec2 refracted=p-shift-zoom;
+   float dispersion=u_depth*curve*.65;
+   vec3 bent=vec3(scene(refracted-normal*dispersion).r,scene(refracted).g,scene(refracted+normal*dispersion).b);
+   // The blur comparison samples the same original backdrop without any displacement.
+   vec3 glass=mix(blur(p,4.5+u_depth*5.),bent,u_optical);
+   float tint=u_dark>.5?.025:.035;
+   glass=mix(glass,vec3(u_dark>.5?.32:1.),tint);
+   vec2 light=normalize(u_pointer-box.xy+vec2(.01));
+   float rim=exp(-inset/1.25);
+   float facing=dot(normal,light);
+   float caustic=exp(-pow((inset-3.)/2.5,2.))*max(-facing,0.)*.12*u_optical;
+   float spec=pow(max(facing,0.),7.)*rim;
+   float inner=pow(max(dot(normal,normalize(vec2(-.6,-.8))),0.),3.)*exp(-inset/6.);
+   float power=(.18+u_highlight*.75)*u_glow;
+   glass+=vec3(1.)*(rim*.11+spec*power+inner*.07+caustic);
+   glass*=1.-max(-facing,0.)*rim*.18;
+   col=mix(col,glass,coverage);
+  }
+ }
+ gl_FragColor=vec4(clamp(col,0.,1.),1.);
+}`;
+function compile(type,code){const shader=gl.createShader(type);gl.shaderSource(shader,code);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(shader));return shader;}
+function initialize(){
+ if(!gl)throw Error('WebGL unavailable');
+ program=gl.createProgram();gl.attachShader(program,compile(gl.VERTEX_SHADER,'attribute vec2 a_position; void main(){ gl_Position=vec4(a_position,0.,1.); }'));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,fragment));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
+ const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);const attribute=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(attribute);gl.vertexAttribPointer(attribute,2,gl.FLOAT,false,0,0);
+ for(const name of ['u_scene','u_size','u_resolution','u_pointer','u_boxes[0]','u_radii','u_depth','u_highlight','u_dark','u_optical','u_glow'])uniforms[name]=gl.getUniformLocation(program,name);
+ texture=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.uniform1i(uniforms.u_scene,0);
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);}
+function rgba(hex,a){return `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},${a})`;}
+function drawScene(){
+ source.width=Math.round(width*dpr);source.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+ ctx.fillStyle=state.dark?'#151f2c':'#e8ebeb';ctx.fillRect(0,0,width,height);
+ const ambient=ctx.createRadialGradient(width*.2,height*.04,10,width*.4,height*.15,width*.85);ambient.addColorStop(0,state.dark?'#243449':'#f7f9f7');ambient.addColorStop(1,state.dark?'#131b28':'#dce1e3');ctx.fillStyle=ambient;ctx.fillRect(0,0,width,height);
+ ctx.strokeStyle=state.dark?'#c9e0ff09':'#24384c0b';ctx.lineWidth=.7;
+ for(let x=24;x<width;x+=24){ctx.beginPath();ctx.moveTo(x,94);ctx.lineTo(x,height-73);ctx.stroke();}
+ ctx.fillStyle=state.dark?'#203047':'#d8dfe3';roundRect(20,21,width-40,54,27);ctx.fill();
+ const left=width<700?30:width*.18,right=width-40,bandY=185;
+ const spectrum=ctx.createLinearGradient(left,0,right,0);
+ ['#ff426c','#ff9448','#f5cc24','#2ed68f','#0cc7e9','#6973ff','#dd45dd'].forEach((c,i)=>spectrum.addColorStop(i/6,c));
+ ctx.fillStyle=spectrum;roundRect(left,bandY,right-left,27,13.5);ctx.fill();
+ ctx.font='10px Onest, sans-serif';ctx.fillStyle=state.dark?'#a9bad0':'#5c6c7b';
+ for(let i=0;i<=8;i++){let x=left+(right-left)*i/8;ctx.fillRect(x,bandY+34,1,5);ctx.fillText(String(400+i*50),x-7,bandY+53);}
+ ctx.strokeStyle=state.dark?'#a1bbd2bb':'#566d86bb';ctx.lineWidth=1.2;ctx.beginPath();
+ for(let x=left;x<right;x++){const envelope=.25+.75*Math.pow(Math.sin((x-left)/(right-left)*Math.PI),2);const y=270+Math.sin(x*.19)*Math.cos(x*.048)*17*envelope;if(x===left)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke();
+ ctx.fillStyle=state.dark?'#90a7c0':'#63778b';ctx.fillText('WAVE / 124 BPM',left,310);
+ const start=width<700?23:width*.18,trackWidth=width-start-35,rowY=343;
+ for(let row=0;row<2;row++){
+  const colour=row===0?state.accent:'#a87bf0',y=rowY+row*51;
+  ctx.fillStyle=rgba(colour,state.dark?.12:.13);roundRect(start,y,trackWidth,42,6);ctx.fill();
+  ctx.fillStyle=rgba(colour,state.dark?.84:.75);
+  for(let i=0;i<24;i++){const nx=start+10+(trackWidth-20)*i/24,ny=y+8+(i*7+row*3)%22;roundRect(nx,ny,(trackWidth-20)/24*(i%3===0?.85:.5),4,1.5);ctx.fill();}
+  if(width>=700){ctx.fillStyle=state.dark?'#bdcadd':'#45576a';ctx.font='11px Onest, sans-serif';ctx.fillText(row?'02 / Air':'01 / Glass Current',27,y+25);}
+ }
+ const slider=$('wet-track').getBoundingClientRect(),stage=viewport.getBoundingClientRect();const sx=slider.left-stage.left+2,sy=slider.top-stage.top+slider.height/2,sw=slider.width-4;
+ ctx.fillStyle=state.dark?'#455167':'#bfc9cf';roundRect(sx,sy-3,sw,6,3);ctx.fill();
+ const accent=ctx.createLinearGradient(sx,0,sx+sw,0);accent.addColorStop(0,state.accent);accent.addColorStop(1,'#ac72ed');ctx.fillStyle=accent;roundRect(sx,sy-3,Math.max(6,sw*state.wet),6,3);ctx.fill();
+ if(gl&&!lost){gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);}
+ if(drawFallback)drawFallback();dirty=true;
+}
+function resize(){width=viewport.clientWidth;height=viewport.clientHeight;dpr=Math.min(window.devicePixelRatio||1,1.5);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);if(gl&&!lost)gl.viewport(0,0,canvas.width,canvas.height);drawScene();wake();}
+function boxes(){const b=$('wet-track').getBoundingClientRect(),r=viewport.getBoundingClientRect();return new Float32Array([state.x*width,state.y,78,51,width/2,48,width/2-20,27,b.left-r.left+2+(b.width-4)*state.wet,b.top-r.top+b.height/2,18,14]);}
+function positionHandle(){handle.style.left=(state.x*width-78)+'px';handle.style.top=(state.y-51)+'px';handle.style.width='156px';handle.style.height='102px';}
+function render(now){
+ frame=0;if(!alive||!visible)return;const dt=Math.min((now-lastTime)/1000||.016,.05);lastTime=now;
+ if(state.moving&&!state.drag){state.time+=dt;state.tx=.52+Math.sin(state.time*.43)*.22;}
+ const damping=1-Math.exp(-dt*(reduced.matches?1000:13));state.x+=(state.tx-state.x)*damping;state.y+=(state.ty-state.y)*damping;state.px+=(state.mx-state.px)*damping;state.py+=(state.my-state.py)*damping;
+ positionHandle();
+ if(gl&&!lost){gl.useProgram(program);gl.uniform2f(uniforms.u_size,width,height);gl.uniform2f(uniforms.u_resolution,canvas.width,canvas.height);gl.uniform2f(uniforms.u_pointer,state.px*width,state.py*height);gl.uniform4fv(uniforms['u_boxes[0]'],boxes());gl.uniform3f(uniforms.u_radii,51,27,14);gl.uniform1f(uniforms.u_depth,state.depth);gl.uniform1f(uniforms.u_highlight,state.highlight);gl.uniform1f(uniforms.u_dark,state.dark?1:0);gl.uniform1f(uniforms.u_optical,state.optical?1:0);gl.uniform1f(uniforms.u_glow,state.glow?1:0);gl.drawArrays(gl.TRIANGLES,0,6);}
+ else if(drawFallback)drawFallback();
+ dirty=false;
+ const settling=Math.abs(state.x-state.tx)+Math.abs(state.y-state.ty)+Math.abs(state.px-state.mx)+Math.abs(state.py-state.my)>.0001;
+ if(state.moving||state.drag||settling)wake();
+}
+function wake(){if(!frame&&visible&&alive)frame=requestAnimationFrame(render);}
+function setMotion(on){state.moving=on;$('motion').setAttribute('aria-pressed',String(on));$('motion').textContent=on?'Движение':'Статично';$('play').setAttribute('aria-pressed',String(on));wake();}
+function updateStatus(){const mode=gl&&!lost?(state.optical?'Преломление · WebGL':'Сравнение · только размытие'):'Оптика недоступна · fallback';$('status').innerHTML='<span class="dot"></span>'+mode;}
+function setMode(optical){state.optical=optical;$('optics').setAttribute('aria-pressed',String(optical));$('blur').setAttribute('aria-pressed',String(!optical));updateStatus();wake();}
+function setTheme(dark){state.dark=dark;document.body.classList.toggle('dark',dark);$('light').setAttribute('aria-pressed',String(!dark));$('dark').setAttribute('aria-pressed',String(dark));drawScene();wake();}
+$('light').onclick=()=>setTheme(false);$('dark').onclick=()=>setTheme(true);$('optics').onclick=()=>setMode(true);$('blur').onclick=()=>setMode(false);$('motion').onclick=$('play').onclick=()=>setMotion(!state.moving);
+$('depth').oninput=e=>{state.depth=Number(e.target.value)/100;$('depth-value').textContent=e.target.value+'%';wake();};
+$('light-power').oninput=e=>{state.highlight=Number(e.target.value)/100;$('light-value').textContent=e.target.value+'%';wake();};
+$('wet').oninput=e=>{state.wet=Number(e.target.value)/100;$('wet-value').textContent=e.target.value+'%';drawScene();wake();};
+$('accent').oninput=e=>{state.accent=e.target.value;drawScene();wake();};
+$('monitor').onclick=()=>{state.glow=!state.glow;$('monitor').setAttribute('aria-pressed',String(state.glow));wake();};
+viewport.addEventListener('pointermove',e=>{const r=viewport.getBoundingClientRect();state.mx=(e.clientX-r.left)/width;state.my=(e.clientY-r.top)/height;wake();});
+handle.addEventListener('pointerdown',e=>{if(e.button!==0)return;setMotion(false);state.drag=true;state.dragX=e.clientX-state.x*width;state.dragY=e.clientY-state.y;handle.setPointerCapture(e.pointerId);});
+handle.addEventListener('pointermove',e=>{if(!state.drag)return;state.tx=Math.max(90/width,Math.min(1-90/width,(e.clientX-state.dragX)/width));state.ty=Math.max(145,Math.min(291,e.clientY-state.dragY));wake();});
+const endDrag=()=>{state.drag=false;wake();};handle.addEventListener('pointerup',endDrag);handle.addEventListener('pointercancel',endDrag);handle.addEventListener('lostpointercapture',endDrag);
+handle.addEventListener('keydown',e=>{const key=e.key;if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home'].includes(key))return;e.preventDefault();setMotion(false);const step=e.shiftKey?30:10;if(key==='ArrowLeft')state.tx-=step/width;if(key==='ArrowRight')state.tx+=step/width;if(key==='ArrowUp')state.ty-=step;if(key==='ArrowDown')state.ty+=step;if(key==='Home'){state.tx=.51;state.ty=220;}state.tx=Math.max(90/width,Math.min(1-90/width,state.tx));state.ty=Math.max(145,Math.min(291,state.ty));wake();});
+function fallback(){lost=true;$('fallback').hidden=false;$('optics').disabled=true;const flat=document.createElement('canvas');flat.style.cssText=canvas.style.cssText;viewport.insertBefore(flat,canvas);canvas.style.display='none';const output=flat.getContext('2d');const lens=document.createElement('div');lens.className='fallback-lens';viewport.insertBefore(lens,viewport.querySelector('.front'));drawFallback=()=>{flat.width=source.width;flat.height=source.height;output.drawImage(source,0,0);positionHandle();lens.style.cssText=`left:${state.x*width-78}px;top:${state.y-51}px;width:156px;height:102px`;};updateStatus();}
+canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();fallback();drawScene();wake();});
+try{initialize();}catch(error){console.error('Prisma optical renderer:',error);fallback();}
+const observer=new ResizeObserver(resize);observer.observe(viewport);document.fonts.ready.then(resize);setMotion(state.moving);updateStatus();resize();
+document.addEventListener('visibilitychange',()=>{visible=!document.hidden;if(visible){lastTime=performance.now();wake();}else if(frame){cancelAnimationFrame(frame);frame=0;}});
+reduced.addEventListener('change',()=>{if(reduced.matches)setMotion(false);});
+window.addEventListener('pagehide',()=>{alive=false;observer.disconnect();cancelAnimationFrame(frame);});
+})();
+</script>
+</body>
+</html>

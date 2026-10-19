@@ -3,7 +3,7 @@
 # Needs Xcode (or the Command Line Tools) and CMake: `brew install cmake ninja`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPRISMA_COPY_AFTER_BUILD=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 echo
