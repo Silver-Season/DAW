@@ -65,6 +65,24 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
+        if (t.glass && style == Style::activator)
+        {
+            // glass: the track number as plain text, as the design writes "01 Drums"; a muted track shows it dim
+            // on a grey pill, struck through
+            const bool muted = ! on;
+            if (muted || isMouseOver())
+            {
+                g.setColour (t.panel2.withAlpha (muted ? 0.9f : 0.6f));
+                g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+            }
+            const auto label = text.length() == 1 ? "0" + text : text;
+            g.setColour (muted ? t.dimText : t.text);
+            g.setFont (t.uiFont (12.5f, 500));
+            g.drawText (label, getLocalBounds(), juce::Justification::centred, false);
+            if (muted)
+                g.fillRect (r.getCentreX() - 8.0f, r.getCentreY(), 16.0f, 1.2f);
+            return;
+        }
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
@@ -132,6 +150,24 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
+        if (t.glass)
+        {
+            // glass: a small slider filled from the centre, its value on the right
+            auto area = r.reduced (2.0f, 0.0f);
+            const auto textArea = area.removeFromRight (26.0f);
+            const auto track = area.reduced (6.0f, 0.0f).withSizeKeepingCentre (area.getWidth() - 12.0f, 3.0f);
+            g.setColour (t.line.withAlpha (0.8f));
+            g.fillRoundedRectangle (track, 1.5f);
+            const float cx = track.getCentreX(), x = cx + (float) value * track.getWidth() * 0.5f;
+            g.setColour (t.accentFill);
+            g.fillRoundedRectangle (juce::Rectangle<float>::leftTopRightBottom (juce::jmin (cx, x), track.getY(), juce::jmax (cx, x), track.getBottom()), 1.5f);
+            g.fillRect (cx - 0.5f, track.getY() - 3.0f, 1.0f, 9.0f);
+            glass::thumb (g, juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ x, track.getCentreY() }));
+            g.setColour (t.dimText);
+            g.setFont (t.numFont (10.0f));
+            g.drawText (panText (value), textArea, juce::Justification::centredRight, false);
+            return;
+        }
         fillCell (g, r, t.panel2, 0.7f);
         strokeCell (g, r, t.line, 1.0f, 0.7f);
         // the position inside the box, so that the value reads at a glance
@@ -399,7 +435,7 @@ public:
             if (h >= 76)
                 line.setY (r.getY() + 7);
             chooser.setBounds (line);
-            pan.setBounds (line.removeFromRight (juce::jmin (64, line.getWidth() / 2 - 2)));
+            pan.setBounds (line.removeFromRight (juce::jmin (theme().glass ? 70 : 64, line.getWidth() / 2 - 2)));
             line.removeFromRight (4);
             volume.setBounds (line);
         }

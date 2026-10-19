@@ -163,6 +163,7 @@ void BrowserPanel::lookAndFeelChanged()
     search.setTextToShowWhenEmpty (Strings::browser::searchPlaceholder, t.dimText);
     search.applyFontToAllText (t.uiFont (12.5f));
     search.setFont (t.uiFont (12.5f));
+    resized(); // glass rows are taller
 }
 
 void BrowserPanel::visibilityChanged()

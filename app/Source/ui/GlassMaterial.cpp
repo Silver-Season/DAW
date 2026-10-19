@@ -31,6 +31,8 @@ accent (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour colour, float 
 void
 surface (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float radius)
 {
+    // Frosted glass: the body a little lighter at the top, a bright glossy band on the upper half, a white inner rim
+    // and a faint dark line at the bottom where the light does not reach.
     const auto& t = theme ();
     if (!t.glass || t.material <= 0.0f)
     {
@@ -39,14 +41,20 @@ surface (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float r
         return;
     }
     const float strength = t.material;
-    const auto top = base.interpolatedWith (t.highlight (), (t.isLight () ? 0.40f : 0.065f) * strength);
-    const auto bottom = base.interpolatedWith (t.accentFill, 0.035f * strength);
-    g.setGradientFill (juce::ColourGradient (top, r.getTopLeft (), bottom, r.getBottomRight (), false));
+    const auto top = base.interpolatedWith (t.highlight (), (t.isLight () ? 0.55f : 0.10f) * strength);
+    const auto bottom = base.interpolatedWith (t.isLight () ? t.line : t.shadow (), (t.isLight () ? 0.12f : 0.15f) * strength);
+    g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
     g.fillRoundedRectangle (r, radius);
-    g.setColour (t.highlight ().withAlpha ((t.isLight () ? 0.70f : 0.12f) * strength));
-    g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
-    g.setColour (t.shadow ().withAlpha ((t.isLight () ? 0.06f : 0.15f) * strength));
-    g.drawRoundedRectangle (r.reduced (1.5f), juce::jmax (0.0f, radius - 1.0f), 0.7f);
+    if (r.getHeight () >= 14.0f)
+    {
+        const auto gloss = r.reduced (1.5f).withHeight (r.getHeight () * 0.46f);
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.75f : 0.10f) * strength), 0.0f, gloss.getY (),
+                                                 t.highlight ().withAlpha (0.0f), 0.0f, gloss.getBottom (), false));
+        g.fillRoundedRectangle (gloss, juce::jmax (0.0f, juce::jmin (radius - 1.5f, gloss.getHeight ())));
+    }
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.95f : 0.22f) * strength), 0.0f, r.getY (),
+                                             t.highlight ().withAlpha ((t.isLight () ? 0.25f : 0.03f) * strength), 0.0f, r.getBottom (), false));
+    g.drawRoundedRectangle (r.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f), 1.0f);
 }
 
 void
@@ -95,15 +103,18 @@ capsule (juce::Graphics& g, juce::Rectangle<float> r)
 void
 thumb (juce::Graphics& g, juce::Rectangle<float> r)
 {
+    // A glossy capsule: soft shadow, a body lit from above, a bright upper half and a rim.
     const auto& t = theme ();
     const float radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
-    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.22f : 0.5f), 4, { 0, 1 })
+    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.26f : 0.55f), 5, { 0, 2 })
       .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (r, radius); return p; } ());
-    const auto body = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.75f);
-    g.setGradientFill (juce::ColourGradient (body, 0.0f, r.getY (), body.interpolatedWith (t.line, 0.25f), 0.0f,
-                                             r.getBottom (), false));
+    const auto body = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.7f);
+    g.setGradientFill (juce::ColourGradient (body, 0.0f, r.getY (), body.interpolatedWith (t.line, 0.45f), 0.0f, r.getBottom (), false));
     g.fillRoundedRectangle (r, radius);
-    g.setColour (t.line.withAlpha (0.7f));
+    const auto gloss = r.reduced (1.5f).withHeight (r.getHeight () * 0.48f);
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha (0.95f), 0.0f, gloss.getY (), t.highlight ().withAlpha (0.15f), 0.0f, gloss.getBottom (), false));
+    g.fillRoundedRectangle (gloss, juce::jmin (radius, gloss.getHeight () * 0.5f));
+    g.setColour (t.isLight () ? t.line.withAlpha (0.85f) : t.shadow ().withAlpha (0.5f));
     g.drawRoundedRectangle (r.reduced (0.5f), radius - 0.5f, 1.0f);
 }
 
@@ -171,28 +182,53 @@ lens (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour track, bool vert
 void
 knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour colour, bool bipolar)
 {
+    // A glass sphere inside a coloured value ring: a soft shadow under it, a body lit from above, a bright
+    // specular spot at the upper left, a thin rim, and the pointer from the centre.
     const auto& t = theme ();
     const float start = -juce::MathConstants<float>::pi * 0.75f, end = -start;
     const float angle = start + value * (end - start);
-    const float radius = juce::jmax (1.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f - 2.0f);
-    auto arc = [&] (float a, float b, juce::Colour c, float thickness)
+    const float outer = juce::jmax (1.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f - 1.5f);
+    const float ringW = juce::jlimit (2.0f, 3.5f, outer * 0.16f);
+    const float ringR = outer - ringW * 0.5f;
+    auto arc = [&] (float a, float b, juce::Colour c)
     {
         juce::Path path;
-        path.addCentredArc (r.getCentreX (), r.getCentreY (), radius, radius, 0.0f, a, b, true);
+        path.addCentredArc (r.getCentreX (), r.getCentreY (), ringR, ringR, 0.0f, a, b, true);
         g.setColour (c);
-        g.strokePath (path,
-                      juce::PathStrokeType (thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.strokePath (path, juce::PathStrokeType (ringW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     };
-    arc (start, end, t.line, 2.0f);
+    arc (start, end, t.isLight () ? t.line.withAlpha (0.7f) : t.shadow ().withAlpha (0.45f));
     if (std::abs (angle - (bipolar ? 0.0f : start)) > 0.01f)
-        arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour, 2.5f);
-    surface (g, r.reduced (5.0f), t.panel, radius);
+        arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour);
+
+    const float sphereR = juce::jmax (2.0f, outer - ringW - 2.5f);
+    const auto c = r.getCentre ();
+    const auto sphere = juce::Rectangle<float> (sphereR * 2.0f, sphereR * 2.0f).withCentre (c);
+    const float strength = t.material > 0.0f ? t.material : 0.0f;
+    juce::DropShadow (t.shadow ().withAlpha ((t.isLight () ? 0.22f : 0.55f) * juce::jmax (0.4f, strength)), juce::roundToInt (sphereR * 0.45f) + 2,
+                      { 0, juce::roundToInt (sphereR * 0.18f) + 1 })
+      .drawForPath (g, [&] { juce::Path p; p.addEllipse (sphere); return p; } ());
+    const auto light = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.35f);
+    const auto dark = t.isLight () ? t.panel2.interpolatedWith (t.line, 0.35f) : t.panel.interpolatedWith (t.shadow (), 0.3f);
+    juce::ColourGradient body (light, c.x - sphereR * 0.35f, c.y - sphereR * 0.55f, dark, c.x + sphereR * 0.4f, c.y + sphereR * 1.05f, true);
+    g.setGradientFill (body);
+    g.fillEllipse (sphere);
+    if (strength > 0.0f && sphereR >= 6.0f)
+    {
+        // the specular spot and a faint bounce of light along the lower rim
+        const auto spot = juce::Rectangle<float> (sphereR * 0.9f, sphereR * 0.55f).withCentre ({ c.x - sphereR * 0.22f, c.y - sphereR * 0.48f });
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.95f : 0.45f) * strength), spot.getCentreX (), spot.getCentreY (),
+                                                 t.highlight ().withAlpha (0.0f), spot.getRight (), spot.getBottom (), true));
+        g.fillEllipse (spot);
+        juce::Path bounce;
+        bounce.addCentredArc (c.x, c.y, sphereR - 1.2f, sphereR - 1.2f, 0.0f, juce::MathConstants<float>::pi * 0.65f, juce::MathConstants<float>::pi * 1.35f, true);
+        g.setColour (t.highlight ().withAlpha ((t.isLight () ? 0.7f : 0.2f) * strength));
+        g.strokePath (bounce, juce::PathStrokeType (1.0f));
+    }
+    g.setColour (t.isLight () ? t.line.withAlpha (0.8f) : t.shadow ().withAlpha (0.6f));
+    g.drawEllipse (sphere.reduced (0.25f), 0.8f);
     g.setColour (t.text);
-    const auto centre = r.getCentre ();
-    g.drawLine (centre.x + std::sin (angle) * radius * 0.30f,
-                centre.y - std::cos (angle) * radius * 0.30f,
-                centre.x + std::sin (angle) * radius * 0.68f,
-                centre.y - std::cos (angle) * radius * 0.68f,
-                1.5f);
+    g.drawLine (c.x + std::sin (angle) * sphereR * 0.18f, c.y - std::cos (angle) * sphereR * 0.18f,
+                c.x + std::sin (angle) * sphereR * 0.78f, c.y - std::cos (angle) * sphereR * 0.78f, juce::jmax (1.4f, sphereR * 0.12f));
 }
 }

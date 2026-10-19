@@ -159,6 +159,16 @@ void ThemeLookAndFeel::drawScrollbar (juce::Graphics& g, juce::ScrollBar&, int x
                                       int thumbStart, int thumbSize, bool isMouseOver, bool isMouseDown)
 {
     const auto& t = theme();
+    if (t.glass)
+    {
+        // glass: a slim translucent pill along the far edge, fuller under the mouse; it floats over the content
+        const float w = isMouseOver || isMouseDown ? 6.0f : 4.0f;
+        auto pill = isVertical ? juce::Rectangle<float> ((float) (x + width) - w - 2.0f, (float) (y + thumbStart) + 2.0f, w, (float) thumbSize - 4.0f)
+                               : juce::Rectangle<float> ((float) (x + thumbStart) + 2.0f, (float) (y + height) - w - 2.0f, (float) thumbSize - 4.0f, w);
+        g.setColour (t.text.withAlpha (isMouseDown ? 0.5f : (isMouseOver ? 0.38f : 0.22f)));
+        g.fillRoundedRectangle (pill, w * 0.5f);
+        return;
+    }
     auto thumb = isVertical ? juce::Rectangle<int> (x + 2, y + thumbStart, width - 4, thumbSize)
                             : juce::Rectangle<int> (x + thumbStart, y + 2, thumbSize, height - 4);
     g.setColour (t.dimText.withAlpha (isMouseDown ? 0.9f : (isMouseOver ? 0.7f : 0.45f)));
@@ -392,7 +402,8 @@ ThemeLookAndFeel::drawRotarySlider (juce::Graphics& g,
                      juce::Rectangle<float> (diameter, diameter)
                        .withCentre ({ (float)x + (float)w * 0.5f, (float)y + (float)h * 0.5f }),
                      pos,
-                     s.isEnabled () ? theme ().accentFill : theme ().dimText,
+                     ! s.isEnabled () ? theme ().dimText
+                                      : (s.isColourSpecified (juce::Slider::trackColourId) ? s.findColour (juce::Slider::trackColourId) : theme ().accentFill),
                      s.getMinimum () < 0.0 && s.getMaximum () > 0.0);
 }
 

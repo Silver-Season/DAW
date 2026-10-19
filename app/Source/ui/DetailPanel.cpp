@@ -138,7 +138,8 @@ public:
         for (int f = frames - 1; f >= 0; f -= 2)
         {
             const float k = (float) f / (float) juce::jmax (1, frames - 1);
-            g.setColour (t.dimText.withAlpha (0.28f));
+            // glass: the frames behind in the track colour, through the spectrum toward the back
+            g.setColour (t.glass ? colour.withRotatedHue (k * 0.18f).withAlpha (0.18f + 0.3f * (1.0f - k)) : t.dimText.withAlpha (0.28f));
             g.strokePath (pathFor (f, k * depthX, k * depthY, -1.0f), juce::PathStrokeType (1.0f));
         }
         const float k = (float) active / (float) juce::jmax (1, frames - 1);
@@ -692,6 +693,31 @@ public:
         }
 
         // drop zone
+        if (t.glass)
+        {
+            // glass: a quiet sunken card with a plus, the hint under it
+            const auto zone = dropZone.toFloat().reduced (0.75f);
+            g.setColour (t.panel2.withAlpha (0.45f));
+            g.fillRoundedRectangle (zone, 12.0f);
+            g.setColour (t.line.withAlpha (0.55f));
+            g.drawRoundedRectangle (zone, 12.0f, 1.0f);
+            const auto c = zone.getCentre().translated (0.0f, -18.0f);
+            const auto disc = juce::Rectangle<float> (34.0f, 34.0f).withCentre (c);
+            glass::surface (g, disc, t.panel, 17.0f);
+            g.setColour (t.line.withAlpha (0.7f));
+            g.drawEllipse (disc, 1.0f);
+            g.setColour (t.dimText);
+            g.fillRect (c.x - 7.0f, c.y - 0.75f, 14.0f, 1.5f);
+            g.fillRect (c.x - 0.75f, c.y - 7.0f, 1.5f, 14.0f);
+            g.setFont (t.uiFont (12.0f));
+            g.drawFittedText (Strings::detail::dropHere, dropZone.reduced (14).withTrimmedTop (dropZone.getHeight() / 2 + 2), juce::Justification::centredTop, 3, 1.0f);
+            if (dropMarker >= 0)
+            {
+                g.setColour (t.accent);
+                g.fillRect (dropMarker - 1, 8, 3, getHeight() - 16);
+            }
+            return;
+        }
         juce::Path outline;
         outline.addRoundedRectangle (dropZone.toFloat().reduced (0.75f), t.radius);
         juce::Path dashed;

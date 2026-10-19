@@ -132,6 +132,19 @@ void ArrangementRuler::paintBrace (juce::Graphics& g) const
     const float x1 = (float) view.beatToX (m.arrangementLoopStart()), x2 = (float) view.beatToX (m.arrangementLoopEnd());
     const bool on = m.arrangementLoopOn();
     const juce::Rectangle<float> r (x1, (float) kBraceTop + 1.0f, juce::jmax (2.0f, x2 - x1), (float) ArrangementView::kBraceHeight - 2.0f);
+    if (t.glass)
+    {
+        // glass: a soft accent band with round handles at the ends
+        g.setColour (t.accentFill.withAlpha (on ? 0.32f : 0.12f));
+        g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+        for (const float x : { r.getX(), r.getRight() })
+        {
+            const auto handle = juce::Rectangle<float> (8.0f, r.getHeight()).withCentre ({ x, r.getCentreY() });
+            g.setColour (on ? t.accentFill.interpolatedWith (t.text, 0.15f) : t.dimText.withAlpha (0.6f));
+            g.fillRoundedRectangle (handle, 4.0f);
+        }
+        return;
+    }
     g.setColour (t.accent.withAlpha (on ? 0.7f : 0.2f));
     g.fillRoundedRectangle (r, 2.0f);
     if (! on)

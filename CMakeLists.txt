@@ -56,7 +56,8 @@ if(DAW_BUILD_JUCE)
         app/Resources/themes/studio.json
         app/Resources/themes/paper.json
         app/Resources/themes/glasslight.json
-        app/Resources/themes/glassdark.json)
+        app/Resources/themes/glassdark.json
+        app/Resources/brand/AppIcon-1024.png)
 
     # Sources shared by the app and the engine tests: model, settings, engine, theme, built-in Prisma.
     set(DAW_APP_SHARED_SOURCES

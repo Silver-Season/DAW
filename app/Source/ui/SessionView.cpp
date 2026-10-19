@@ -106,6 +106,19 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
+        if (t.glass && role == Role::activator)
+        {
+            // glass: the track number on a light glass button; a muted track shows it dim and struck through
+            glass::surface (g, r, on ? t.panel : t.panel2, r.getHeight() * 0.5f);
+            g.setColour (t.line.withAlpha (0.8f));
+            g.drawRoundedRectangle (r.reduced (0.5f), r.getHeight() * 0.5f, 1.0f);
+            g.setColour (on ? t.text : t.dimText);
+            g.setFont (t.uiFont (11.5f, 600));
+            g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+            if (! on)
+                g.fillRect (r.getCentreX() - 7.0f, r.getCentreY(), 14.0f, 1.2f);
+            return;
+        }
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
@@ -116,10 +129,17 @@ public:
         else if (isMouseOver())
             fill = t.panel2.brighter (0.08f);
         if (t.glass && on)
-            glass::accent (g, r, fill, t.radius * 0.7f);
+            glass::accent (g, r, fill, r.getHeight() * 0.5f);
+        else if (t.glass)
+            glass::surface (g, r, t.panel, r.getHeight() * 0.5f);
         else
             fillCell (g, r, fill, 0.7f);
-        if (! on)
+        if (! on && t.glass)
+        {
+            g.setColour (t.line.withAlpha (0.8f));
+            g.drawRoundedRectangle (r.reduced (0.5f), r.getHeight() * 0.5f, 1.0f);
+        }
+        else if (! on)
             strokeCell (g, r, t.line, 1.0f, 0.7f);
         g.setColour (ink);
         if (role == Role::arm)
@@ -492,7 +512,7 @@ public:
             SessionRecorder::Progress progress;
             const bool hasProgress = recScene >= 0 && view.recorder->getProgress (v.track.id(), progress);
             // empty slots carry a trace of the track colour, so neighbouring columns differ
-            const auto emptyFill = t.glass ? t.panel.interpolatedWith (t.panel2, 0.45f).interpolatedWith (t.palette (v.track.colour()), 0.03f)
+            const auto emptyFill = t.glass ? t.panel2.interpolatedWith (t.panel, 0.25f)
                                            : t.panel.interpolatedWith (t.palette (v.track.colour()), 0.08f);
 
             for (int s = 0; s < numScenes; ++s)
@@ -512,8 +532,32 @@ public:
                         paintRecording (g, cell, progress, hasProgress, v.track, animate, blink4, now, selected);
                         continue;
                     }
+                    if (t.glass)
+                    {
+                        // Glass, as the design: a quiet grey cell; a faint plus in the middle (double-click makes a
+                        // clip), or the red record ring when the track records.
+                        fillCell (g, cell, dropTarget ? t.accentFill.withAlpha (0.2f).overlaidWith (emptyFill) : emptyFill);
+                        if (dropTarget || selected)
+                            strokeCell (g, cell, t.accent, 1.5f);
+                        const auto c = cell.getCentre();
+                        if (live)
+                        {
+                            const auto ring = juce::Rectangle<float> (14.0f, 14.0f).withCentre (c);
+                            g.setColour (t.record.withAlpha (armed ? 1.0f : 0.55f));
+                            g.drawEllipse (ring, 1.4f);
+                            if (armed)
+                                g.fillEllipse (ring.reduced (3.5f));
+                        }
+                        else
+                        {
+                            g.setColour (t.dimText.withAlpha (0.45f));
+                            g.fillRect (c.x - 5.0f, c.y - 0.6f, 10.0f, 1.2f);
+                            g.fillRect (c.x - 0.6f, c.y - 5.0f, 1.2f, 10.0f);
+                        }
+                        continue;
+                    }
                     fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
-                    strokeCell (g, cell, dropTarget || selected ? t.accent : (t.glass ? t.line.withAlpha (0.55f) : t.line), selected ? 1.5f : 1.0f);
+                    strokeCell (g, cell, dropTarget || selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
                     const auto mark = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
                     g.setColour (live ? (armed ? t.record : t.record.withAlpha (0.6f)) : t.line);
                     if (live)
@@ -998,13 +1042,27 @@ public:
                 continue;
             const auto scene = view.model.sceneAt (s);
             const bool selected = sel.kind == Selection::Kind::scene && sel.scene == s;
-            fillCell (g, b.toFloat(), t.panel2);
-            strokeCell (g, b.toFloat(), selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
+            if (t.glass)
+            {
+                // glass: a light list row with a hairline under it; a selected scene is a tinted row
+                if (selected || s == hoverScene)
+                {
+                    g.setColour (selected ? t.accentFill.withAlpha (t.isLight() ? 0.2f : 0.26f) : t.panel2.withAlpha (0.6f));
+                    g.fillRoundedRectangle (b.toFloat().reduced (0.0f, 1.0f), 8.0f);
+                }
+                g.setColour (t.line.withAlpha (0.5f));
+                g.fillRect ((float) b.getX() + 8.0f, (float) b.getBottom() - 0.5f, (float) b.getWidth() - 16.0f, 1.0f);
+            }
+            else
+            {
+                fillCell (g, b.toFloat(), t.panel2);
+                strokeCell (g, b.toFloat(), selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
+            }
             const bool hot = s == hoverScene && hoverLaunch;
             g.setColour (hot ? t.play : (scene.colour() >= 0 ? t.palette (scene.colour()) : t.dimText));
             g.fillPath (icons::play (juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ (float) b.getX() + 13.0f, (float) b.getCentreY() })));
             g.setColour (t.text);
-            g.setFont (t.uiFont (12.0f));
+            g.setFont (t.uiFont (t.glass ? 13.0f : 12.0f));
             g.drawText (scene.name(), b.withTrimmedLeft (28).withTrimmedRight (6), juce::Justification::centredLeft, true);
         }
         const auto stop = stopBounds().toFloat();
@@ -1244,6 +1302,8 @@ public:
         strokeCell (g, r, t.line);
     }
 
+    void lookAndFeelChanged() override { resized(); } // the glass themes lay the strip out differently
+
     void resized() override
     {
         auto r = getLocalBounds().reduced (8);
@@ -1256,6 +1316,22 @@ public:
         arm.setBounds (buttons);
         r.removeFromBottom (6);
 
+        if (theme().glass && getWidth() >= 96)
+        {
+            // Glass: the sends and the pan as larger glass knobs on top, the meter and the fader with its scale below.
+            sendA.setVisible (true);
+            sendB.setVisible (true);
+            auto sendsRow = r.removeFromTop (50);
+            const int cellW = sendsRow.getWidth() / 3;
+            sendA.setBounds (sendsRow.removeFromLeft (cellW));
+            sendB.setBounds (sendsRow.removeFromLeft (cellW));
+            pan.setBounds (sendsRow);
+            r.removeFromTop (4);
+            dbField.setBounds (r.removeFromBottom (16).withTrimmedLeft (r.getWidth() / 3));
+            meter.setBounds (r.getX(), r.getY(), 14, r.getHeight());
+            fader.setBounds (r.getX() + 20, r.getY(), juce::jmax (24, juce::jmin (64, r.getWidth() - 20)), r.getHeight());
+            return;
+        }
         auto sends = r.removeFromTop (40);
         const bool narrow = getWidth() < 96;
         const int cell = juce::jmin (36, (sends.getWidth()) / (narrow ? 1 : 3));

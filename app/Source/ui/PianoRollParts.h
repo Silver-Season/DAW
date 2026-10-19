@@ -100,6 +100,7 @@ public:
 
     // Copies the state of the clip and the editor into the widgets (not while one is being dragged).
     void refresh();
+    void lookAndFeelChanged() override;
     void resized() override;
     void paint (juce::Graphics&) override;
 

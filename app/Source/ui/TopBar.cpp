@@ -139,9 +139,13 @@ public:
             // Glass: play is a round green button at all times, glowing while the song plays.
             const auto circle = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight()), juce::jmin (r.getWidth(), r.getHeight()));
             juce::DropShadow (t.play.withAlpha (on ? 0.55f : 0.25f), on ? 12 : 6, { 0, 1 }).drawForRectangle (g, circle.toNearestInt().reduced (3));
-            g.setGradientFill (juce::ColourGradient (t.play.interpolatedWith (t.highlight(), 0.25f), circle.getX(), circle.getY(),
-                                                     t.play.interpolatedWith (t.shadow(), 0.12f), circle.getX(), circle.getBottom(), false));
+            g.setGradientFill (juce::ColourGradient (t.play.interpolatedWith (t.highlight(), 0.35f), circle.getX(), circle.getY(),
+                                                     t.play, circle.getX(), circle.getBottom(), false));
             g.fillEllipse (circle);
+            // the gloss: a bright lens over the upper half and a thin light rim
+            const auto gloss = circle.reduced (circle.getWidth() * 0.16f, 0.0f).withHeight (circle.getHeight() * 0.5f).translated (0.0f, 1.5f);
+            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (0.6f), 0.0f, gloss.getY(), t.highlight().withAlpha (0.0f), 0.0f, gloss.getBottom(), false));
+            g.fillEllipse (gloss);
             g.setColour (t.highlight().withAlpha (0.55f));
             g.drawEllipse (circle.reduced (0.75f), 1.0f);
             g.setColour (juce::Colours::white);
@@ -153,7 +157,14 @@ public:
         {
             // Inside the transport capsule a button is only its icon until it is lit or under the mouse.
             const float pill = r.getHeight () * 0.5f;
-            if (on)
+            if (on && role == Role::normal && ! framed)
+            {
+                // a lit switch of the capsule (loop, follow, metronome): a soft tint and the icon in the accent
+                g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.22f : 0.3f));
+                g.fillRoundedRectangle (r, pill);
+                ink = t.accent;
+            }
+            else if (on)
                 glass::accent (g, r, fill, pill);
             else if (framed)
             {
@@ -308,6 +319,20 @@ public:
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
+        if (t.glass)
+        {
+            // glass: "CPU 14%" and a slim bar
+            g.setColour (t.text);
+            g.setFont (t.uiFont (12.0f, 500));
+            const auto label = Strings::transport::cpu + " " + juce::String (juce::roundToInt (load * 100.0f)) + "%";
+            g.drawText (label, getLocalBounds().removeFromLeft (64), juce::Justification::centredLeft, false);
+            const auto bar = juce::Rectangle<float> ((float) getWidth() - 64.0f, (float) getHeight() * 0.5f - 3.0f, 60.0f, 6.0f);
+            g.setColour (t.line.withAlpha (0.7f));
+            g.fillRoundedRectangle (bar, 3.0f);
+            g.setColour (load > 0.85f ? t.record : t.play);
+            g.fillRoundedRectangle (bar.withWidth (juce::jmax (6.0f, bar.getWidth() * load)), 3.0f);
+            return;
+        }
         g.setColour (t.dimText);
         g.setFont (t.uiFont (10.5f, 500));
         g.drawText (Strings::transport::cpu, getLocalBounds().removeFromLeft (26), juce::Justification::centredLeft, false);
@@ -531,6 +556,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     tempo.setWheelStep (0.1);
     tempo.setHelpText (Strings::help::tempo);
     tempo.setBoxedInGlass (false);
+    tempo.setInterfaceFontInGlass (true);
     // With a tempo envelope on the master the field scales the whole envelope: every point by the same factor.
     tempo.onGestureStart = [this] {
         model.undo.beginNewTransaction (Strings::undoTempo);
@@ -708,6 +734,12 @@ void TopBar::setVersionText (const juce::String& text)
     }
 }
 
+void TopBar::mouseUp (const juce::MouseEvent& e)
+{
+    if (nameArea.contains (e.getPosition()) && onProjectClicked)
+        onProjectClicked();
+}
+
 void TopBar::setArrangementShown (bool shown)
 {
     tabs->setView (shown ? Tabs::arrangementView : Tabs::session);
@@ -842,18 +874,29 @@ void TopBar::paint (juce::Graphics& g)
         for (const int x : separators)
             g.fillRect ((float) x, (float) capsuleArea.getY () + 11.0f, 1.0f, (float) capsuleArea.getHeight () - 22.0f);
     }
-    ui::drawLogo (g, logoArea.toFloat());
+    if (t.glass)
+        ui::drawAppIcon (g, logoArea.toFloat()); // glass: the icon tile, as on the dock
+    else
+        ui::drawLogo (g, logoArea.toFloat());
     g.setColour (t.text);
     g.setFont (t.uiFont (22.0f, 600));
     g.drawText (Strings::labelAppName, juce::Rectangle<int> (logoArea.getRight() + 9, 9, 96, 34), juce::Justification::centredLeft, false);
-    // the project name, after a thin divider
-    const int nameX = logoArea.getRight() + 9 + 96 + 14;
+    // the project name, after a thin divider, with a chevron: a click opens the project properties
     g.setColour (t.line);
-    g.fillRect (nameX - 14, 17, 1, 18);
+    g.fillRect (nameArea.getX() - 14, 17, 1, 18);
     g.setColour (t.text);
-    g.setFont (t.uiFont (15.0f, 500));
-    g.drawFittedText (projectName, juce::Rectangle<int> (nameX, 9, juce::jmax (40, tabs->getX() - nameX - 12), 34),
-                      juce::Justification::centredLeft, 1, 1.0f);
+    g.setFont (t.uiFont (t.glass ? 16.0f : 15.0f, 500));
+    const float nameWidth = juce::jmin ((float) nameArea.getWidth() - 18.0f, juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), projectName) + 2.0f);
+    g.drawFittedText (projectName, nameArea.withWidth (juce::roundToInt (nameWidth)), juce::Justification::centredLeft, 1, 1.0f);
+    {
+        juce::Path v;
+        const juce::Point<float> c ((float) nameArea.getX() + nameWidth + 10.0f, (float) nameArea.getCentreY() + 1.0f);
+        v.startNewSubPath (c.x - 4.0f, c.y - 2.0f);
+        v.lineTo (c.x, c.y + 2.0f);
+        v.lineTo (c.x + 4.0f, c.y - 2.0f);
+        g.setColour (t.dimText);
+        g.strokePath (v, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
         if (! t.glass)
@@ -862,8 +905,9 @@ void TopBar::paint (juce::Graphics& g)
             strokeCell (g, area.toFloat(), t.line);
         }
         g.setColour (t.text);
-        g.setFont (t.numFont (13.0f));
-        g.drawText (text, area, juce::Justification::centred, false);
+        // glass: the numbers in the interface face, a size up, as the design sets them ("33.1.1", "4/4")
+        g.setFont (t.glass ? t.uiFont (15.5f, 500) : t.numFont (13.0f));
+        g.drawText (t.glass ? text.removeCharacters (" ") : text, area, juce::Justification::centred, false);
     };
     const int num = model.sigNum(), den = model.sigDen();
     field (signatureArea, juce::String (num) + " / " + juce::String (den));
@@ -954,8 +998,9 @@ void TopBar::resized()
     // and a capsule holding the transport in groups, with the lamps and the CPU at its right end; the ribbon and the
     // spectrum take the room left in between.
     constexpr int h = 30, gap = 6, groupGap = 15, cy = 78;
-    logoArea = { 16, 10, 34, 34 };
+    logoArea = theme ().glass ? juce::Rectangle<int> (14, 8, 38, 38) : juce::Rectangle<int> (16, 10, 34, 34);
     tabs->setBounds (getWidth () / 2 - 165, 9, 330, 34);
+    nameArea = { logoArea.getRight () + 9 + 96 + 14, 9, juce::jmax (40, tabs->getX () - (logoArea.getRight () + 9 + 96 + 14) - 12), 34 };
     settingsButton->setBounds (getWidth () - 14 - 34, 10, 34, 32);
     exportButton->setBounds (settingsButton->getX () - 8 - 104, 10, 104, 32);
     redoButton->setBounds (exportButton->getX () - 10 - 32, 10, 32, 32);
@@ -1026,7 +1071,7 @@ void TopBar::resized()
         c.setBounds (right, cy - 10, width, 20);
         right -= gap;
     };
-    take (*cpu, 80);
+    take (*cpu, theme ().glass ? 112 : 80);
     take (*diskLamp, 20);
     take (*keysLamp, 78);
     take (*midiLamp, 48);

@@ -332,6 +332,11 @@ void PianoRoll::Props::refresh()
     content->repaint();
 }
 
+void PianoRoll::Props::lookAndFeelChanged()
+{
+    resized(); // glass switches take a row each
+}
+
 void PianoRoll::Props::resized()
 {
     viewport.setBounds (getLocalBounds().withTrimmedRight (1));
