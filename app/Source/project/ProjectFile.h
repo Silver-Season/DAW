@@ -57,6 +57,11 @@ juce::File historyFolder (const juce::File& folder);
 juce::File versionFile (const juce::File& folder, int number);
 // "My track Project" -> "My track"
 juce::String projectNameOfFolder (const juce::File& folder);
+
+// The project file named on a command line (a double click in Finder, "open -a DAW x.prisma", a terminal): the first
+// argument that is an existing .prisma file, or a project folder that has one; an invalid File if there is none.
+// Arguments may be quoted; system flags such as -psn_... or -NSDocumentRevisionsDebugMode are skipped.
+juce::File projectFileFromCommandLine (const juce::String& commandLine);
 // ~/Music/Prisma DAW/Unsaved/<date time> Project
 juce::File newUnsavedFolder (const juce::File& musicFolder, juce::Time now);
 

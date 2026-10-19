@@ -306,8 +306,12 @@ class TrackRef final : public NodeRef
 public:
     using NodeRef::NodeRef;
 
-    juce::String type() const { return get<juce::String> (ids::type, "midi"); }
+    // The master (the MASTER node seen as a track) answers "master": it has a chain, a volume and automation, no clips.
+    juce::String type() const { return isMaster() ? juce::String ("master") : get<juce::String> (ids::type, "midi"); }
     bool isAudio() const { return type() == "audio"; }
+    bool isMaster() const { return state.hasType (ids::MASTER); }
+    // A track whose first device is an instrument (MIDI tracks); the others carry effects only.
+    bool hasInstrument() const { return type() == "midi"; }
     juce::String name() const { return get<juce::String> (ids::name, {}); }
     int colour() const { return get<int> (ids::colour, 0); }
     float volumeDb() const { return get<float> (ids::volumeDb, 0.0f); }

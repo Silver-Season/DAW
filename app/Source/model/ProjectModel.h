@@ -235,6 +235,13 @@ public:
     void moveDevice (const DeviceRef&, int newIndex);
     DeviceRef findDevice (int64_t id) const;
 
+    // The master seen as a track (TrackRef::isMaster): its chain, volume and automation lanes. It is not in tracks(), and
+    // findTrack() does not find it, so code that works on clips never meets it; code that may show it uses
+    // findTrackOrMaster(). Its id is fixed: ids handed out by newId() start at 1.
+    static constexpr int64_t kMasterTrackId = 0;
+    TrackRef masterTrack() const { return TrackRef (masterNode()); }
+    TrackRef findTrackOrMaster (int64_t id) const { return id == kMasterTrackId ? masterTrack() : findTrack (id); }
+
     juce::ValueTree masterNode() const { return root.getChildWithName (ids::MASTER); }
     float masterVolumeDb() const { return (float) (double) masterNode().getProperty (ids::volumeDb, 0.0); }
     void setMasterVolumeDb (float db) { masterNode().setProperty (ids::volumeDb, (double) db, &undo); }

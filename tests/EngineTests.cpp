@@ -150,6 +150,12 @@ int main()
         std::printf ("\n%d checks, %d failures\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
+    if (juce::String (std::getenv ("DAW_TEST_ONLY")) == "mix")
+    {
+        runMixTests();
+        std::printf ("\n%d checks, %d failures\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     if (juce::String (std::getenv ("DAW_TEST_ONLY")) == "recording")
     {
         runAudioRecordingTests();
@@ -176,6 +182,7 @@ int main()
     runAudioRecordingTests();
     runBuiltInEffectTests();
     runWarpTests();
+    runMixTests();
     std::printf ("\n%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

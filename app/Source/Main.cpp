@@ -6,6 +6,7 @@
 #include "engine/NullAudioDriver.h"
 #include "library/UserLibrary.h"
 #include "model/ArrangementEdit.h"
+#include "project/ProjectFile.h"
 #include "ui/ThemeLookAndFeel.h"
 
 class DawApplication final
@@ -21,7 +22,7 @@ public:
         return juce::SystemStats::getEnvironmentVariable ("DAW_UI_SNAPSHOTS", {}).isNotEmpty ();
     }
 
-    void initialise (const juce::String&) override
+    void initialise (const juce::String& commandLine) override
     {
         const auto output = juce::SystemStats::getEnvironmentVariable ("DAW_UI_SNAPSHOTS", {});
         if (output.isNotEmpty ())
@@ -75,13 +76,20 @@ public:
             nullDriver = std::make_unique<NullAudioDriver> (*engine); // no sound card: tick the engine from a timer thread
         mainWindow = std::make_unique<MainWindow> (*engine, *model, *settings);
         if (snapshotDirectory == juce::File ())
-            mainWindow->startup ();
+            mainWindow->startup (project::projectFileFromCommandLine (commandLine));
         else
         {
             engine->rebuildGraph ();
             mainWindow->getContentComponent ()->setSize (1440, 940);
             startTimer (180);
         }
+    }
+
+    // A second launch with a file, or a .prisma opened in Finder while the app runs (macOS hands documents over this way).
+    void anotherInstanceStarted (const juce::String& commandLine) override
+    {
+        if (mainWindow != nullptr)
+            mainWindow->openFromSystem (project::projectFileFromCommandLine (commandLine));
     }
 
     void shutdown() override
@@ -138,7 +146,8 @@ private:
             if (isActiveWindow() && content != nullptr && ! content->hasKeyboardFocus (true))
                 content->grabKeyboardFocus();
         }
-        void startup() { content->startup(); }
+        void startup (const juce::File& file) { content->startup (file); }
+        void openFromSystem (const juce::File& file) { content->openFromSystem (file); }
         void requestQuit (std::function<void()> quitNow) { content->requestQuit (std::move (quitNow)); }
 
     private:

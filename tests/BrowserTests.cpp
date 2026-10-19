@@ -109,6 +109,10 @@ void testSearch()
     check (factoryPresetFolder ("Reese Bass") == "Bass" && factoryPresetFolder ("Vox Sweep") == "FX" && factoryPresetFolder ("Init") == "Init"
                && factoryPresetFolder ("Glass Pad") == "Pad" && factoryPresetFolder ("Pluck") == "Pluck" && factoryPresetFolder ("Supersaw Lead") == "Lead",
            "factory presets sit in Bass, Lead, Pad, Pluck, FX, Init");
+    check (factoryPresetFolder ("Electric Keys") == "Keys" && factoryPresetFolder ("Drawbar Organ") == "Keys" && factoryPresetFolder ("Glass Bell") == "Bells"
+               && factoryPresetFolder ("Music Box") == "Bells" && factoryPresetFolder ("String Ensemble") == "Strings"
+               && factoryPresetFolder ("Brass Section") == "Brass" && factoryPresetFolder ("Laser Zap") == "FX",
+           "and in Keys, Bells, Strings, Brass");
     root.deleteRecursively();
 }
 

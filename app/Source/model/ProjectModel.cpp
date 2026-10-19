@@ -38,6 +38,7 @@ juce::ValueTree ProjectModel::createEmptyTree()
     p.appendChild (juce::ValueTree (ids::TRACKS), nullptr);
 
     juce::ValueTree master (ids::MASTER);
+    master.setProperty (ids::id, (juce::int64) kMasterTrackId, nullptr);
     master.setProperty (ids::volumeDb, 0.0, nullptr);
     master.appendChild (juce::ValueTree (ids::DEVICES), nullptr);
     p.appendChild (master, nullptr);
@@ -62,6 +63,7 @@ void ProjectModel::normalise (juce::ValueTree& p)
     };
     ensure (ids::TRACKS);
     auto master = ensure (ids::MASTER);
+    master.setProperty (ids::id, (juce::int64) kMasterTrackId, nullptr); // older files have no id on the master
     if (! master.getChildWithName (ids::DEVICES).isValid())
         master.appendChild (juce::ValueTree (ids::DEVICES), nullptr);
     auto scenes = ensure (ids::SCENES);

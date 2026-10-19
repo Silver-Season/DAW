@@ -4,6 +4,7 @@
 #include "Chrome.h"
 #include "ScalePicker.h"
 #include "../engine/AudioEngine.h"
+#include "../model/Automation.h"
 #include "../engine/SessionRecorder.h"
 #include "TransportMenus.h"
 #include "ArrangementView.h"
@@ -503,8 +504,28 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     tempo.setWheelStep (0.1);
     tempo.setHelpText (Strings::help::tempo);
     tempo.setBoxedInGlass (false);
-    tempo.onGestureStart = [this] { model.undo.beginNewTransaction (Strings::undoTempo); };
-    tempo.onValueChange = [this] (double) { model.setTempo (tempo.getValue()); };
+    // With a tempo envelope on the master the field scales the whole envelope: every point by the same factor.
+    tempo.onGestureStart = [this] {
+        model.undo.beginNewTransaction (Strings::undoTempo);
+        tempoScalePoints.clear();
+        tempoScaleFrom = tempo.getValue();
+        const auto lane = automation::findLane (model.masterTrack(), automation::tempoTarget);
+        if (lane.isValid())
+            for (const auto& point : lane)
+                tempoScalePoints.push_back ({ point, automation::tempoFromNormalised ((float) point.getProperty (ids::value)) });
+    };
+    tempo.onValueChange = [this] (double) {
+        if (tempoScalePoints.empty() || tempoScaleFrom <= 0.0)
+        {
+            model.setTempo (tempo.getValue());
+            return;
+        }
+        const double factor = tempo.getValue() / tempoScaleFrom;
+        for (const auto& [point, bpm] : tempoScalePoints)
+            if (point.getParent().isValid())
+                automation::movePoint (model, point, (double) point.getProperty (ids::beat), automation::normalisedTempo (bpm * factor));
+    };
+    tempo.onGestureEnd = [this] { tempoScalePoints.clear(); };
     addAndMakeVisible (tempo);
 
     namespace I = icons;
@@ -683,8 +704,20 @@ void TopBar::tick()
     const bool playing = engine.isPlaying();
     play->setOn (playing);
 
-    if (! tempo.isEditing() && std::abs (tempo.getValue() - model.tempo()) > 0.004)
-        tempo.setValue (model.tempo());
+    // With a tempo envelope on the master the field shows the tempo at the cursor and cannot be edited.
+    const auto tempoLane = automation::findLane (model.masterTrack(), automation::tempoTarget);
+    const bool mapped = tempoLane.isValid() && tempoLane.getNumChildren() > 0;
+    if (mapped != tempoMapped)
+    {
+        tempoMapped = mapped;
+        tempo.setHelpText (mapped ? Strings::help::tempoMapped : Strings::help::tempo);
+        tempo.repaint();
+    }
+    const double shownTempo = ! mapped ? model.tempo()
+                              : playing ? engine.getCurrentTempo()
+                                        : automation::tempoFromNormalised (daw::engine::automationValueAt (automation::points (tempoLane), engine.getSongPositionBeats()));
+    if (! tempo.isEditing() && std::abs (tempo.getValue() - shownTempo) > 0.004)
+        tempo.setValue (shownTempo);
 
     // The song position (the arrangement's); the count-in shows its own run from -4 to 0. 6/8 is three quarter notes long.
     const auto text = formatPosition (engine.isCountingIn() ? engine.getPositionBeats() : engine.getSongPositionBeats(), model.beatsPerBar());

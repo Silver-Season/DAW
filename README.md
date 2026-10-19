@@ -185,6 +185,19 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 
 ![The audio clip editor with warp markers and the decision strip, Prism theme](media/stage7-markers-prism.png)
 
+## Master, tempo, export and plug-in folders (after the demo song)
+
+- **The master is a track.** Click the master in the Session View or the Arrangement and its chain opens at the bottom: drop built-in effects and plug-ins there like on any track. In automation mode (A) the Arrangement has a master row with Volume, Pan, the parameters of its effects and **Tempo**.
+- **Tempo changes.** The Tempo envelope of the master moves the song: two points on one beat make a step, a line between points a smooth accelerando or slowdown. The tempo field shows the tempo at the cursor; changing it there speeds up or slows down the whole envelope.
+- **Export** (Cmd+Shift+R): the master, stems or both from one pass (every track's share of the mix, with the same gain as the master, so they add back up); WAV, AIFF, FLAC or MP3 (320–128 kbps or VBR); normalization by peak or by loudness (−14, −16 or −9 LUFS, never above −1 dB true peak); the result reports loudness, loudness range and true peak. 16-bit files are dithered.
+- **Plug-in folders.** Settings → Plug-ins lists the VST3 folders that are searched (add, remove, back to the default) with Scan Now; the plug-in window shows how many folders are searched and links there.
+- **Open from the Finder**: double-click a `.prisma` file, or pass it on the command line.
+- Nine new Prisma presets: Electric Keys, Drawbar Organ, Glass Bell, Music Box, String Ensemble, Brass Section, Sub Bass, Noise Riser, Laser Zap. Drum kits play 10 dB quieter, in line with the synths. Automation mode opens the envelope that is drawn; return tracks have no clip slots.
+
+![The Tempo envelope on the master row, Prism theme](media/mix-tempo-master-prism.png)
+
+![Export with stems, MP3 and loudness normalization, Prism theme](media/export-prism.png)
+
 ## English interface
 
 English is the default UI language. Settings → Appearance → Language switches to Russian (and back); the choice applies after a restart. Every UI text is a `tr ("English", "Русский")` pair in `app/Source/Strings.h`, and the engine tests run once in each language.

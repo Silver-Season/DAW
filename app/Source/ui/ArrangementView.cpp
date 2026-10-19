@@ -131,6 +131,8 @@ int ArrangementView::trackHeight (const TrackRef& track) const
 
 void ArrangementView::setTrackHeight (int64_t trackId, int height, bool newTransaction)
 {
+    if (trackId == ProjectModel::kMasterTrackId)
+        return; // the master row keeps its height
     height = juce::jlimit (kMinTrackHeight, kMaxTrackHeight, height);
     if (v.uniformHeights)
         v.uniformHeight = height;
@@ -160,6 +162,12 @@ void ArrangementView::rebuildRows()
         layoutRows.push_back ({ track.id(), y, h });
         y += h;
     }
+    // In automation mode the master gets a row of its own below the tracks: its volume, pan and effects have envelopes too.
+    if (automationOn)
+    {
+        layoutRows.push_back ({ ProjectModel::kMasterTrackId, y, kMasterRowHeight });
+        y += kMasterRowHeight;
+    }
     rowsTotalHeight = y;
 
     // forget what is gone
@@ -178,7 +186,7 @@ void ArrangementView::rebuildRows()
             markerSel = -1;
     }
     for (size_t i = timeSel.tracks.size(); i-- > 0;)
-        if (! model.findTrack (timeSel.tracks[i]).isValid())
+        if (! model.findTrackOrMaster (timeSel.tracks[i]).isValid() || rowIndexOfTrack (timeSel.tracks[i]) < 0)
             timeSel.tracks.erase (timeSel.tracks.begin() + (std::ptrdiff_t) i);
     juce::ignoreUnused (selectionLost);
 
@@ -665,14 +673,26 @@ void ArrangementView::setAutomationMode (bool on)
     if (on == automationOn)
         return;
     automationOn = on;
-    headersPart->refreshRows();
-    repaintAll();
+    rebuildRows();
 }
 
 juce::String ArrangementView::automationTarget (int64_t trackId) const
 {
     const auto it = automationTargets.find (trackId);
-    return it != automationTargets.end() ? it->second : automation::volumeTarget;
+    if (it != automationTargets.end())
+        return it->second;
+    // Nothing chosen yet: the envelope that is drawn (volume first), so an automated parameter shows up without a search.
+    juce::String drawn;
+    for (const auto& lane : automation::lanes (model.findTrackOrMaster (trackId)))
+        if (lane.getNumChildren() > 0)
+        {
+            const auto target = lane.getProperty (ids::target).toString();
+            if (target == automation::volumeTarget)
+                return target;
+            if (drawn.isEmpty())
+                drawn = target;
+        }
+    return drawn.isNotEmpty() ? drawn : automation::volumeTarget;
 }
 
 void ArrangementView::setAutomationTarget (int64_t trackId, const juce::String& target)
@@ -703,6 +723,8 @@ juce::String ArrangementView::automationTargetName (const TrackRef& track, const
         return Strings::arrangement::autoVolume;
     if (target == automation::panTarget)
         return Strings::arrangement::autoPan;
+    if (target == automation::tempoTarget)
+        return Strings::arrangement::autoTempo;
     int64_t deviceId = -1;
     int index = -1;
     if (automation::parseDeviceTarget (target, deviceId, index))
@@ -722,6 +744,8 @@ float ArrangementView::automationCurrentValue (const TrackRef& track, const juce
         return automation::normalisedVolume (track.volumeDb());
     if (target == automation::panTarget)
         return juce::jlimit (0.0f, 1.0f, (track.pan() + 1.0f) * 0.5f);
+    if (target == automation::tempoTarget)
+        return automation::normalisedTempo (model.tempo());
     if (auto* p = automationParameter (target))
         return p->getValue();
     return 0.5f;
@@ -736,6 +760,8 @@ juce::String ArrangementView::automationValueText (const TrackRef&, const juce::
         const int p = juce::roundToInt ((normalised * 2.0f - 1.0f) * 50.0f);
         return p == 0 ? juce::String ("C") : juce::String (std::abs (p)) + (p < 0 ? "L" : "R");
     }
+    if (target == automation::tempoTarget)
+        return juce::String (automation::tempoFromNormalised (normalised), 1) + " BPM";
     if (auto* p = automationParameter (target))
         return p->getText (normalised, 24);
     return juce::String (normalised, 2);
@@ -744,7 +770,7 @@ juce::String ArrangementView::automationValueText (const TrackRef&, const juce::
 juce::PopupMenu ArrangementView::automationMenu (int64_t trackId)
 {
     juce::PopupMenu menu;
-    const auto track = model.findTrack (trackId);
+    const auto track = model.findTrackOrMaster (trackId);
     if (! track.isValid())
         return menu;
     const auto current = automationTarget (trackId);
@@ -762,6 +788,8 @@ juce::PopupMenu ArrangementView::automationMenu (int64_t trackId)
         });
         into.addItem (it);
     };
+    if (track.isMaster())
+        item (menu, Strings::arrangement::autoTempo, automation::tempoTarget);
     item (menu, Strings::arrangement::autoVolume, automation::volumeTarget);
     item (menu, Strings::arrangement::autoPan, automation::panTarget);
     menu.addSeparator();
@@ -794,7 +822,7 @@ bool ArrangementView::deleteSelection()
         bool removed = false;
         model.undo.beginNewTransaction (Strings::undoAutoClear);
         for (const auto id : timeSel.tracks)
-            if (const auto track = model.findTrack (id); track.isValid())
+            if (const auto track = model.findTrackOrMaster (id); track.isValid())
                 if (const auto lane = automation::findLane (track, automationTarget (id)); lane.isValid() && lane.getNumChildren() > 0)
                 {
                     automation::removePointsIn (model, lane, timeSel.start, timeSel.end);

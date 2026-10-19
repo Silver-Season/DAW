@@ -481,8 +481,8 @@ public:
 
         for (const auto& v : visible)
         {
-            if (! v.track.isValid())
-                continue;
+            if (! v.track.isValid() || v.track.isReturn())
+                continue; // a return track has no clips, so its column has no slots
             auto* rt = view.engine.findRuntime (v.track.id());
             const int playingScene = rt != nullptr ? rt->playingSlot.load() : -1;
             const int queuedScene = rt != nullptr ? rt->queuedSlot.load() : -1;
@@ -655,6 +655,11 @@ public:
             return;
         }
         const auto id = view.columnTrack[(size_t) column];
+        if (view.model.findTrack (id).isReturn())
+        {
+            view.commands.selectTrack (id);
+            return;
+        }
         view.commands.selectSlot (id, scene);
         pressColumn = column;
         pressScene = scene;
@@ -700,7 +705,7 @@ public:
         dragScene = pressScene;
         dragPosition = e.getPosition();
         int column = -1, scene = -1;
-        if (hit (e.getPosition(), column, scene) && scene != stopRow)
+        if (hit (e.getPosition(), column, scene) && scene != stopRow && ! view.model.findTrack (view.columnTrack[(size_t) column]).isReturn())
         {
             dropColumn = column;
             dropScene = scene;
@@ -749,6 +754,8 @@ public:
         if (e.mods.isPopupMenu() || ! hit (e.getPosition(), column, scene) || scene == stopRow)
             return;
         const auto id = view.columnTrack[(size_t) column];
+        if (view.model.findTrack (id).isReturn())
+            return;
         if (view.model.findTrack (id).clipAt (scene).isValid())
         {
             // double-click on a clip: edit it
@@ -1333,6 +1340,8 @@ public:
 
     void updateMeter() { meter.push (view.engine.masterMeterL.exchange (0.0f), view.engine.masterMeterR.exchange (0.0f)); }
 
+    void mouseDown (const juce::MouseEvent&) override { view.commands.selectTrack (ProjectModel::kMasterTrackId); }
+
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
@@ -1457,6 +1466,7 @@ void SessionView::structureChanged (const juce::ValueTree& parent)
 
 void SessionView::changeListenerCallback (juce::ChangeBroadcaster*)
 {
+    repaint (masterHeaderArea);
     headers->repaint();
     grid->repaint();
     scenes->repaint();
@@ -1550,6 +1560,13 @@ void SessionView::scrollBarMoved (juce::ScrollBar* bar, double start)
     clampScroll();
     mixer->layoutStrips();
     repaintViews();
+}
+
+void SessionView::mouseDown (const juce::MouseEvent& e)
+{
+    // the master header selects the master: its chain opens in the bottom panel
+    if (masterHeaderArea.contains (e.getPosition()))
+        commands.selectTrack (ProjectModel::kMasterTrackId);
 }
 
 void SessionView::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
@@ -1650,6 +1667,8 @@ void SessionView::paint (juce::Graphics& g)
 
     // the master column header
     fillCell (g, masterHeaderArea.toFloat(), t.panel2);
+    if (model.selectedTrack() == ProjectModel::kMasterTrackId)
+        strokeCell (g, masterHeaderArea.toFloat(), t.text, 2.0f);
     g.setColour (t.text);
     g.setFont (t.uiFont (12.5f, 600));
     g.drawText (Strings::masterName, masterHeaderArea.reduced (9, 0), juce::Justification::centredLeft, true);

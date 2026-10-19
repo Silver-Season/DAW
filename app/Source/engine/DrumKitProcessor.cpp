@@ -107,7 +107,13 @@ void DrumKitProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
     if (right == nullptr)
         return;
+    // The machine starts from silence (it is the instrument), so the whole buffer is its output: trimmed to sit with
+    // the synths. Factory kits peak near full scale; a groove with the faders at 0 dB used to clip the master.
+    buffer.clear (0, 0, buffer.getNumSamples());
+    buffer.clear (1, 0, buffer.getNumSamples());
     engine.process (buffer.getWritePointer (0), right, buffer.getNumSamples(), events.data(), (int) events.size());
+    buffer.applyGain (0, 0, buffer.getNumSamples(), kOutputGain);
+    buffer.applyGain (1, 0, buffer.getNumSamples(), kOutputGain);
 }
 
 void DrumKitProcessor::getStateInformation (juce::MemoryBlock& dest)

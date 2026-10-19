@@ -228,9 +228,9 @@ public:
         volume.setWheelStep (0.0); // the wheel scrolls the tracks: a volume changed by scrolling past it was a misclick
         volume.setHelpText (Strings::help::arrHeaderVolume);
         volume.setLevelBarInGlass (true, -12.0);
-        volume.onGestureStart = [this] { view.model.undo.beginNewTransaction (Strings::undoTrackVolume); };
+        volume.onGestureStart = [this] { view.model.undo.beginNewTransaction (isMaster() ? Strings::undoMasterVolume : Strings::undoTrackVolume); };
         volume.onValueChange = [this] (double db) {
-            if (auto track = view.model.findTrack (trackId); track.isValid())
+            if (auto track = view.model.findTrackOrMaster (trackId); track.isValid())
                 track.setVolumeDb ((float) db, &view.model.undo);
         };
         pan.onGestureStart = [this] { view.model.undo.beginNewTransaction (Strings::undoTrackPan); };
@@ -253,17 +253,28 @@ public:
         };
         for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &volume, &pan })
             addAndMakeVisible (c);
+        if (isMaster())
+            for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &pan })
+                c->setVisible (false); // the master row: a volume and the envelope chooser
         refreshValues (true);
     }
 
     int64_t id() const { return trackId; }
+    bool isMaster() const { return trackId == ProjectModel::kMasterTrackId; }
     juce::Rectangle<int> nameArea() const { return nameBounds; }
 
     void refreshValues (bool force = false)
     {
-        const auto track = view.model.findTrack (trackId);
+        const auto track = view.model.findTrackOrMaster (trackId);
         if (! track.isValid())
             return;
+        if (isMaster())
+        {
+            if (force || ! volume.isEditing())
+                volume.setValue ((double) track.volumeDb());
+            chooser.setText (view.automationTargetName (track, view.automationTarget (trackId)));
+            return;
+        }
         if (force || ! volume.isEditing())
             volume.setValue ((double) track.volumeDb());
         if (force || ! pan.isDragging())
@@ -307,11 +318,24 @@ public:
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
-        const auto track = view.model.findTrack (trackId);
+        const auto track = view.model.findTrackOrMaster (trackId);
         if (! track.isValid())
             return;
         auto r = getLocalBounds();
         const bool selected = track.id() == view.model.selectedTrack();
+        if (isMaster())
+        {
+            g.setColour (selected ? t.panel2 : t.panel);
+            g.fillRect (r.withTrimmedBottom (1));
+            g.setColour (t.line);
+            g.fillRect (r.getX(), r.getY(), r.getWidth(), 1);
+            g.fillRect (r.getX(), r.getBottom() - 1, r.getWidth(), 1);
+            g.setColour (t.text);
+            g.fillRect (r.getX(), r.getY(), kStripe, r.getHeight() - 1);
+            g.setFont (t.uiFont (12.5f, 600));
+            g.drawText (Strings::masterName, nameBounds, juce::Justification::centredLeft, true);
+            return;
+        }
         g.setColour (selected ? t.panel2 : t.panel);
         g.fillRect (r.withTrimmedBottom (1));
         g.setColour (t.line);
@@ -344,6 +368,15 @@ public:
         const int pad = 8, btn = compact ? 18 : 20;
         auto r = getLocalBounds().withTrimmedLeft (kStripe + pad).withTrimmedRight (pad).withTrimmedBottom (1);
         auto top = compact ? r.withSizeKeepingCentre (r.getWidth(), btn) : r.removeFromTop (juce::jmin (h - 2, 6 + btn)).withTrimmedTop (5).withHeight (btn);
+        if (isMaster())
+        {
+            // the name with the volume beside it, the chooser of the envelope under them
+            volume.setBounds (top.removeFromRight (juce::jmin (90, top.getWidth() / 2)));
+            nameBounds = top;
+            chooser.setVisible (true);
+            chooser.setBounds (juce::Rectangle<int> (r.getX(), r.getY() + 5, r.getWidth(), 20));
+            return;
+        }
         // right to left: record, solo, Session / timeline, on
         arm.setBounds (top.removeFromRight (btn));
         top.removeFromRight (3);
@@ -392,18 +425,27 @@ public:
 
     juce::String helpAt (juce::Point<int> p) const override
     {
+        if (isMaster())
+            return Strings::help::arrMasterHeader;
         return p.y >= getHeight() - kEdgeGrab ? Strings::help::arrHeaderEdge : Strings::help::arrHeader;
     }
 
     void mouseMove (const juce::MouseEvent& e) override
     {
-        setMouseCursor (e.y >= getHeight() - kEdgeGrab ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
+        setMouseCursor (! isMaster() && e.y >= getHeight() - kEdgeGrab ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
     {
         resizing = false;
         view.takeFocus();
+        if (isMaster())
+        {
+            view.model.setSelectedTrack (trackId);
+            view.selectionState.selectTrack (trackId);
+            view.headersPart->repaint();
+            return;
+        }
         if (! e.mods.isPopupMenu() && e.y >= getHeight() - kEdgeGrab)
         {
             resizing = true;
@@ -433,7 +475,7 @@ public:
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
-        if (e.y < getHeight() - kEdgeGrab && nameBounds.contains (e.getPosition()))
+        if (! isMaster() && e.y < getHeight() - kEdgeGrab && nameBounds.contains (e.getPosition()))
             beginRename();
     }
 
