@@ -1,4 +1,5 @@
 #include "SessionView.h"
+#include "Kit.h"
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
@@ -106,40 +107,37 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
-        if (t.glass && role == Role::activator)
+        if (t.glass)
         {
-            // glass: the track number on a light glass button; a muted track shows it dim and struck through
-            glass::surface (g, r, on ? t.panel : t.panel2, r.getHeight() * 0.5f);
-            g.setColour (t.line.withAlpha (0.8f));
-            g.drawRoundedRectangle (r.reduced (0.5f), r.getHeight() * 0.5f, 1.0f);
-            g.setColour (on ? t.text : t.dimText);
-            g.setFont (t.uiFont (11.5f, 600));
-            g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
-            if (! on)
-                g.fillRect (r.getCentreX() - 7.0f, r.getCentreY(), 14.0f, 1.2f);
+            // glass, from the kit: the number on a glass button (dim and struck through when muted), solo in the
+            // second accent, arm in red
+            kit::State st;
+            st.on = on && role != Role::activator;
+            st.hover = isMouseOver();
+            const auto ink = kit::button (g, r, role == Role::arm ? kit::Kind::danger : kit::Kind::toggle, st,
+                                          role == Role::solo ? std::optional<juce::Colour> (t.accentFill2) : std::nullopt);
+            g.setColour (role == Role::activator && ! on ? t.dimText : ink);
+            if (role == Role::arm)
+                g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (r.getCentre()));
+            else
+            {
+                g.setFont (t.uiFont (t.metrics.small, 600));
+                g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+                if (role == Role::activator && ! on)
+                    g.fillRect (r.getCentreX() - 7.0f, r.getCentreY(), 14.0f, 1.2f);
+            }
             return;
         }
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
-            fill = role == Role::activator ? (t.glass ? t.accentFill : t.accent)
-                                           : (role == Role::solo ? (t.glass ? t.accentFill2 : t.accent2) : t.record);
-            ink = t.glass ? t.inkOn (fill) : t.clipInk;
+            fill = role == Role::activator ? t.accent : (role == Role::solo ? t.accent2 : t.record);
+            ink = t.clipInk;
         }
         else if (isMouseOver())
             fill = t.panel2.brighter (0.08f);
-        if (t.glass && on)
-            glass::accent (g, r, fill, r.getHeight() * 0.5f);
-        else if (t.glass)
-            glass::surface (g, r, t.panel, r.getHeight() * 0.5f);
-        else
-            fillCell (g, r, fill, 0.7f);
-        if (! on && t.glass)
-        {
-            g.setColour (t.line.withAlpha (0.8f));
-            g.drawRoundedRectangle (r.reduced (0.5f), r.getHeight() * 0.5f, 1.0f);
-        }
-        else if (! on)
+        fillCell (g, r, fill, 0.7f);
+        if (! on)
             strokeCell (g, r, t.line, 1.0f, 0.7f);
         g.setColour (ink);
         if (role == Role::arm)

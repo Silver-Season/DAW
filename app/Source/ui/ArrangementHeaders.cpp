@@ -1,4 +1,5 @@
 #include "ArrangementHeaders.h"
+#include "Kit.h"
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
@@ -83,21 +84,37 @@ public:
                 g.fillRect (r.getCentreX() - 8.0f, r.getCentreY(), 16.0f, 1.2f);
             return;
         }
+        if (t.glass)
+        {
+            kit::State st;
+            st.on = on;
+            st.hover = isMouseOver();
+            const auto ink = kit::button (g, r, style == Style::arm ? kit::Kind::danger : (style == Style::plain && ! icon ? kit::Kind::plain : kit::Kind::toggle), st,
+                                          style == Style::solo ? std::optional<juce::Colour> (t.accentFill2) : std::nullopt);
+            g.setColour (on ? ink : (isMouseOver() ? t.text : t.dimText));
+            if (icon)
+                g.fillPath (icon (juce::Rectangle<float> (8.0f, 8.0f).withCentre (r.getCentre())));
+            else if (style == Style::arm)
+                g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (r.getCentre()));
+            else
+            {
+                g.setFont (t.uiFont (t.metrics.small, 600));
+                g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+            }
+            return;
+        }
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
-            fill = style == Style::arm ? t.record : (style == Style::solo ? (t.glass ? t.accentFill2 : t.accent2) : (t.glass ? t.accentFill : t.accent));
-            ink = t.glass ? t.inkOn (fill) : t.clipInk;
+            fill = style == Style::arm ? t.record : (style == Style::solo ? t.accent2 : t.accent);
+            ink = t.clipInk;
         }
         else if (isMouseOver())
         {
             fill = t.panel2.brighter (0.08f);
             ink = t.text;
         }
-        if (t.glass && on)
-            glass::accent (g, r, fill, t.radius * 0.7f);
-        else
-            fillCell (g, r, fill, 0.7f);
+        fillCell (g, r, fill, 0.7f);
         if (! on)
             strokeCell (g, r, t.line, 1.0f, 0.7f);
         g.setColour (ink);

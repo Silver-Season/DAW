@@ -1,4 +1,5 @@
 #include "DetailPanel.h"
+#include "Kit.h"
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
@@ -289,10 +290,7 @@ public:
         if (t.glass)
         {
             // glass: a rounded card with a soft shadow, no divider under the header, a power symbol for on/off
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.06f : 0.3f), 10, { 0, 2 }).drawForRectangle (g, getLocalBounds().reduced (3));
-            glass::surface (g, r.reduced (0.5f), missing ? t.panel2.withAlpha (0.6f) : t.panel, 12.0f);
-            g.setColour (isSelected ? t.accent : t.line.withAlpha (0.7f));
-            g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, isSelected ? 1.5f : 1.0f);
+            kit::card (g, r.reduced (0.5f), isSelected);
             const auto symbol = powerRect().toFloat().withSizeKeepingCentre (12.0f, 12.0f);
             juce::Path power;
             power.addCentredArc (symbol.getCentreX(), symbol.getCentreY() + 0.5f, 5.5f, 5.5f, 0.0f, 0.65f, juce::MathConstants<float>::twoPi - 0.65f, true);

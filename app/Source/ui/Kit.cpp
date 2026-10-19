@@ -4,6 +4,19 @@
 
 namespace ui::kit
 {
+namespace
+{
+// The theme's ink for a fill, or black or white when that is not readable enough on it (any theme).
+juce::Colour inkFor (juce::Colour fill)
+{
+    const auto& t = theme();
+    auto ink = t.inkOn (fill);
+    if (Theme::contrast (ink, fill) < 4.5f)
+        ink = Theme::contrast (juce::Colours::white, fill) >= Theme::contrast (juce::Colours::black, fill) ? juce::Colours::white : juce::Colours::black;
+    return ink;
+}
+} // namespace
+
 float controlRadius (juce::Rectangle<float> r)
 {
     const auto& m = theme().metrics;
@@ -42,7 +55,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         g.fillRoundedRectangle (r, t.radius);
         g.setColour (s.on ? play : t.line);
         g.drawRoundedRectangle (r.reduced (0.5f), t.radius, 1.0f);
-        return s.on ? t.inkOn (play) : t.play;
+        return s.on ? inkFor (play) : t.text;
     }
 
     if (! t.glass)
@@ -63,7 +76,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         g.fillRoundedRectangle (r, radius);
         g.setColour (border);
         g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
-        ink = lit ? t.inkOn (litColour) : (s.enabled ? t.text : t.dimText.withAlpha (0.6f));
+        ink = lit ? inkFor (litColour) : (s.enabled ? t.text : t.dimText.withAlpha (0.6f));
     }
     else if (kind == Kind::ghost && ! (s.on && colour.has_value()))
     {
@@ -90,7 +103,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
             g.setColour (t.highlight().withAlpha (s.down ? 0.18f : 0.1f));
             g.fillRoundedRectangle (r, radius);
         }
-        ink = s.enabled ? t.inkOn (litColour) : t.dimText;
+        ink = s.enabled ? inkFor (litColour) : t.dimText;
     }
     else
     {
@@ -105,29 +118,30 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
     return ink;
 }
 
-void label (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& text, juce::Colour ink, float size, int weight,
-            const juce::Path* icon, float iconSize, bool leftAligned, bool chevron)
+void label (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& text, juce::Colour ink, const Icon& icon, LabelStyle st)
 {
     const auto& t = theme();
-    const auto font = t.uiFont (size > 0.0f ? size : t.metrics.text, weight);
+    const auto font = t.uiFont (st.size > 0.0f ? st.size : t.metrics.text, st.weight);
     const float textWidth = text.isEmpty() ? 0.0f : juce::GlyphArrangement::getStringWidth (font, text);
-    const float gap = icon != nullptr && text.isNotEmpty() ? 8.0f : 0.0f;
-    const float chevronWidth = chevron ? 14.0f : 0.0f;
-    const float total = (icon != nullptr ? iconSize : 0.0f) + gap + textWidth + chevronWidth;
-    float x = leftAligned ? r.getX() + 12.0f : r.getCentreX() - total * 0.5f;
-    g.setColour (ink);
-    if (icon != nullptr)
+    const float iconSize = icon ? st.iconSize : 0.0f;
+    const float gap = icon && text.isNotEmpty() ? 8.0f : 0.0f;
+    const float chevronWidth = st.chevron ? 14.0f : 0.0f;
+    const float total = iconSize + gap + textWidth + chevronWidth;
+    float x = st.leftAligned ? r.getX() + 12.0f : r.getCentreX() - total * 0.5f;
+    if (icon)
     {
-        g.fillPath (*icon, icon->getTransformToScaleToFit (juce::Rectangle<float> (iconSize, iconSize).withCentre ({ x + iconSize * 0.5f, r.getCentreY() }), true));
+        g.setColour (st.iconColour.value_or (ink));
+        g.fillPath (icon (juce::Rectangle<float> (iconSize, iconSize).withCentre ({ x + iconSize * 0.5f, r.getCentreY() })));
         x += iconSize + gap;
     }
     if (text.isNotEmpty())
     {
+        g.setColour (ink);
         g.setFont (font);
         g.drawText (text, juce::Rectangle<float> (x, r.getY(), textWidth + 2.0f, r.getHeight()), juce::Justification::centredLeft, false);
         x += textWidth;
     }
-    if (chevron)
+    if (st.chevron)
     {
         juce::Path v;
         const juce::Point<float> c (x + 9.0f, r.getCentreY() + 1.0f);

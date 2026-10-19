@@ -14,6 +14,7 @@
 #include "../app/Source/model/ClipEdit.h"
 #include "../app/Source/ui/EditCommands.h"
 #include "../app/Source/ui/Theme.h"
+#include "../app/Source/ui/Kit.h"
 
 using namespace tests;
 
@@ -195,6 +196,51 @@ testAppearance ()
     }
     manager.setAppearance (Appearance ());
     manager.setCurrent ("prism");
+}
+
+void testKit()
+{
+    std::printf ("[test kit] every control kind in every state paints in all six themes; labels stay readable\n");
+    auto& manager = ThemeManager::get();
+    manager.reload();
+    using ui::kit::Kind;
+    const Kind kinds[] { Kind::plain, Kind::ghost, Kind::toggle, Kind::primary, Kind::danger, Kind::play };
+    for (const auto& th : manager.all())
+    {
+        manager.setCurrent (th.id);
+        const auto& t = theme();
+        check (t.metrics.controlHeight >= 16.0f && t.metrics.compactHeight <= t.metrics.controlHeight
+                   && t.metrics.text > t.metrics.small && t.metrics.panelRadius >= 0.0f,
+               th.id + ": size tokens are sane");
+        juce::Image image (juce::Image::ARGB, 120, 40, true);
+        juce::Graphics g (image);
+        bool readable = true, painted = true;
+        for (const auto kind : kinds)
+            for (int bits = 0; bits < 32; ++bits)
+            {
+                ui::kit::State st { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) == 0 };
+                image.clear (image.getBounds(), t.panel);
+                const auto ink = ui::kit::button (g, { 4.0f, 4.0f, 112.0f, 32.0f }, kind, st);
+                const auto fill = image.getPixelAt (60, 20);
+                painted = painted && image.getPixelAt (60, 20).getAlpha() > 0;
+                if (st.enabled && kind != Kind::play && fill.getAlpha() == 255)
+                    readable = readable && Theme::contrast (ink, fill) >= 3.0f;
+            }
+        check (painted, th.id + ": buttons paint in every state");
+        check (readable, th.id + ": button labels contrast with their fill (3:1 or more) in every enabled state");
+        image.clear (image.getBounds());
+        ui::kit::switchControl (g, { 0.0f, 0.0f, 40.0f, 24.0f }, { false, false, true });
+        ui::kit::segmented (g, { 0.0f, 0.0f, 120.0f, 30.0f }, { "A", "B", "C" }, 1, 0, 2);
+        ui::kit::field (g, { 0.0f, 0.0f, 120.0f, 26.0f }, { false, false, false, true });
+        ui::kit::card (g, { 4.0f, 4.0f, 100.0f, 30.0f }, true);
+        ui::kit::row (g, { 0.0f, 0.0f, 120.0f, 24.0f }, { true, false, true });
+        check (ui::kit::segmentAt ({ 0.0f, 0.0f, 120.0f, 30.0f }, 3, 100.0f) == 2 && ui::kit::segmentAt ({ 0.0f, 0.0f, 120.0f, 30.0f }, 3, -5.0f) == 0,
+               th.id + ": a click finds its segment");
+    }
+    manager.setCurrent ("glass-light");
+    check (theme().metrics.pill && std::abs (theme().metrics.controlHeight - 28.0f) < 0.01f, "glass themes read their size tokens from the file");
+    manager.setCurrent ("prism");
+    check (! theme().metrics.pill && std::abs (theme().metrics.controlRadius - theme().radius) < 0.01f, "classic themes keep their own radius");
 }
 
 //==============================================================================
@@ -824,6 +870,7 @@ void tests::runUiTests()
     testRecordingUi();
     testThemes();
     testAppearance ();
+    testKit();
     testActionTransactions();
     testActionsWithEngine();
     testEditCommands();

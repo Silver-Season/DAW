@@ -12,8 +12,9 @@ Goal (owner, 2026-10-19): lay the interface down once, so that a change of style
 ## Steps
 
 - [x] Plan written down (this file).
-- [ ] `Theme::Metrics` with defaults, optional `metrics` object in theme JSON, glass values from the design tokens.
-- [ ] `ui::kit` painters with states; tests for every kind × state in all six themes (painting does not throw, contrast of labels ≥ 4.5:1).
-- [ ] Move the existing controls onto the kit: top bar buttons and tabs, session strip buttons, arrangement header buttons, piano roll chips and mode bar, browser rows and preview, look-and-feel buttons, toggles, combo boxes, text fields.
+- [x] `Theme::Metrics` with defaults, optional `metrics` object in theme JSON, glass values from the design tokens.
+- [x] `ui::kit` painters with states; tests for every kind × state in all six themes (painting does not throw, contrast of labels ≥ 4.5:1).
+- [x] Move the existing controls onto the kit: top bar buttons and tabs, session strip buttons, arrangement header buttons (glass), piano roll chips and mode bar, browser rows, search and preview, look-and-feel buttons (incl. dialog primary and colour swatches), toggles, combo boxes, text fields, device and export cards.
+- [ ] Still painting on their own: knobs/faders (GlassMaterial, already shared), clip cells, drum pads, the synth editor (its own look and feel, in the plug-in), settings theme thumbnails. Views still use literal sizes in places; move them to `metrics` as they are touched.
 - [ ] Screens compared against the sheets one by one, starting with the main window.
 - [ ] GPU backdrop.

@@ -30,8 +30,16 @@ float controlRadius (juce::Rectangle<float>);
 // Paints a button's background and returns the colour for its label and icon. `colour` overrides the lit colour.
 juce::Colour button (juce::Graphics&, juce::Rectangle<float>, Kind, State, std::optional<juce::Colour> colour = std::nullopt);
 // A label centred in a button (or from the left edge), with an optional icon before it.
-void label (juce::Graphics&, juce::Rectangle<float>, const juce::String&, juce::Colour ink, float size = 0.0f, int weight = 500,
-            const juce::Path* icon = nullptr, float iconSize = 0.0f, bool leftAligned = false, bool chevron = false);
+using Icon = std::function<juce::Path (juce::Rectangle<float>)>;
+struct LabelStyle
+{
+    float size = 0.0f; // 0: theme().metrics.text
+    int weight = 500;
+    float iconSize = 11.0f;
+    std::optional<juce::Colour> iconColour; // the icon in its own colour (the red dot of Capture)
+    bool leftAligned = false, chevron = false;
+};
+void label (juce::Graphics&, juce::Rectangle<float>, const juce::String&, juce::Colour ink, const Icon& icon = {}, LabelStyle = {});
 // A switch: its track and thumb inside `area` (right-aligned), label not included.
 void switchControl (juce::Graphics&, juce::Rectangle<float> area, State);
 // A segmented control (view switch, editor modes). `drop`: a segment highlighted while something is dragged over it.

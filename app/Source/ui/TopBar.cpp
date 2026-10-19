@@ -4,6 +4,7 @@
 
 #include "../Strings.h"
 #include "Chrome.h"
+#include "Kit.h"
 #include "ScalePicker.h"
 #include "../engine/AudioEngine.h"
 #include "../model/Automation.h"
@@ -110,122 +111,36 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        // the look comes from the kit: a framed button, a capsule switch, record/punch in red, play round in glass
         const auto& t = theme();
-        auto r = getLocalBounds().toFloat().reduced (0.5f);
-        juce::Colour fill = t.panel, ink = t.text, border = t.line;
-        if (role == Role::record)
-            ink = t.record;
-        else if (accentInk)
-            ink = t.accent;
-        if (on)
+        const auto r = getLocalBounds().toFloat().reduced (0.5f);
+        using K = kit::Kind;
+        const K idle = framed || ! t.glass ? K::plain : K::ghost; // how a button of this place looks while off
+        const K kind = role == Role::play && icon && text.isEmpty() ? K::play
+                     : role == Role::record ? (on ? K::danger : idle)
+                     : role == Role::warning ? (on ? K::toggle : idle)
+                     : idle;
+        kit::State st;
+        st.on = on;
+        st.hover = isMouseOver() && isEnabled();
+        st.enabled = isEnabled();
+        auto ink = kit::button (g, r, kind, st, role == Role::warning ? std::optional<juce::Colour> (t.warning) : std::nullopt);
+        if (! on && isEnabled() && (role == Role::record || accentInk))
+            ink = role == Role::record ? t.record : t.accent;
+        if (kind == K::play && t.glass)
         {
-            const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : (role == Role::warning ? t.warning : t.accent));
-            fill = accent;
-            border = accent;
-            ink = t.inkOn (accent);
-            if ((role == Role::play || role == Role::warning) && t.glow > 0.0f)
-                juce::DropShadow (accent.withAlpha (0.6f), juce::roundToInt (14.0f * t.glow), {}).drawForRectangle (g, getLocalBounds().reduced (3));
-        }
-        else if (isMouseOver() && isEnabled())
-            fill = t.panel2;
-        if (! isEnabled())
-        {
-            fill = fill.withMultipliedAlpha (0.5f);
-            ink = t.dimText.withAlpha (0.6f);
-            border = border.withMultipliedAlpha (0.6f);
-        }
-        if (t.glass && role == Role::play && icon && text.isEmpty())
-        {
-            // Glass: play is a round green button at all times, glowing while the song plays.
-            const auto circle = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight()), juce::jmin (r.getWidth(), r.getHeight()));
-            juce::DropShadow (t.play.withAlpha (on ? 0.55f : 0.25f), on ? 12 : 6, { 0, 1 }).drawForRectangle (g, circle.toNearestInt().reduced (3));
-            g.setGradientFill (juce::ColourGradient (t.play.interpolatedWith (t.highlight(), 0.35f), circle.getX(), circle.getY(),
-                                                     t.play, circle.getX(), circle.getBottom(), false));
-            g.fillEllipse (circle);
-            // the gloss: a bright lens over the upper half and a thin light rim
-            const auto gloss = circle.reduced (circle.getWidth() * 0.16f, 0.0f).withHeight (circle.getHeight() * 0.5f).translated (0.0f, 1.5f);
-            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (0.6f), 0.0f, gloss.getY(), t.highlight().withAlpha (0.0f), 0.0f, gloss.getBottom(), false));
-            g.fillEllipse (gloss);
-            g.setColour (t.highlight().withAlpha (0.55f));
-            g.drawEllipse (circle.reduced (0.75f), 1.0f);
-            g.setColour (juce::Colours::white);
-            const float s = circle.getHeight() * 0.36f;
-            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (circle.getCentre().translated (s * 0.08f, 0.0f))));
-            return;
-        }
-        if (t.glass)
-        {
-            // Inside the transport capsule a button is only its icon until it is lit or under the mouse.
-            const float pill = r.getHeight () * 0.5f;
-            if (on && role == Role::normal && ! framed)
-            {
-                // a lit switch of the capsule (loop, follow, metronome): a soft tint and the icon in the accent
-                g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.22f : 0.3f));
-                g.fillRoundedRectangle (r, pill);
-                ink = t.accent;
-            }
-            else if (on)
-                glass::accent (g, r, fill, pill);
-            else if (framed)
-            {
-                glass::surface (g, r, fill, pill);
-                g.setColour (border.withMultipliedAlpha (0.8f));
-                g.drawRoundedRectangle (r, pill, 1.0f);
-            }
-            else if (isMouseOver () && isEnabled ())
-            {
-                g.setColour (t.panel2.withAlpha (0.8f));
-                g.fillRoundedRectangle (r, pill);
-            }
-        }
-        else
-        {
-            fillCell (g, r, fill);
-            strokeCell (g, r, border);
-        }
-
-        g.setColour (ink);
-        const auto font = t.uiFont (getWidth() < 34 ? 10.5f : (framed && t.glass ? 13.5f : 12.5f), 500);
-        const float s = iconSize > 0.0f ? iconSize : (text.isEmpty() ? 11.0f : 10.0f);
-        if (icon && text.isNotEmpty() && iconSize > 0.0f)
-        {
-            // icon and label as one group: centred, or from the left edge
-            const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
-            const float groupWidth = s + 9.0f + textWidth;
-            const float x0 = leftAligned ? r.getX() + 12.0f : r.getCentreX() - groupWidth * 0.5f;
-            if (iconColour)
-                g.setColour (isEnabled() ? *iconColour : iconColour->withAlpha (0.4f));
-            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre ({ x0 + s * 0.5f, r.getCentreY() })));
+            const float s = juce::jmin (r.getWidth(), r.getHeight()) * 0.36f;
             g.setColour (ink);
-            g.setFont (font);
-            g.drawText (text, juce::Rectangle<float> (x0 + s + 9.0f, r.getY(), textWidth + 4.0f, r.getHeight()), juce::Justification::centredLeft, false);
+            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (r.getCentre().translated (s * 0.08f, 0.0f))));
             return;
         }
-        if (icon)
-        {
-            const auto box = juce::Rectangle<float> (s, s).withCentre (text.isEmpty() ? r.getCentre() : juce::Point<float> (r.getX() + 8.0f + s * 0.5f, r.getCentreY()));
-            g.fillPath (icon (box));
-        }
-        if (text.isNotEmpty())
-        {
-            g.setFont (font);
-            const int iconRoom = icon ? juce::roundToInt (s + 12.0f) : 0;
-            if (chevron && t.glass)
-            {
-                const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
-                const float x0 = r.getCentreX() - (textWidth + 14.0f) * 0.5f;
-                g.drawText (text, juce::Rectangle<float> (x0, r.getY(), textWidth + 2.0f, r.getHeight()), juce::Justification::centredLeft, false);
-                g.setColour (ink.withAlpha (0.8f));
-                juce::Path v;
-                const auto c = juce::Point<float> (x0 + textWidth + 10.0f, r.getCentreY() + 1.0f);
-                v.startNewSubPath (c.x - 3.5f, c.y - 2.0f);
-                v.lineTo (c.x, c.y + 1.8f);
-                v.lineTo (c.x + 3.5f, c.y - 2.0f);
-                g.strokePath (v, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-                return;
-            }
-            g.drawText (text, getLocalBounds().withTrimmedLeft (iconRoom), juce::Justification::centred, false);
-        }
+        kit::LabelStyle style;
+        style.size = getWidth() < 34 ? 10.5f : (framed && t.glass ? 13.5f : 12.5f);
+        style.iconSize = iconSize > 0.0f ? iconSize : (text.isEmpty() ? 11.0f : 10.0f);
+        style.iconColour = iconColour.has_value() && isEnabled() ? iconColour : std::nullopt;
+        style.leftAligned = leftAligned;
+        style.chevron = chevron && t.glass;
+        kit::label (g, r, text, ink, icon ? kit::Icon (icon) : kit::Icon(), style);
     }
 
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
@@ -484,58 +399,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        const auto& t = theme();
-        auto r = getLocalBounds().toFloat().reduced (0.5f);
-        const float third = r.getWidth() / 3.0f;
-        const auto segment = [&] (int i) { return juce::Rectangle<float> (r.getX() + third * (float) i, r.getY(), third, r.getHeight()); };
-        const juce::String labels[] { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab };
-        if (t.glass)
-        {
-            // A sunken pill track; the shown view is a raised glass pill in it.
-            const float pill = r.getHeight() * 0.5f;
-            g.setColour (t.panel2.withAlpha (t.isLight() ? 0.85f : 0.7f));
-            g.fillRoundedRectangle (r, pill);
-            g.setColour (t.line.withAlpha (0.6f));
-            g.drawRoundedRectangle (r, pill, 1.0f);
-            const auto active = segment (view).reduced (3.0f);
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
-            glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
-            for (int i = 0; i < 3; ++i)
-            {
-                g.setColour (i == view ? t.text : t.dimText);
-                g.setFont (t.uiFont (14.0f, i == view ? 600 : 500));
-                g.drawText (labels[i], segment (i).toNearestInt(), juce::Justification::centred, false);
-            }
-            if (hovering)
-            {
-                g.setColour (t.accent.withAlpha (0.2f));
-                g.fillRoundedRectangle (segment (arrangementView), pill);
-            }
-            return;
-        }
-        g.setColour (t.panel);
-        g.fillRoundedRectangle (r, t.radius);
-        for (int i = 0; i < 3; ++i)
-        {
-            auto area = segment (i);
-            const bool active = i == view;
-            if (active)
-            {
-                g.setColour (t.panel2);
-                g.fillRoundedRectangle (area, t.radius);
-                g.setColour (t.accent);
-                g.fillRect (area.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
-            }
-            g.setColour (active ? t.text : t.dimText);
-            g.setFont (t.uiFont (12.0f, 500));
-            g.drawText (labels[i], area.toNearestInt(), juce::Justification::centred, false);
-        }
-        if (hovering) // a clip is held over the Arrangement tab
-        {
-            g.setColour (t.accent.withAlpha (0.25f));
-            g.fillRoundedRectangle (segment (arrangementView), t.radius);
-        }
-        strokeCell (g, getLocalBounds().toFloat(), t.line);
+        kit::segmented (g, getLocalBounds().toFloat().reduced (0.5f),
+                        { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab },
+                        view, -1, hovering ? (int) arrangementView : -1);
     }
 
 private:
