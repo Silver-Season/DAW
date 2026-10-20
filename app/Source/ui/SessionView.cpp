@@ -1303,9 +1303,11 @@ public:
         const auto r = getLocalBounds().toFloat();
         if (view.underGlass > 0)
         {
-            // glass over the clip grid: what scrolls beneath shows through, blurred
-            const auto area = view.grid->getLocalArea (this, getLocalBounds());
-            glass::frosted (g, r, t.metrics.panelRadius, glass::backdrop (*view.grid, area), t.panel);
+            // a calm glass card over the clip grid (the blurred grid showing through moved under the mouse and read
+            // as stray shadows)
+            glass::surface (g, r, t.panel, t.metrics.panelRadius);
+            g.setColour (t.line.withAlpha (t.isLight() ? 0.5f : 0.6f));
+            g.drawRoundedRectangle (r.reduced (0.5f), t.metrics.panelRadius, 1.0f);
             return;
         }
         fillCell (g, r, t.panel);
@@ -1434,9 +1436,11 @@ public:
         const auto r = getLocalBounds().toFloat();
         if (view.underGlass > 0)
         {
-            // glass over the clip grid: what scrolls beneath shows through, blurred
-            const auto area = view.grid->getLocalArea (this, getLocalBounds());
-            glass::frosted (g, r, t.metrics.panelRadius, glass::backdrop (*view.scenes, area), t.panel);
+            // a calm glass card over the clip grid (the blurred grid showing through moved under the mouse and read
+            // as stray shadows)
+            glass::surface (g, r, t.panel, t.metrics.panelRadius);
+            g.setColour (t.line.withAlpha (t.isLight() ? 0.5f : 0.6f));
+            g.drawRoundedRectangle (r.reduced (0.5f), t.metrics.panelRadius, 1.0f);
             return;
         }
         fillCell (g, r, t.panel);

@@ -355,11 +355,10 @@ void row (juce::Graphics& g, juce::Rectangle<float> r, State s)
         const float radius = juce::jmin (t.metrics.controlRadius + 2.0f, r.getHeight() * 0.5f);
         if (s.on)
         {
-            g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.16f : 0.2f));
+            // the selection is a piece of glass laid on the list, faintly tinted with the accent
+            glass::bead (g, r, radius);
+            g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.10f : 0.12f));
             g.fillRoundedRectangle (r, radius);
-            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.6f : 0.12f), 0.0f, r.getY(),
-                                                     t.highlight().withAlpha (0.0f), 0.0f, r.getCentreY(), false));
-            g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
         }
         else
         {

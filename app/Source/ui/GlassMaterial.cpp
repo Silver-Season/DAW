@@ -389,36 +389,39 @@ knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour col
     const float start = -juce::MathConstants<float>::pi * 0.75f, end = -start;
     const float angle = start + value * (end - start);
     const float outer = juce::jmax (1.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f - 1.5f);
-    const float ringW = juce::jlimit (2.0f, 4.0f, outer * 0.2f);
+    const float ringW = juce::jlimit (1.8f, 3.4f, outer * 0.13f);
     const float ringR = outer - ringW * 0.5f;
     const auto c = r.getCentre ();
-    const float sphereR = juce::jmax (2.0f, outer - ringW - 1.0f);
+    // the sphere fills the knob; the ring is laid round its edge, as on a dial
+    const float sphereR = juce::jmax (2.0f, outer - 0.5f);
     const auto sphere = juce::Rectangle<float> (sphereR * 2.0f, sphereR * 2.0f).withCentre (c);
     const bool lit = value > 0.001f || bipolar;
     {
         Liquid liquid (g, r.expanded (2.0f).getSmallestIntegerContainer ());
         auto& b = liquid.backdrop ();
-        auto arc = [&] (float a, float e, juce::Colour col, float width)
-        {
-            juce::Path path;
-            path.addCentredArc (c.x, c.y, ringR, ringR, 0.0f, a, e, true);
-            b.setColour (col);
-            b.strokePath (path, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        };
-        // the groove, sunk into the panel
-        arc (start, end, light ? t.line.withAlpha (0.7f) : t.shadow ().withAlpha (0.5f), ringW);
-        if (std::abs (angle - (bipolar ? 0.0f : start)) > 0.01f)
-            arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour, ringW);
-        // the sphere's body: brighter at the top, a little of the ring's colour caught in its lower half
-        b.setGradientFill (juce::ColourGradient (light ? t.panel.interpolatedWith (t.highlight (), 0.5f) : t.panel2.interpolatedWith (t.highlight (), 0.22f), c.x, sphere.getY (),
-                                                 (light ? t.panel.interpolatedWith (t.line, 0.75f) : t.panel.interpolatedWith (t.shadow (), 0.25f)),
+        // the sphere's body: brighter at the top, darker toward the bottom
+        b.setGradientFill (juce::ColourGradient (light ? t.panel.interpolatedWith (t.highlight (), 0.6f) : t.panel2.interpolatedWith (t.highlight (), 0.2f), c.x, sphere.getY (),
+                                                 (light ? t.panel.interpolatedWith (t.line, 0.7f) : t.panel.interpolatedWith (t.shadow (), 0.3f)),
                                                  c.x, sphere.getBottom (), false));
         b.fillEllipse (sphere);
         liquid.lens (sphere, sphereR, 0.0f);
     }
-    // where the sphere meets the groove: a fine dark seam, so it sits in the ring rather than on it
-    g.setColour (t.shadow ().withAlpha (light ? 0.16f : 0.45f));
-    g.drawEllipse (sphere.expanded (0.4f), 0.8f);
+    auto arc = [&] (float a, float e, juce::Colour col, float width)
+    {
+        juce::Path path;
+        path.addCentredArc (c.x, c.y, ringR, ringR, 0.0f, a, e, true);
+        g.setColour (col);
+        g.strokePath (path, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    };
+    // the groove along the rim, then the value in the ring's colour
+    arc (start, end, light ? t.line.withAlpha (0.55f) : t.shadow ().withAlpha (0.45f), ringW);
+    if (std::abs (angle - (bipolar ? 0.0f : start)) > 0.01f)
+        arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour, ringW);
+    // a fine seam inside the ring, so the dome rises from it
+    g.setColour (t.shadow ().withAlpha (light ? 0.10f : 0.35f));
+    g.drawEllipse (sphere.reduced (ringW + 0.4f), 0.7f);
+    const float domeR = sphereR - ringW - 0.5f;
+    const auto dome = sphere.reduced (ringW + 0.5f);
 
     const auto dir = lightFrom (c);
     const float k = t.material > 0.0f ? t.material : 0.0f;
@@ -426,31 +429,31 @@ knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour col
     {
         juce::Graphics::ScopedSaveState save (g);
         juce::Path clip;
-        clip.addEllipse (sphere);
+        clip.addEllipse (dome);
         g.reduceClipRegion (clip);
         // the ring's colour gathered at the edge away from the light: light that passed through the glass
         if (lit)
         {
-            const auto far = c - dir * sphereR * 0.85f;
+            const auto far = c - dir * domeR * 0.85f;
             g.setGradientFill (juce::ColourGradient (colour.withAlpha ((light ? 0.35f : 0.45f) * k), far, colour.withAlpha (0.0f), c, true));
-            g.fillEllipse (sphere);
+            g.fillEllipse (dome);
         }
         // the crescent along the lit rim
         juce::Path crescent;
         const float towards = std::atan2 (dir.x, -dir.y);
-        crescent.addCentredArc (c.x, c.y, sphereR - 1.2f, sphereR - 1.2f, 0.0f, towards - 1.05f, towards + 1.05f, true);
+        crescent.addCentredArc (c.x, c.y, domeR - 1.0f, domeR - 1.0f, 0.0f, towards - 1.05f, towards + 1.05f, true);
         g.setColour (t.highlight ().withAlpha ((light ? 0.95f : 0.55f) * k));
-        g.strokePath (crescent, juce::PathStrokeType (juce::jmax (1.0f, sphereR * 0.09f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.strokePath (crescent, juce::PathStrokeType (juce::jmax (1.0f, domeR * 0.09f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
     // the pointer
     g.setColour (t.text.withAlpha (0.9f));
-    g.drawLine (c.x + std::sin (angle) * sphereR * 0.2f, c.y - std::cos (angle) * sphereR * 0.2f,
-                c.x + std::sin (angle) * sphereR * 0.7f, c.y - std::cos (angle) * sphereR * 0.7f, juce::jmax (1.4f, sphereR * 0.13f));
+    g.drawLine (c.x + std::sin (angle) * domeR * 0.25f, c.y - std::cos (angle) * domeR * 0.25f,
+                c.x + std::sin (angle) * domeR * 0.78f, c.y - std::cos (angle) * domeR * 0.78f, juce::jmax (1.4f, domeR * 0.13f));
     // the bright point where the light enters
     if (k > 0.0f)
     {
-        const auto spot = c + dir * sphereR * 0.48f;
-        const float sr = juce::jmax (1.2f, sphereR * 0.2f);
+        const auto spot = c + dir * domeR * 0.5f;
+        const float sr = juce::jmax (1.2f, domeR * 0.2f);
         g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.95f : 0.8f) * k), spot, t.highlight ().withAlpha (0.0f), spot.translated (sr, 0.0f), true));
         g.fillEllipse (juce::Rectangle<float> (sr * 2.0f, sr * 2.0f).withCentre (spot));
     }
@@ -517,19 +520,37 @@ public:
             installed = true;
         }
         for (auto& w : lit)
-            if (w.getComponent() == &c)
+            if (w.component.getComponent() == &c)
                 return;
-        lit.erase (std::remove_if (lit.begin(), lit.end(), [] (const auto& w) { return w.getComponent() == nullptr; }), lit.end());
-        lit.emplace_back (&c);
+        lit.erase (std::remove_if (lit.begin(), lit.end(), [] (const auto& w) { return w.component.getComponent() == nullptr; }), lit.end());
+        lit.push_back ({ &c, 0.0f });
     }
 
     // The smoothed pointer in screen coordinates, if the mouse has been seen.
     std::optional<juce::Point<float>> pointer() const { return seen ? std::optional<juce::Point<float>> (smoothed) : std::nullopt; }
 
+    // How much the pointer touches the glass of `c`, 0..1: rises as the mouse comes near, full while it is held on it,
+    // and falls back smoothly when the mouse leaves (slowly at first, so a quick flick away still fades out).
+    float touchOf (juce::Component& c) const
+    {
+        for (const auto& w : lit)
+            if (w.component.getComponent() == &c)
+                return w.touch;
+        return 0.0f;
+    }
+
 private:
+    struct Entry
+    {
+        juce::Component::SafePointer<juce::Component> component;
+        float touch = 0.0f;
+    };
+
     LightTracker() = default;
     void mouseMove (const juce::MouseEvent& e) override { follow (e.getScreenPosition().toFloat()); }
     void mouseDrag (const juce::MouseEvent& e) override { follow (e.getScreenPosition().toFloat()); }
+    void mouseDown (const juce::MouseEvent& e) override { follow (e.getScreenPosition().toFloat()); }
+    void mouseUp (const juce::MouseEvent& e) override { follow (e.getScreenPosition().toFloat()); }
     void follow (juce::Point<float> p)
     {
         target = p;
@@ -546,23 +567,44 @@ private:
     }
     void timerCallback() override
     {
+        static constexpr float kReach = 140.0f; // the glass starts to answer within this distance of the pointer
         const double now = juce::Time::getMillisecondCounterHiRes();
         const float dt = (float) juce::jlimit (0.0, 0.05, (now - last) / 1000.0);
         last = now;
         const auto previous = smoothed;
         smoothed += (target - smoothed) * (1.0f - std::exp (-dt * 13.0f)); // the study's damping
-        if (smoothed.getDistanceFrom (previous) < 0.25f)
-        {
-            stopTimer();
-            return;
-        }
+        const bool moving = smoothed.getDistanceFrom (previous) >= 0.25f;
+        bool settling = false;
         for (auto& w : lit)
-            if (auto* c = w.getComponent(); c != nullptr && c->isShowing()
-                && c->getScreenBounds().expanded (320).toFloat().contains (smoothed))
+        {
+            auto* c = w.component.getComponent();
+            if (c == nullptr)
+                continue;
+            float goal = 0.0f;
+            if (c->isShowing())
+            {
+                const auto bounds = c->getScreenBounds().toFloat();
+                const float dx = juce::jmax (0.0f, juce::jmax (bounds.getX() - target.x, target.x - bounds.getRight()));
+                const float dy = juce::jmax (0.0f, juce::jmax (bounds.getY() - target.y, target.y - bounds.getBottom()));
+                const float near = juce::jlimit (0.0f, 1.0f, 1.0f - std::sqrt (dx * dx + dy * dy) / kReach);
+                goal = c->isMouseButtonDown (true) && c->isMouseOver (true) ? 1.0f : 0.6f * near * near;
+            }
+            // quick to answer, slower to let go
+            const float rate = goal > w.touch ? 12.0f : 4.0f;
+            const float before = w.touch;
+            w.touch += (goal - w.touch) * (1.0f - std::exp (-dt * rate));
+            if (std::abs (goal - w.touch) < 0.002f)
+                w.touch = goal;
+            const bool changed = std::abs (w.touch - before) > 0.001f;
+            settling = settling || w.touch != goal;
+            if (c->isShowing() && (changed || (moving && c->getScreenBounds().expanded (320).toFloat().contains (smoothed))))
                 c->repaint();
+        }
+        if (! moving && ! settling)
+            stopTimer();
     }
 
-    std::vector<juce::Component::SafePointer<juce::Component>> lit;
+    std::vector<Entry> lit;
     juce::Point<float> target, smoothed;
     double last = 0.0;
     bool installed = false, seen = false;
@@ -670,7 +712,7 @@ void Liquid::compose ()
     // it is held (dragging a fader or a knob); lenses that are prisms already (the view switch) keep their own
     float touch = 0.0f;
     if (! litStack.empty() && litStack.back()->isEnabled())
-        touch = litStack.back()->isMouseButtonDown (true) ? 1.0f : (litStack.back()->isMouseOver (true) ? 0.45f : 0.0f);
+        touch = LightTracker::get().touchOf (*litStack.back());
     // what lies under the lens sits a little deeper than the glass: it moves against the pointer (parallax)
     const auto under = litStack.empty() ? juce::Point<float>() : parallax (*litStack.back(), 2.0f);
     for (auto b : boxes)
