@@ -94,6 +94,14 @@ public:
     std::function<void()> onClick;
     std::function<void()> onPopup; // right mouse button
 
+private:
+    std::unique_ptr<juce::VBlankAttachment> fade;
+    double fadeStart = 0.0;
+    float fadeFrom = 0.0f, amount = 0.0f; // how far the lit state has appeared
+    bool fading = false;
+
+public:
+
     IconButton (std::function<juce::Path (juce::Rectangle<float>)> iconFn, const juce::String& label, Role r, const juce::String& help)
         : icon (std::move (iconFn)), text (label), role (r)
     {
@@ -102,11 +110,29 @@ public:
 
     void setOn (bool v)
     {
-        if (on != v)
+        if (on == v)
+            return;
+        on = v;
+        // glass: the lit pane appears (and goes) over a quarter of a second instead of switching
+        if (theme().glass && isShowing())
         {
-            on = v;
-            repaint();
+            fadeStart = juce::Time::getMillisecondCounterHiRes();
+            fadeFrom = amount;
+            fading = true;
+            if (fade == nullptr) // kept for the button's life; idle between fades
+                fade = std::make_unique<juce::VBlankAttachment> (this, [this] {
+                    if (! fading)
+                        return;
+                    const float p = (float) juce::jlimit (0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - fadeStart) / 260.0);
+                    const float eased = 1.0f - (1.0f - p) * (1.0f - p) * (1.0f - p);
+                    amount = fadeFrom + ((on ? 1.0f : 0.0f) - fadeFrom) * eased;
+                    fading = p < 1.0f;
+                    repaint();
+                });
         }
+        else
+            amount = on ? 1.0f : 0.0f;
+        repaint();
     }
 
     void paint (juce::Graphics& g) override
@@ -121,12 +147,15 @@ public:
         const auto floatBy = t.glass ? glass::parallax (*this, 1.2f) : juce::Point<float>();
         using K = kit::Kind;
         const K idle = framed || ! t.glass ? K::plain : K::ghost; // how a button of this place looks while off
+        // while the pane fades out the button still draws its lit state, fading
+        const bool shownOn = on || amount > 0.001f;
         const K kind = role == Role::play && icon && text.isEmpty() ? K::play
-                     : role == Role::record ? (on ? K::danger : idle)
-                     : role == Role::warning ? (on ? K::toggle : idle)
+                     : role == Role::record ? (shownOn ? K::danger : idle)
+                     : role == Role::warning ? (shownOn ? K::toggle : idle)
                      : idle;
         kit::State st;
-        st.on = on;
+        st.on = shownOn;
+        st.amount = amount;
         st.hover = isMouseOver() && isEnabled();
         st.enabled = isEnabled();
         auto ink = kit::button (g, r, kind, st, role == Role::warning ? std::optional<juce::Colour> (t.warning) : std::nullopt);
@@ -390,17 +419,20 @@ public:
         view = v;
         if (animationsEnabled != nullptr && ! animationsEnabled())
         {
-            slide.reset();
+            sliding = false;
             repaint();
             return;
         }
         slideStart = juce::Time::getMillisecondCounterHiRes();
         if (slide == nullptr)
             slide = std::make_unique<juce::VBlankAttachment> (this, [this] {
-                if (slideProgress() >= 1.0f)
-                    slide.reset();
+                // kept alive between slides (destroying it inside its own callback is not allowed); idle once settled
+                if (! sliding)
+                    return;
+                sliding = slideProgress() < 1.0f;
                 repaint();
             });
+        sliding = true;
         repaint();
     }
 
@@ -431,7 +463,7 @@ private:
     int segmentAt (int x) const { return juce::jlimit (0, 2, x * 3 / juce::jmax (1, getWidth())); }
     float slideProgress() const
     {
-        return slide == nullptr ? 1.0f : (float) juce::jlimit (0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - slideStart) / kSlideMs);
+        return ! sliding ? 1.0f : (float) juce::jlimit (0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - slideStart) / kSlideMs);
     }
     // where the lens is now: eased out with a slight overshoot, like glass that slides and settles
     float slidePosition() const
@@ -444,6 +476,7 @@ private:
         return from + ((float) view - from) * eased;
     }
     std::unique_ptr<juce::VBlankAttachment> slide;
+    bool sliding = false;
     double slideStart = 0.0;
     float from = 0.0f;
     int view = session;

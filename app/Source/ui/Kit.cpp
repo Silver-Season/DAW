@@ -38,13 +38,16 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         const auto circle = r.withSizeKeepingCentre (d, d);
         if (t.glass)
         {
-            // clear glass; while playing the light of the accent gathers in it and the rim turns into a spectrum
-            juce::ignoreUnused (play);
-            const auto light = colour.value_or (t.accentFill);
-            glass::litBead (g, circle, d * 0.5f, true, light, s.on ? 1.0f : 0.0f);
-            if (! s.on && (s.hover || s.down))
-                glass::spectrumRim (g, circle, d * 0.5f, s.down ? 0.45f : 0.3f);
-            return s.on ? (t.isLight() ? t.accent : t.accent.interpolatedWith (t.highlight(), 0.3f)) : t.text;
+            // clear glass; while playing a soft green light appears in it and its edge turns green with the icon
+            const float lit = s.on ? juce::jlimit (0.0f, 1.0f, s.amount) : 0.0f;
+            glass::litBead (g, circle, d * 0.5f, true, play, lit);
+            if (s.hover || s.down)
+            {
+                g.setColour (t.highlight().withAlpha (s.down ? 0.06f : (t.isLight() ? 0.2f : 0.05f)));
+                g.fillEllipse (circle);
+            }
+            const auto green = t.isLight() ? play.interpolatedWith (t.text, 0.25f) : play;
+            return t.text.interpolatedWith (green, lit);
         }
         // classic: a framed square that lights up while playing
         if (s.on && t.glow > 0.0f)
@@ -78,27 +81,26 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
     }
     else if (kind == Kind::ghost && ! (s.on && colour.has_value()))
     {
-        // in the transport capsule: only the icon; lit is a soft tint with the icon in the accent
-        if (s.on)
+        // in the transport capsule: the icon on a faint pane of glass; when it turns on the glass comes forward (animated
+        // by the button through `amount`), its edge and a little light in it in the accent, the icon in the accent
+        const float lit = s.on && s.enabled ? juce::jlimit (0.0f, 1.0f, s.amount) : 0.0f;
+        const auto pane = r.reduced (1.0f);
+        const float paneRadius = juce::jmax (0.0f, radius - 1.0f);
+        const float presence = juce::jmax (lit, s.enabled ? (s.down ? 0.95f : (s.hover ? 0.75f : 0.45f)) : 0.25f); // every button sits on its glass; on, the glass comes forward
+        if (presence > 0.0f)
         {
-            // lit like the other glass: the accent gathered in a small bead, the icon in the accent
-            glass::litBead (g, r.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f), false, t.accentFill, 0.75f);
-            ink = t.accent;
+            g.beginTransparencyLayer (presence);
+            glass::litBead (g, pane, paneRadius, false, litColour, lit > 0.0f ? 1.0f : 0.0f);
+            g.endTransparencyLayer();
         }
-        else if ((s.hover || s.down) && s.enabled)
-        {
-            g.setColour (t.panel2.withAlpha (s.down ? 1.0f : 0.8f));
-            g.fillRoundedRectangle (r, radius);
-        }
-        if (! s.enabled)
-            ink = t.dimText.withAlpha (0.6f);
+        ink = s.enabled ? t.text.interpolatedWith (t.accent, lit) : t.dimText.withAlpha (0.6f);
     }
     else if (lit && kind != Kind::primary && s.enabled)
     {
         // a toggle that is on, record armed: the glass lit from inside by its colour, the label in that colour
-        glass::litBead (g, r, radius, false, litColour, s.down ? 0.8f : 1.0f);
+        glass::litBead (g, r, radius, false, litColour, (s.down ? 0.8f : 1.0f) * juce::jlimit (0.0f, 1.0f, s.amount));
         // the middle of the lit glass is about the body with the glow over it; the label keeps 3:1 against it
-        const auto middle = (t.isLight() ? t.highlight() : t.panel2).interpolatedWith (litColour, t.isLight() ? 0.47f : 0.62f);
+        const auto middle = (t.isLight() ? t.highlight() : t.panel2).interpolatedWith (litColour, t.isLight() ? 0.18f : 0.24f);
         ink = t.text;
         for (const auto candidate : { t.isLight() ? litColour.interpolatedWith (t.text, 0.35f) : litColour.interpolatedWith (t.highlight(), 0.45f),
                                       t.text, t.background })

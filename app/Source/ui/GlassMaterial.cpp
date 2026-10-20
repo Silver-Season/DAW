@@ -283,8 +283,8 @@ spectrumRim (juce::Graphics& g, juce::Rectangle<float> r, float radius, float al
 void
 litBead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juce::Colour colour, float strength)
 {
-    // Glass lit from inside: the clear bead with the light of `colour` gathered in it and spilling softly round it,
-    // the rim tinted, and the spectrum round the edge while it is lit.
+    // Glass lit from inside, quietly: the clear bead with a little of the light of `colour` scattered in it and its edge
+    // drawn in that colour.
     const auto& t = theme ();
     if (round)
         radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
@@ -302,17 +302,17 @@ litBead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, 
     {
         juce::Graphics::ScopedSaveState save (g);
         g.reduceClipRegion (shape);
-        juce::ColourGradient glow (colour.withAlpha ((t.isLight () ? 0.45f : 0.6f) * strength), r.getCentreX (), r.getCentreY () + r.getHeight () * 0.15f,
-                                   colour.withAlpha (0.12f * strength), r.getX (), r.getY (), true);
+        // a soft light scattered in the glass, strongest low in it, and gathered along the rim inside
+        juce::ColourGradient glow (colour.withAlpha ((t.isLight () ? 0.20f : 0.26f) * strength), r.getCentreX (), r.getBottom () - r.getHeight () * 0.2f,
+                                   colour.withAlpha (0.0f), r.getCentreX (), r.getY () - r.getHeight () * 0.2f, true);
         g.setGradientFill (glow);
         g.fillRect (r);
-        // the light gathers along the rim inside, as in lit glass
-        g.setColour (colour.withAlpha (0.35f * strength));
+        g.setColour (colour.withAlpha (0.16f * strength));
         g.strokePath (shape, juce::PathStrokeType (juce::jlimit (2.0f, 4.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.12f)));
     }
-    g.setColour (colour.withAlpha (0.55f * strength));
-    g.strokePath (shape, juce::PathStrokeType (1.0f));
-    spectrumRim (g, r, radius, (t.isLight () ? 0.45f : 0.55f) * strength * (t.material > 0.0f ? 1.0f : 0.0f), 1.2f);
+    // the edge in the colour: the clearest sign that it is on, and still quiet
+    g.setColour (colour.withAlpha ((t.isLight () ? 0.75f : 0.65f) * strength));
+    g.strokePath (shape, juce::PathStrokeType (1.2f));
 }
 
 namespace

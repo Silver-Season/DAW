@@ -13,6 +13,7 @@ namespace ui::kit
 struct State
 {
     bool hover = false, down = false, on = false, focus = false, enabled = true;
+    float amount = 1.0f; // glass: how far the lit state has appeared (a button animates it from 0 to 1 when it turns on)
 };
 
 enum class Kind
