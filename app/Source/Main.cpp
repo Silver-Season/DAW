@@ -170,19 +170,20 @@ private:
     {
         static const char* themes[]{ "glass-light", "glass-dark" };
         auto* content = dynamic_cast<MainComponent*> (mainWindow->getContentComponent ());
-        if (snapshotStep >= 56)
+        if (snapshotStep >= 32)
         {
             stopTimer ();
             quit ();
             return;
         }
-        const int capture = snapshotStep / 2;
+        // 0-5: both themes in three views, then (as 18-27) the appearance tab, synth, mix, export and drums per theme
+        const int capture = snapshotStep / 2 < 6 ? snapshotStep / 2 : snapshotStep / 2 + 12;
         if (snapshotStep % 2 == 0)
         {
             snapshotWindow.reset ();
-            if (capture < 18)
+            if (capture < 6)
             {
-                ThemeManager::get ().setCurrent (themes[(capture / 3) % 2]);
+                ThemeManager::get ().setCurrent (themes[capture / 3]);
                 if (content->isArrangementShown ())
                     content->getCommandManager ().invokeDirectly (ui::commands::switchView, false);
                 content->getDetailPanel ().setEditorMode (false);
@@ -228,7 +229,7 @@ private:
                 if (!stream.openedOk () || !juce::PNGImageFormat ().writeImageToStream (image, stream))
                     setApplicationReturnValue (1);
             };
-            if (capture < 18)
+            if (capture < 6)
             {
                 const char* views[]{ "session", "midi", "arrangement" };
                 save (*content, juce::String (themes[capture / 3]) + "-" + views[capture % 3]);

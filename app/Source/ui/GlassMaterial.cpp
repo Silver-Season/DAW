@@ -170,11 +170,16 @@ surface (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float r
 void
 bead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juce::Colour fringe)
 {
+    // Clear glass over the ground, as in the references: a body only a little lighter than what is under it, a thin
+    // rim that catches the light at the top and, more faintly, at the bottom where it leaves the glass, and only a
+    // breath of shadow (a heavy shadow under small buttons reads as dirt, above all on dark ground).
+    juce::ignoreUnused (fringe);
     const auto& t = theme ();
     if (round)
         radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
     radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
     const float k = t.material > 0.0f ? t.material : 0.0f;
+    const bool light = t.isLight ();
     const auto shape = [&] (juce::Rectangle<float> b, float rad) {
         juce::Path p;
         if (round)
@@ -183,43 +188,78 @@ bead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juc
             p.addRoundedRectangle (b, rad);
         return p;
     };
-    const float thick = juce::jlimit (1.2f, 2.6f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.07f);
-    if (fringe.isTransparent ())
-        fringe = t.accentFill;
-    // shadow under the glass
-    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.16f : 0.5f), juce::roundToInt (thick * 3.5f) + 2, { 0, juce::roundToInt (thick) + 1 })
-      .drawForPath (g, shape (r, radius));
-    // the body: near white in light themes, a lifted panel in dark ones, lighter toward the top
-    const auto body = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.12f);
-    const auto lower = t.isLight () ? t.panel.interpolatedWith (t.line, 0.18f) : t.panel;
-    g.setGradientFill (juce::ColourGradient (body, 0.0f, r.getY (), lower, 0.0f, r.getBottom (), false));
+    if (light)
+        juce::DropShadow (t.shadow ().withAlpha (0.07f), 4, { 0, 1 }).drawForPath (g, shape (r, radius));
+    const auto top = light ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.10f);
+    const auto bottom = light ? t.panel.interpolatedWith (t.highlight (), 0.4f) : t.panel2.interpolatedWith (t.panel, 0.5f);
+    g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
     g.fillPath (shape (r, radius));
     if (k > 0.0f)
     {
-        juce::Graphics::ScopedSaveState save (g);
-        g.reduceClipRegion (shape (r, radius));
-        // caustic: light gathered along the bottom inside the rim
-        const auto low = r.withTrimmedTop (r.getHeight () * 0.55f);
-        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha (0.0f), 0.0f, low.getY (),
-                                                 t.highlight ().withAlpha ((t.isLight () ? 0.7f : 0.16f) * k), 0.0f, r.getBottom () - thick, false));
-        g.fillRect (low);
-        // gloss on the upper half
-        const auto top = r.reduced (thick * 1.5f).withHeight (r.getHeight () * 0.45f);
-        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.85f : 0.22f) * k), 0.0f, top.getY (),
-                                                 t.highlight ().withAlpha (0.0f), 0.0f, top.getBottom (), false));
-        g.fillPath (shape (top, juce::jmax (0.0f, radius - thick * 1.5f)));
-        // the refracting rim: a darker band just inside the edge, lit cyan where the light bends at the lower left
-        g.setColour (t.shadow ().withAlpha ((t.isLight () ? 0.07f : 0.2f) * k));
-        g.strokePath (shape (r.reduced (thick * 1.1f), juce::jmax (0.0f, radius - thick * 1.1f)), juce::PathStrokeType (thick * 0.9f));
-        juce::ColourGradient rim (t.highlight ().withAlpha (t.isLight () ? 1.0f : 0.5f), r.getRight (), r.getY (),
-                                  fringe.withAlpha (0.75f * k), r.getX (), r.getBottom (), false);
-        rim.addColour (0.55, t.highlight ().withAlpha (t.isLight () ? 0.85f : 0.3f));
+        juce::ColourGradient rim (t.highlight ().withAlpha ((light ? 1.0f : 0.42f) * k), 0.0f, r.getY (),
+                                  t.highlight ().withAlpha ((light ? 0.55f : 0.14f) * k), 0.0f, r.getBottom (), false);
+        rim.addColour (0.5, t.highlight ().withAlpha ((light ? 0.25f : 0.05f) * k));
         g.setGradientFill (rim);
-        g.strokePath (shape (r.reduced (thick * 0.5f), juce::jmax (0.0f, radius - thick * 0.5f)), juce::PathStrokeType (thick));
+        g.strokePath (shape (r.reduced (0.9f), juce::jmax (0.0f, radius - 0.9f)), juce::PathStrokeType (1.1f));
     }
-    // a hairline outside, so the bead holds its shape on light ground
-    g.setColour (t.line.withAlpha (t.isLight () ? 0.55f : 0.8f));
+    // a hairline outside, so the bead holds its shape on light ground and stays apart from dark ground
+    g.setColour (light ? t.line.withAlpha (0.5f) : t.shadow ().withAlpha (0.35f));
     g.strokePath (shape (r.reduced (0.25f), radius), juce::PathStrokeType (0.75f));
+}
+
+void
+spectrumRim (juce::Graphics& g, juce::Rectangle<float> r, float radius, float alpha, float width)
+{
+    if (alpha <= 0.0f || r.isEmpty ())
+        return;
+    const auto& t = theme ();
+    radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
+    juce::Path p;
+    p.addRoundedRectangle (r.reduced (width * 0.5f), juce::jmax (0.0f, radius - width * 0.5f));
+    const auto c = r.getCentre ();
+    juce::PathFlatteningIterator it (p, {}, 0.5f);
+    while (it.next ())
+    {
+        const float mx = (it.x1 + it.x2) * 0.5f - c.x, my = (it.y1 + it.y2) * 0.5f - c.y;
+        // the hue turns with the direction of the rim, the same order as the prism lens of the view switch
+        const float hue = std::fmod (std::atan2 (my, mx) / juce::MathConstants<float>::twoPi + 1.25f, 1.0f);
+        g.setColour (juce::Colour::fromHSV (hue, t.isLight () ? 0.85f : 0.75f, 1.0f, alpha));
+        g.drawLine (it.x1, it.y1, it.x2, it.y2, width);
+    }
+}
+
+void
+litBead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juce::Colour colour, float strength)
+{
+    // Glass lit from inside: the clear bead with the light of `colour` gathered in it and spilling softly round it,
+    // the rim tinted, and the spectrum round the edge while it is lit.
+    const auto& t = theme ();
+    if (round)
+        radius = juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f;
+    radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
+    strength = juce::jlimit (0.0f, 1.0f, strength);
+    juce::Path shape;
+    if (round)
+        shape.addEllipse (r);
+    else
+        shape.addRoundedRectangle (r, radius);
+    if (strength > 0.0f)
+        juce::DropShadow (colour.withAlpha ((t.isLight () ? 0.30f : 0.45f) * strength), juce::roundToInt (juce::jmin (r.getWidth (), r.getHeight ()) * 0.45f), {})
+          .drawForPath (g, shape);
+    bead (g, r, radius, round);
+    if (strength <= 0.0f)
+        return;
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (shape);
+        juce::ColourGradient glow (colour.withAlpha ((t.isLight () ? 0.42f : 0.55f) * strength), r.getCentreX (), r.getCentreY () + r.getHeight () * 0.15f,
+                                   colour.withAlpha (0.08f * strength), r.getX (), r.getY (), true);
+        g.setGradientFill (glow);
+        g.fillRect (r);
+    }
+    g.setColour (colour.withAlpha (0.55f * strength));
+    g.strokePath (shape, juce::PathStrokeType (1.0f));
+    spectrumRim (g, r, radius, (t.isLight () ? 0.45f : 0.55f) * strength * (t.material > 0.0f ? 1.0f : 0.0f), 1.2f);
 }
 
 void

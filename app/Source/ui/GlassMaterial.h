@@ -21,6 +21,12 @@ void frosted (juce::Graphics&, juce::Rectangle<float> r, float radius, const juc
 // near-white body, a thick bright rim whose lower edge bends the light into a cyan fringe, a gloss on top and a caustic
 // glow along the bottom. `round` draws a circle in r.
 void bead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round = false, juce::Colour fringe = juce::Colour());
+// A thin line of spectrum round a rounded rectangle (the hue turns with the direction of the rim): the prism edge of
+// glass that is lit or being touched. `alpha` 0 draws nothing.
+void spectrumRim (juce::Graphics&, juce::Rectangle<float> r, float radius, float alpha, float width = 1.2f);
+// A bead lit from inside by `colour` (play while playing, record while armed, a toggle that is on): the light gathered
+// in the glass and spilling round it, a tinted rim and the spectrum edge. `strength` 0..1 (0 = the plain bead).
+void litBead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round, juce::Colour colour, float strength);
 
 // A flat cell (clip slot, field, meter): a soft top light only, no rim, so a grid of them stays calm.
 void

@@ -38,15 +38,13 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         const auto circle = r.withSizeKeepingCentre (d, d);
         if (t.glass)
         {
-            juce::DropShadow (play.withAlpha (s.on ? 0.55f : 0.25f), s.on ? 12 : 6, { 0, 1 }).drawForRectangle (g, circle.toNearestInt().reduced (3));
-            g.setGradientFill (juce::ColourGradient (play.interpolatedWith (t.highlight(), 0.35f), 0.0f, circle.getY(), play, 0.0f, circle.getBottom(), false));
-            g.fillEllipse (circle);
-            const auto gloss = circle.reduced (circle.getWidth() * 0.16f, 0.0f).withHeight (circle.getHeight() * 0.5f).translated (0.0f, 1.5f);
-            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (0.6f), 0.0f, gloss.getY(), t.highlight().withAlpha (0.0f), 0.0f, gloss.getBottom(), false));
-            g.fillEllipse (gloss);
-            g.setColour (t.highlight().withAlpha (0.55f));
-            g.drawEllipse (circle.reduced (0.75f), 1.0f);
-            return juce::Colours::white;
+            // clear glass; while playing the light of the accent gathers in it and the rim turns into a spectrum
+            juce::ignoreUnused (play);
+            const auto light = colour.value_or (t.accentFill);
+            glass::litBead (g, circle, d * 0.5f, true, light, s.on ? 1.0f : 0.0f);
+            if (! s.on && (s.hover || s.down))
+                glass::spectrumRim (g, circle, d * 0.5f, s.down ? 0.45f : 0.3f);
+            return s.on ? (t.isLight() ? t.accent : t.accent.interpolatedWith (t.highlight(), 0.3f)) : t.text;
         }
         // classic: a framed square that lights up while playing
         if (s.on && t.glow > 0.0f)
@@ -95,6 +93,21 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         if (! s.enabled)
             ink = t.dimText.withAlpha (0.6f);
     }
+    else if (lit && kind != Kind::primary && s.enabled)
+    {
+        // a toggle that is on, record armed: the glass lit from inside by its colour, the label in that colour
+        glass::litBead (g, r, radius, false, litColour, s.down ? 0.8f : 1.0f);
+        // the middle of the lit glass is about the body with the glow over it; the label keeps 3:1 against it
+        const auto middle = (t.isLight() ? t.highlight() : t.panel2).interpolatedWith (litColour, t.isLight() ? 0.42f : 0.55f);
+        ink = t.text;
+        for (const auto candidate : { t.isLight() ? litColour.interpolatedWith (t.text, 0.35f) : litColour.interpolatedWith (t.highlight(), 0.45f),
+                                      t.text, t.background })
+            if (Theme::contrast (candidate, middle) >= 3.0f)
+            {
+                ink = candidate;
+                break;
+            }
+    }
     else if (lit)
     {
         glass::accent (g, r, s.enabled ? litColour : t.panel2, radius);
@@ -112,8 +125,9 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
             glass::bead (g, r, radius);
             if (s.hover || s.down)
             {
-                g.setColour ((s.down ? t.shadow() : t.highlight()).withAlpha (s.down ? 0.06f : 0.25f));
+                g.setColour ((s.down ? t.shadow() : t.highlight()).withAlpha (s.down ? 0.06f : (t.isLight() ? 0.25f : 0.06f)));
                 g.fillRoundedRectangle (r, radius);
+                glass::spectrumRim (g, r, radius, s.down ? 0.45f : 0.3f); // touched glass splits the light at its edge
             }
         }
         else
