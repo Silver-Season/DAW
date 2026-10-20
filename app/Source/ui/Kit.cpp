@@ -168,28 +168,27 @@ void switchControl (juce::Graphics& g, juce::Rectangle<float> area, State s)
     const auto& t = theme();
     const float h = juce::jmin (area.getHeight(), t.glass ? 18.0f : 16.0f), w = h * 1.75f;
     const auto track = juce::Rectangle<float> (w, h).withCentre ({ area.getRight() - w * 0.5f - 1.0f, area.getCentreY() });
-    if (s.on)
+    const auto knob = juce::Rectangle<float> (h + 2.0f, h + 2.0f).withCentre ({ s.on ? track.getRight() - h * 0.5f : track.getX() + h * 0.5f, track.getCentreY() });
+    if (t.glass)
     {
-        if (t.glass)
-            glass::accent (g, track, s.enabled ? t.accentFill : t.panel2, h * 0.5f);
+        // the knob is a clear lens over the track
+        glass::Liquid liquid (g, track.expanded (3.0f).getSmallestIntegerContainer());
+        auto& b = liquid.backdrop();
+        if (s.on)
+            glass::accent (b, track, s.enabled ? t.accentFill : t.panel2, h * 0.5f);
         else
         {
-            g.setColour (s.enabled ? t.accent : t.panel2);
-            g.fillRoundedRectangle (track, h * 0.5f);
+            b.setColour (t.line.withMultipliedAlpha (s.enabled ? 1.0f : 0.5f));
+            b.fillRoundedRectangle (track, h * 0.5f);
         }
+        liquid.lens (knob.reduced (1.0f), knob.getWidth() * 0.5f, 0.5f, 0.92f);
     }
     else
     {
-        g.setColour (t.line.withMultipliedAlpha (s.enabled ? 1.0f : 0.5f));
+        g.setColour (s.on ? (s.enabled ? t.accent : t.panel2) : t.line.withMultipliedAlpha (s.enabled ? 1.0f : 0.5f));
         g.fillRoundedRectangle (track, h * 0.5f);
-    }
-    const auto knob = juce::Rectangle<float> (h - 2.0f, h - 2.0f).withCentre ({ s.on ? track.getRight() - h * 0.5f : track.getX() + h * 0.5f, track.getCentreY() });
-    if (t.glass)
-        glass::thumb (g, knob);
-    else
-    {
         g.setColour (s.on ? t.inkOn (t.accent) : t.panel);
-        g.fillEllipse (knob);
+        g.fillEllipse (knob.reduced (2.0f));
     }
     if (s.focus)
         focusRing (g, track.expanded (2.0f), h * 0.5f + 2.0f);
@@ -206,49 +205,69 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
     const int n = juce::jmax (1, labels.size());
     const float w = r.getWidth() / (float) n;
     const auto seg = [&] (int i) { return juce::Rectangle<float> (r.getX() + w * (float) i, r.getY(), w, r.getHeight()); };
+    const auto labelFont = [&] (int i) { return t.uiFont (t.glass ? t.metrics.text + 1.0f : 12.0f, i == selected && t.glass ? 600 : 500); };
     if (t.glass)
     {
+        // A sunken track with the labels; the selected segment is a clear lens over it (the labels under the lens bend
+        // with the track), and its own label is drawn sharp on top.
         const float pill = r.getHeight() * 0.5f;
-        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.85f : 0.7f));
-        g.fillRoundedRectangle (r, pill);
-        g.setColour (t.line.withAlpha (0.6f));
-        g.drawRoundedRectangle (r.reduced (0.5f), pill, 1.0f);
-        if (hover >= 0 && hover != selected)
         {
-            g.setColour (t.panel.withAlpha (0.5f));
-            g.fillRoundedRectangle (seg (hover).reduced (3.0f), pill - 3.0f);
+            glass::Liquid liquid (g, r.expanded (2.0f, 2.0f).withTrimmedBottom (-12.0f).getSmallestIntegerContainer(), t.background);
+            auto& b = liquid.backdrop();
+            b.setColour (t.panel2.interpolatedWith (t.line, t.isLight() ? 0.35f : 0.2f));
+            b.fillRoundedRectangle (r, pill);
+            b.setColour (t.shadow().withAlpha (t.isLight() ? 0.06f : 0.25f));
+            b.drawRoundedRectangle (r.reduced (0.5f), pill, 1.0f);
+            if (hover >= 0 && hover != selected)
+            {
+                b.setColour (t.panel.withAlpha (0.45f));
+                b.fillRoundedRectangle (seg (hover).reduced (3.0f), pill - 3.0f);
+            }
+            for (int i = 0; i < labels.size(); ++i)
+                if (i != selected)
+                {
+                    b.setColour (t.dimText);
+                    b.setFont (labelFont (i));
+                    b.drawText (labels[i], seg (i), juce::Justification::centred, false);
+                }
+            if (drop >= 0)
+            {
+                b.setColour (t.accent.withAlpha (0.22f));
+                b.fillRoundedRectangle (seg (drop), pill);
+            }
+            if (selected >= 0)
+                liquid.lens (seg (selected).reduced (2.5f), pill, 0.0f, t.isLight() ? 0.9f : 0.5f);
         }
         if (selected >= 0)
         {
-            const auto active = seg (selected).reduced (2.0f);
-            glass::bead (g, active, active.getHeight() * 0.5f);
+            g.setColour (t.text);
+            g.setFont (labelFont (selected));
+            g.drawText (labels[selected], seg (selected), juce::Justification::centred, false);
         }
+        return;
     }
-    else
+    g.setColour (t.panel);
+    g.fillRoundedRectangle (r, t.radius);
+    if (selected >= 0)
     {
-        g.setColour (t.panel);
-        g.fillRoundedRectangle (r, t.radius);
-        if (selected >= 0)
-        {
-            auto a = seg (selected);
-            g.setColour (t.panel2);
-            g.fillRoundedRectangle (a, t.radius);
-            g.setColour (t.accent);
-            g.fillRect (a.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
-        }
-        g.setColour (t.line);
-        g.drawRoundedRectangle (r.reduced (0.5f), t.radius, 1.0f);
+        auto a = seg (selected);
+        g.setColour (t.panel2);
+        g.fillRoundedRectangle (a, t.radius);
+        g.setColour (t.accent);
+        g.fillRect (a.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
     }
+    g.setColour (t.line);
+    g.drawRoundedRectangle (r.reduced (0.5f), t.radius, 1.0f);
     for (int i = 0; i < labels.size(); ++i)
     {
         g.setColour (i == selected ? t.text : t.dimText);
-        g.setFont (t.uiFont (t.glass ? t.metrics.text + 1.0f : 12.0f, i == selected && t.glass ? 600 : 500));
+        g.setFont (labelFont (i));
         g.drawText (labels[i], seg (i), juce::Justification::centred, false);
     }
     if (drop >= 0)
     {
         g.setColour (t.accent.withAlpha (0.22f));
-        g.fillRoundedRectangle (seg (drop), t.glass ? r.getHeight() * 0.5f : t.radius);
+        g.fillRoundedRectangle (seg (drop), t.radius);
     }
 }
 

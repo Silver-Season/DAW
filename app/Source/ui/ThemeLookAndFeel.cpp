@@ -360,17 +360,21 @@ ThemeLookAndFeel::drawLinearSlider (juce::Graphics& g,
     const auto bounds = juce::Rectangle<float> ((float)x, (float)y, (float)w, (float)h);
     const auto track = vertical ? bounds.withSizeKeepingCentre (4.0f, bounds.getHeight ())
                                 : bounds.withSizeKeepingCentre (bounds.getWidth (), 4.0f);
-    g.setColour (t.line);
-    g.fillRoundedRectangle (track, 2.0f);
+    ui::glass::Liquid liquid (g, s.getLocalBounds ());
+    auto& lg = liquid.backdrop ();
+    lg.setColour (t.line);
+    lg.fillRoundedRectangle (track, 2.0f);
     // a range across zero fills from the centre (mod amounts), otherwise from the start
     const bool bipolar = s.getMinimum () < 0.0 && s.getMaximum () > 0.0;
     const float zero = bipolar ? (float) s.getPositionOfValue (0.0) : (vertical ? track.getBottom () : track.getX ());
     const auto filled = vertical ? juce::Rectangle<float>::leftTopRightBottom (track.getX (), juce::jmin (pos, zero), track.getRight (), juce::jmax (pos, zero))
                                  : juce::Rectangle<float>::leftTopRightBottom (juce::jmin (pos, zero), track.getY (), juce::jmax (pos, zero), track.getBottom ());
-    ui::glass::accent (g, filled, s.isEnabled () ? t.accentFill : t.dimText, 2.0f);
+    ui::glass::accent (lg, filled, s.isEnabled () ? t.accentFill : t.dimText, 2.0f);
     const auto centre =
       vertical ? juce::Point<float> (bounds.getCentreX (), pos) : juce::Point<float> (pos, bounds.getCentreY ());
-    ui::glass::thumb (g, juce::Rectangle<float> (vertical ? 20.0f : 18.0f, vertical ? 14.0f : 18.0f).withCentre (centre));
+    // the thumb is a clear lens over the track, as in the optics study
+    const float side = juce::jmin (vertical ? bounds.getWidth () : bounds.getHeight (), 24.0f);
+    liquid.lens (juce::Rectangle<float> (vertical ? side : side * 1.35f, vertical ? side * 0.7f : side).withCentre (centre), side * 0.5f, 0.6f, 0.55f);
 }
 
 void

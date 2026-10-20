@@ -307,11 +307,18 @@ void Fader::paint (juce::Graphics& g)
         const bool scale = bounds.getWidth() >= 40.0f;
         const float x = scale ? bounds.getX() + 13.0f : bounds.getCentreX();
         const auto track = juce::Rectangle<float> (4.0f, bounds.getHeight() - 6.0f).withCentre ({ x, bounds.getCentreY() });
-        g.setColour (t.isLight() ? t.line.withAlpha (0.75f) : t.shadow().withAlpha (0.45f));
-        g.fillRoundedRectangle (track, 2.0f);
-        g.setColour (t.text.withAlpha (t.isLight() ? 0.55f : 0.65f));
         const auto yOf = [&] (double db) { return bounds.getBottom() - 5.0f - (float) dbToNorm (db) * travel; };
-        g.fillRoundedRectangle (track.withTop (yOf (valueDb)), 2.0f);
+        // the thumb is a clear lens over the track: the level under it bends at its rim
+        const auto thumb = juce::Rectangle<float> (26.0f, 16.0f).withCentre ({ x, thumbArea().getCentreY() });
+        {
+            glass::Liquid liquid (g, getLocalBounds());
+            auto& b = liquid.backdrop();
+            b.setColour (t.isLight() ? t.line.withAlpha (0.75f) : t.shadow().withAlpha (0.45f));
+            b.fillRoundedRectangle (track, 2.0f);
+            b.setColour (t.accentFill);
+            b.fillRoundedRectangle (track.withTop (yOf (valueDb)), 2.0f);
+            liquid.lens (thumb, 8.0f, 0.6f, 0.5f);
+        }
         if (scale)
         {
             g.setFont (t.numFont (9.5f));
@@ -324,10 +331,6 @@ void Fader::paint (juce::Graphics& g)
                             juce::Justification::centredLeft, false);
             }
         }
-        const auto thumb = juce::Rectangle<float> (22.0f, 13.0f).withCentre ({ x, thumbArea().getCentreY() });
-        glass::thumb (g, thumb);
-        g.setColour (t.dimText.withAlpha (0.8f));
-        g.fillRect (juce::Rectangle<float> (10.0f, 1.0f).withCentre (thumb.getCentre()));
         return;
     }
     const float cx = bounds.getWidth() >= 40.0f ? bounds.getX() + 12.0f : bounds.getCentreX(); // a wide fader keeps its track on the left

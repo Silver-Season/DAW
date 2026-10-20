@@ -334,33 +334,203 @@ lens (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour track, bool vert
 void
 knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour colour, bool bipolar)
 {
-    // A glass sphere inside a coloured value ring: a soft shadow under it, a body lit from above, a bright
-    // specular spot at the upper left, a thin rim, and the pointer from the centre.
+    // A coloured value ring with a clear glass sphere set into it: the sphere bends the inner half of the ring at its
+    // rim, a pale disc behind it gives it body, the pointer is drawn on top.
     const auto& t = theme ();
     const float start = -juce::MathConstants<float>::pi * 0.75f, end = -start;
     const float angle = start + value * (end - start);
     const float outer = juce::jmax (1.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f - 1.5f);
-    const float ringW = juce::jlimit (2.0f, 3.5f, outer * 0.16f);
+    const float ringW = juce::jlimit (2.0f, 4.0f, outer * 0.18f);
     const float ringR = outer - ringW * 0.5f;
-    auto arc = [&] (float a, float b, juce::Colour c)
-    {
-        juce::Path path;
-        path.addCentredArc (r.getCentreX (), r.getCentreY (), ringR, ringR, 0.0f, a, b, true);
-        g.setColour (c);
-        g.strokePath (path, juce::PathStrokeType (ringW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    };
-    arc (start, end, t.isLight () ? t.line.withAlpha (0.7f) : t.shadow ().withAlpha (0.45f));
-    if (std::abs (angle - (bipolar ? 0.0f : start)) > 0.01f)
-        arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour);
-
-    const float sphereR = juce::jmax (2.0f, outer - ringW - 2.5f);
     const auto c = r.getCentre ();
+    const float sphereR = juce::jmax (2.0f, outer - ringW * 0.45f);
     const auto sphere = juce::Rectangle<float> (sphereR * 2.0f, sphereR * 2.0f).withCentre (c);
-    const float strength = t.material > 0.0f ? t.material : 0.0f;
-
-    bead (g, sphere, sphereR, true, colour);
+    {
+        Liquid liquid (g, r.expanded (2.0f).getSmallestIntegerContainer ());
+        auto& b = liquid.backdrop ();
+        auto arc = [&] (float a, float e, juce::Colour col)
+        {
+            juce::Path path;
+            path.addCentredArc (c.x, c.y, ringR, ringR, 0.0f, a, e, true);
+            b.setColour (col);
+            b.strokePath (path, juce::PathStrokeType (ringW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        };
+        arc (start, end, t.isLight () ? t.line.withAlpha (0.8f) : t.shadow ().withAlpha (0.45f));
+        if (std::abs (angle - (bipolar ? 0.0f : start)) > 0.01f)
+            arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour);
+        // the body of the sphere: pale, lit from above
+        const auto disc = sphere.reduced (ringW * 0.9f);
+        b.setGradientFill (juce::ColourGradient (t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.2f), c.x, disc.getY (),
+                                                 t.isLight () ? t.panel.interpolatedWith (t.line, 0.35f) : t.panel, c.x, disc.getBottom (), false));
+        b.fillEllipse (disc);
+        liquid.lens (sphere, sphereR, 0.7f);
+    }
     g.setColour (t.text);
-    g.drawLine (c.x + std::sin (angle) * sphereR * 0.18f, c.y - std::cos (angle) * sphereR * 0.18f,
-                c.x + std::sin (angle) * sphereR * 0.78f, c.y - std::cos (angle) * sphereR * 0.78f, juce::jmax (1.4f, sphereR * 0.12f));
+    g.drawLine (c.x + std::sin (angle) * sphereR * 0.15f, c.y - std::cos (angle) * sphereR * 0.15f,
+                c.x + std::sin (angle) * sphereR * 0.62f, c.y - std::cos (angle) * sphereR * 0.62f, juce::jmax (1.4f, sphereR * 0.12f));
 }
 }
+
+//==============================================================================
+namespace ui::glass
+{
+namespace
+{
+float roundedBoxDistance (float px, float py, float hx, float hy, float r)
+{
+    const float qx = std::abs (px) - hx + r, qy = std::abs (py) - hy + r;
+    return std::sqrt (juce::square (juce::jmax (qx, 0.0f)) + juce::square (juce::jmax (qy, 0.0f))) + juce::jmin (juce::jmax (qx, qy), 0.0f) - r;
+}
+
+struct Rgba // premultiplied, 0..1
+{
+    float r = 0, g = 0, b = 0, a = 0;
+};
+
+// Bilinear, clamped to the image, premultiplied (transparent parts of the backdrop stay transparent through the lens).
+Rgba fetch (const juce::Image::BitmapData& d, float x, float y)
+{
+    x = juce::jlimit (0.0f, (float) d.width - 1.001f, x);
+    y = juce::jlimit (0.0f, (float) d.height - 1.001f, y);
+    const int x0 = (int) x, y0 = (int) y;
+    const float fx = x - (float) x0, fy = y - (float) y0;
+    const auto px = [&] (int xx, int yy) { return *reinterpret_cast<const juce::PixelARGB*> (d.getPixelPointer (xx, yy)); };
+    const auto a = px (x0, y0), b = px (x0 + 1, y0), c = px (x0, y0 + 1), e = px (x0 + 1, y0 + 1);
+    const auto mix = [&] (float pa, float pb, float pc, float pe) { return ((pa * (1 - fx) + pb * fx) * (1 - fy) + (pc * (1 - fx) + pe * fx) * fy) / 255.0f; };
+    return { mix (a.getRed(), b.getRed(), c.getRed(), e.getRed()), mix (a.getGreen(), b.getGreen(), c.getGreen(), e.getGreen()),
+             mix (a.getBlue(), b.getBlue(), c.getBlue(), e.getBlue()), mix (a.getAlpha(), b.getAlpha(), c.getAlpha(), e.getAlpha()) };
+}
+
+// `top` (premultiplied) over `under`
+Rgba over (Rgba top, Rgba under)
+{
+    const float k = 1.0f - top.a;
+    return { top.r + under.r * k, top.g + under.g * k, top.b + under.b * k, top.a + under.a * k };
+}
+} // namespace
+
+Liquid::Liquid (juce::Graphics& g, juce::Rectangle<int> a, juce::Colour behind) : target (g), area (a)
+{
+    scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext ().getPhysicalPixelScaleFactor ());
+    image = juce::Image (juce::Image::ARGB, juce::jmax (1, juce::roundToInt ((float) area.getWidth () * scale)),
+                         juce::jmax (1, juce::roundToInt ((float) area.getHeight () * scale)), true, juce::SoftwareImageType ());
+    graphics = std::make_unique<juce::Graphics> (image);
+    if (! behind.isTransparent ())
+        graphics->fillAll (behind);
+    graphics->addTransform (juce::AffineTransform::translation ((float) -area.getX (), (float) -area.getY ()).scaled (scale));
+}
+
+Liquid::~Liquid ()
+{
+    graphics.reset ();
+    compose ();
+    target.setOpacity (1.0f);
+    target.drawImage (image, area.toFloat ());
+    // the body of a lens where the optics are off: a plain bead, so the control still reads as one
+    const auto& t = theme ();
+    if (!t.glass || t.material <= 0.0f)
+        for (const auto& b : boxes)
+        {
+            target.setColour (t.panel.withAlpha (0.9f));
+            target.fillRoundedRectangle (b.r, b.radius);
+            target.setColour (t.line);
+            target.drawRoundedRectangle (b.r.reduced (0.5f), b.radius, 1.0f);
+        }
+}
+
+void Liquid::lens (juce::Rectangle<float> box, float radius, float shadow, float body)
+{
+    radius = juce::jlimit (0.0f, juce::jmin (box.getWidth (), box.getHeight ()) * 0.5f, radius);
+    if (body > 0.0f && graphics != nullptr)
+    {
+        const auto& t = theme ();
+        const auto pale = t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.18f);
+        graphics->setGradientFill (juce::ColourGradient (pale.withAlpha (body), 0.0f, box.getY (), pale.withAlpha (body * 0.75f), 0.0f, box.getBottom (), false));
+        graphics->fillRoundedRectangle (box.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f));
+    }
+    boxes.push_back ({ box, radius, shadow });
+}
+
+void Liquid::compose ()
+{
+    const auto& t = theme ();
+    if (boxes.empty () || !t.glass || t.material <= 0.0f)
+        return;
+    const juce::Image source = image.createCopy ();
+    const juce::Image::BitmapData src (source, juce::Image::BitmapData::readOnly);
+    juce::Image::BitmapData dst (image, juce::Image::BitmapData::readWrite);
+    const bool dark = !t.isLight ();
+    const float depth = juce::jlimit (0.0f, 1.0f, t.material * 0.9f); // the study's depth slider, from Appearance → Glass depth
+    const float highlight = 0.52f;
+    // light from above, a little from the right, as in the study
+    const float lx = 0.24f, ly = -0.97f;
+    for (const auto& b : boxes)
+    {
+        const float hx = b.r.getWidth () * 0.5f, hy = b.r.getHeight () * 0.5f, radius = b.radius;
+        const float cx = b.r.getCentreX (), cy = b.r.getCentreY ();
+        const float reach = b.shadow > 0.0f ? 26.0f : 2.0f; // the shadow fades out within this distance
+        const auto pixels = b.r.expanded (reach, reach).translated ((float) -area.getX (), (float) -area.getY ()) * scale;
+        const int x0 = juce::jmax (0, (int) std::floor (pixels.getX ())), x1 = juce::jmin (dst.width, (int) std::ceil (pixels.getRight ()));
+        const int y0 = juce::jmax (0, (int) std::floor (pixels.getY ())), y1 = juce::jmin (dst.height, (int) std::ceil (pixels.getBottom ()));
+        // small lenses bend less: the study's numbers are for a lens about 50 px tall
+        const float size = juce::jlimit (0.2f, 1.0f, juce::jmin (hx, hy) / 30.0f);
+        const float shiftMax = (3.0f + depth * 22.0f) * size, zoomBase = 0.025f + depth * 0.07f;
+        // the shadow fades out before the edge of the painted area, so it never ends in a hard line
+        const float room = juce::jmax (1.0f, juce::jmin (b.r.getX () - (float) area.getX (), b.r.getY () - (float) area.getY (),
+                                                         (float) area.getRight () - b.r.getRight (), (float) area.getBottom () - b.r.getBottom ()));
+        const float edgeWidth = juce::jmin (radius * 0.9f, 34.0f, juce::jmin (hx, hy));
+        for (int yy = y0; yy < y1; ++yy)
+            for (int xx = x0; xx < x1; ++xx)
+            {
+                // component coordinates of this pixel, then relative to the lens centre
+                const float px = ((float) xx + 0.5f) / scale + (float) area.getX (), py = ((float) yy + 0.5f) / scale + (float) area.getY ();
+                const float lxp = px - cx, lyp = py - cy;
+                const float dist = roundedBoxDistance (lxp, lyp, hx, hy, radius);
+                auto* out = reinterpret_cast<juce::PixelARGB*> (dst.getPixelPointer (xx, yy));
+                Rgba col { out->getRed () / 255.0f, out->getGreen () / 255.0f, out->getBlue () / 255.0f, out->getAlpha () / 255.0f };
+                // soft shadow under the lens: black, fading with the distance below and around it
+                const float shadowDist = roundedBoxDistance (lxp, lyp - 5.0f, hx, hy, radius);
+                const float shade = std::exp (-juce::jmax (shadowDist, 0.0f) / 9.0f) * (dark ? 0.2f : 0.11f) * b.shadow
+                                  * juce::square (juce::jlimit (0.0f, 1.0f, 1.0f - juce::jmax (0.0f, roundedBoxDistance (lxp, lyp, hx, hy, radius)) / room))
+                                  * (1.0f - juce::jlimit (0.0f, 1.0f, (-dist + 0.2f) / 1.2f));
+                col = over ({ 0, 0, 0, shade }, col);
+                if (dist < 1.0f)
+                {
+                    const float coverage = 1.0f - juce::jlimit (0.0f, 1.0f, (dist + 0.65f) / 1.3f);
+                    const float gx = roundedBoxDistance (lxp + 0.4f, lyp, hx, hy, radius) - roundedBoxDistance (lxp - 0.4f, lyp, hx, hy, radius);
+                    const float gy = roundedBoxDistance (lxp, lyp + 0.4f, hx, hy, radius) - roundedBoxDistance (lxp, lyp - 0.4f, hx, hy, radius);
+                    const float gl = juce::jmax (0.0001f, std::sqrt (gx * gx + gy * gy));
+                    const float nx = gx / gl, ny = gy / gl;
+                    const float inset = juce::jmax (-dist, 0.0f);
+                    const float edge = 1.0f - juce::jlimit (0.0f, 1.0f, inset / juce::jmax (1.0f, edgeWidth));
+                    const float curve = std::pow (edge, 1.65f);
+                    const float sx = px - nx * shiftMax * curve - lxp * zoomBase * (1.0f - edge);
+                    const float sy = py - ny * shiftMax * curve - lyp * zoomBase * (1.0f - edge);
+                    // the spectrum at the rim: five samples spread along the normal, red outward, violet inward
+                    const float spread = (0.6f + depth * 2.6f) * curve * size;
+                    const auto at = [&] (float k) { return fetch (src, (sx - (float) area.getX () + nx * spread * k) * scale, (sy - (float) area.getY () + ny * spread * k) * scale); };
+                    const Rgba s0 = at (-1.0f), s1 = at (-0.5f), s2 = at (0.0f), s3 = at (0.5f), s4 = at (1.0f);
+                    Rgba glassCol { s0.r * 0.45f + s1.r * 0.35f + s2.r * 0.2f, s1.g * 0.25f + s2.g * 0.5f + s3.g * 0.25f,
+                                    s2.b * 0.2f + s3.b * 0.35f + s4.b * 0.45f, (s0.a + s1.a + s2.a + s3.a + s4.a) * 0.2f };
+                    const float tint = dark ? 0.025f : 0.035f, tintValue = dark ? 0.32f : 1.0f;
+                    glassCol = over ({ tintValue * tint, tintValue * tint, tintValue * tint, tint }, glassCol);
+                    const float rim = std::exp (-inset / 1.25f);
+                    const float facing = nx * lx + ny * ly;
+                    const float caustic = std::exp (-juce::square ((inset - 3.0f) / 2.5f)) * juce::jmax (-facing, 0.0f) * 0.12f;
+                    const float spec = std::pow (juce::jmax (facing, 0.0f), 7.0f) * rim;
+                    const float inner = std::pow (juce::jmax (nx * -0.6f + ny * -0.8f, 0.0f), 3.0f) * std::exp (-inset / 6.0f);
+                    const float power = 0.18f + highlight * 0.75f;
+                    const float add = juce::jlimit (0.0f, 1.0f, rim * 0.11f + spec * power + inner * 0.07f + caustic);
+                    glassCol = over ({ add, add, add, add }, glassCol); // light: white over the glass
+                    const float dim = 1.0f - juce::jmax (-facing, 0.0f) * rim * 0.18f;
+                    glassCol = over ({ 0, 0, 0, 1.0f - dim }, glassCol);
+                    col = { col.r + (glassCol.r - col.r) * coverage, col.g + (glassCol.g - col.g) * coverage, col.b + (glassCol.b - col.b) * coverage,
+                            col.a + (glassCol.a - col.a) * coverage };
+                }
+                const auto byte = [] (float v) { return (juce::uint8) juce::jlimit (0, 255, juce::roundToInt (v * 255.0f)); };
+                const float a = juce::jlimit (0.0f, 1.0f, col.a);
+                out->setARGB (byte (a), byte (juce::jmin (col.r, a)), byte (juce::jmin (col.g, a)), byte (juce::jmin (col.b, a)));
+            }
+    }
+}
+} // namespace ui::glass
