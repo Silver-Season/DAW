@@ -346,14 +346,8 @@ void CardFrames::paint (juce::Graphics& g)
                 g.excludeClipRegion (other.reduced (2));
             juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.07f : 0.30f), 12, { 0, 3 }).drawForPath (g, rounded);
         }
-        // the rim: bright along the top, a quiet line all round
-        g.setColour (t.line.withAlpha (t.isLight() ? 0.55f : 0.7f));
-        g.strokePath (rounded, juce::PathStrokeType (1.0f));
-        g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.9f : 0.16f), 0.0f, r.getY(),
-                                                 t.highlight().withAlpha (0.0f), 0.0f, r.getY() + 40.0f, false));
-        juce::Path inner;
-        inner.addRoundedRectangle (r.reduced (1.0f), kRadius - 1.0f);
-        g.strokePath (inner, juce::PathStrokeType (1.0f));
+        // the edge of the plate: hairline, bevel and the glints where its thickness catches the light
+        glass::edge (g, r, kRadius, 1.0f);
     }
 }
 

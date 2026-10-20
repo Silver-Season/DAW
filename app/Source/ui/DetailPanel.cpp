@@ -1165,9 +1165,12 @@ void DetailPanel::paint (juce::Graphics& g)
         g.fillRect (0, 0, getWidth(), 1);
     if (editorShown)
         return;
-    g.fillRect (kInfoWidth - 1, t.glass ? 12 : 1, 1, getHeight() - (t.glass ? 24 : 1));
+    if (t.glass)
+        kit::card (g, juce::Rectangle<float> (8.0f, 8.0f, (float) kInfoWidth - 14.0f, (float) getHeight() - 16.0f)); // the track as its own card
+    else
+        g.fillRect (kInfoWidth - 1, 1, 1, getHeight() - 1);
 
-    auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (14, 12);
+    auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (t.glass ? 22 : 14, t.glass ? 18 : 12);
     const auto track = model.findTrackOrMaster (shownTrack);
     if (! track.isValid())
     {

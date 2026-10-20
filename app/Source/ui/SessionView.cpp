@@ -1306,8 +1306,7 @@ public:
             // a calm glass card over the clip grid (the blurred grid showing through moved under the mouse and read
             // as stray shadows)
             glass::surface (g, r, t.panel, t.metrics.panelRadius);
-            g.setColour (t.line.withAlpha (t.isLight() ? 0.5f : 0.6f));
-            g.drawRoundedRectangle (r.reduced (0.5f), t.metrics.panelRadius, 1.0f);
+            glass::edge (g, r, t.metrics.panelRadius, 0.6f);
             return;
         }
         fillCell (g, r, t.panel);
@@ -1439,8 +1438,7 @@ public:
             // a calm glass card over the clip grid (the blurred grid showing through moved under the mouse and read
             // as stray shadows)
             glass::surface (g, r, t.panel, t.metrics.panelRadius);
-            g.setColour (t.line.withAlpha (t.isLight() ? 0.5f : 0.6f));
-            g.drawRoundedRectangle (r.reduced (0.5f), t.metrics.panelRadius, 1.0f);
+            glass::edge (g, r, t.metrics.panelRadius, 0.6f);
             return;
         }
         fillCell (g, r, t.panel);

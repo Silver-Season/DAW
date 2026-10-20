@@ -334,14 +334,18 @@ void card (juce::Graphics& g, juce::Rectangle<float> r, bool selected)
     {
         // no outer shadow: cards often fill their component, and the shadow would be cut square at its edge
         glass::surface (g, r, t.panel, radius);
+        glass::edge (g, r, radius, 0.6f);
     }
     else
     {
         g.setColour (t.panel);
         g.fillRoundedRectangle (r, radius);
     }
-    g.setColour (selected ? t.accent : t.line.withAlpha (t.glass ? 0.7f : 1.0f));
-    g.drawRoundedRectangle (r.reduced (0.5f), radius, selected ? 1.5f : 1.0f);
+    if (selected || ! t.glass)
+    {
+        g.setColour (selected ? t.accent : t.line);
+        g.drawRoundedRectangle (r.reduced (0.5f), radius, selected ? 1.5f : 1.0f);
+    }
 }
 
 void row (juce::Graphics& g, juce::Rectangle<float> r, State s)
