@@ -28,9 +28,9 @@ void edge (juce::Graphics&, juce::Rectangle<float> r, float radius, float streng
 // hairline and a lit top bevel; `presence` 0..1 fades the whole pane in, `lit` 0..1 adds a quiet edge and light in
 // `colour` (the button is on).
 void pane (juce::Graphics&, juce::Rectangle<float> r, float radius, juce::Colour colour, float lit, float presence);
-// The light caught by the rim of glass, as on the lenses: bright where the rim faces the light (upper left), a second,
-// fainter catch where the light leaves the glass (lower right), nothing in between; a soft glow just inside the lit
-// part. This, not a drawn outline, is what makes a pane read as glass. `strength` 0..1.
+// The rim of a pane of glass, where its thickness shows: two edges a few pixels apart (the outer one catching the light
+// where it faces it, the inner one where the light leaves the glass) and a lighter band between them. This, not a
+// single drawn outline, is what makes a pane read as glass. `strength` 0..1.
 void rimLight (juce::Graphics&, juce::Rectangle<float> r, float radius, float strength = 1.0f);
 // A thin line of spectrum round a rounded rectangle (the hue turns with the direction of the rim): the prism edge of
 // glass that is lit or being touched. `alpha` 0 draws nothing.

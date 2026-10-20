@@ -273,7 +273,7 @@ rimLight (juce::Graphics& g, juce::Rectangle<float> r, float radius, float stren
     const juce::Point<float> from { -0.45f, -0.89f }; // the resting light, as on the lenses
     const auto c = r.getCentre ();
     const float hx = r.getWidth () * 0.5f - radius, hy = r.getHeight () * 0.5f - radius;
-    const auto rimAt = [&] (float inset, float width, float main, float back)
+    const auto rimAt = [&] (float inset, float width, float base, float main, float back)
     {
         juce::Path p;
         p.addRoundedRectangle (r.reduced (inset), juce::jmax (0.0f, radius - inset));
@@ -284,18 +284,28 @@ rimLight (juce::Graphics& g, juce::Rectangle<float> r, float radius, float stren
             const float mx = (it.x1 + it.x2) * 0.5f - c.x, my = (it.y1 + it.y2) * 0.5f - c.y;
             const float nx0 = mx - juce::jlimit (-hx, hx, mx), ny0 = my - juce::jlimit (-hy, hy, my);
             const float nl = std::sqrt (nx0 * nx0 + ny0 * ny0);
-            if (nl < 0.001f)
-                continue;
-            const float facing = (nx0 * from.x + ny0 * from.y) / nl;
-            const float a = std::pow (juce::jmax (facing, 0.0f), 2.2f) * main + std::pow (juce::jmax (-facing, 0.0f), 3.0f) * back;
+            const float facing = nl < 0.001f ? 0.0f : (nx0 * from.x + ny0 * from.y) / nl;
+            const float a = base + std::pow (juce::jmax (facing, 0.0f), 2.2f) * main + std::pow (juce::jmax (-facing, 0.0f), 3.0f) * back;
             if (a < 0.01f)
                 continue;
             g.setColour (t.highlight ().withAlpha (juce::jmin (1.0f, a * k)));
             g.drawLine (it.x1, it.y1, it.x2, it.y2, width);
         }
     };
-    rimAt (0.8f, 1.3f, light ? 1.0f : 0.55f, light ? 0.55f : 0.22f); // the catch on the rim
-    rimAt (2.4f, 2.6f, light ? 0.35f : 0.10f, 0.0f);                   // its glow just inside
+    // the thickness of the glass: a band between the outer edge and an inner one a few pixels in, lighter at the top
+    const float thick = juce::jlimit (2.0f, 6.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.08f);
+    {
+        juce::Path band;
+        band.addRoundedRectangle (r.reduced (0.5f), radius);
+        band.addRoundedRectangle (r.reduced (thick), juce::jmax (0.0f, radius - thick));
+        band.setUsingNonZeroWinding (false);
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.40f : 0.06f) * k), 0.0f, r.getY (),
+                                                 t.highlight ().withAlpha ((light ? 0.14f : 0.02f) * k), 0.0f, r.getBottom (), false));
+        g.fillPath (band);
+    }
+    // the outer edge catches the light where it faces it; the inner edge, where the light leaves the glass
+    rimAt (0.8f, 1.2f, light ? 0.35f : 0.07f, light ? 0.8f : 0.45f, light ? 0.3f : 0.12f);
+    rimAt (thick, 0.9f, light ? 0.45f : 0.06f, light ? 0.2f : 0.08f, light ? 0.6f : 0.25f);
 }
 
 void
