@@ -910,8 +910,8 @@ void Liquid::compose ()
     float touch = 0.0f;
     if (! litStack.empty() && litStack.back()->isEnabled())
         touch = LightTracker::get().touchOf (*litStack.back());
-    // what lies under the lens sits a little deeper than the glass: it moves against the pointer (parallax)
-    const auto under = litStack.empty() ? juce::Point<float>() : parallax (*litStack.back(), 2.0f);
+    // what lies under a lens stays where it is (moving labels read as a fault); only the light moves with the pointer
+    const juce::Point<float> under;
     for (auto b : boxes)
     {
         if (b.prism <= 1.0f && touch > 0.0f)

@@ -141,11 +141,11 @@ public:
         // the look comes from the kit: a framed button, a capsule switch, record/punch in red, play round in glass
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat().reduced (0.5f);
-        // glass: the icon floats a little above the glass, so it moves a little with the pointer (parallax)
+        // glass: the light of the pane follows the pointer; icons and labels stay still (moving text reads as a fault)
         std::optional<glass::Lit> lit;
         if (t.glass)
             lit.emplace (*this);
-        const auto floatBy = t.glass ? glass::parallax (*this, 1.2f) : juce::Point<float>();
+        const juce::Point<float> floatBy;
         using K = kit::Kind;
         const K idle = framed || ! t.glass ? K::plain : K::ghost; // how a button of this place looks while off
         // while the pane fades out the button still draws its lit state, fading
