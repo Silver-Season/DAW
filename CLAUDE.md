@@ -47,4 +47,4 @@ UI screenshots: `Xvfb :99 -screen 0 1600x1000x24 &`, then `HOME=<empty folder> D
 - One branch per stage, PR into `main`, merge only with green CI. PR description: "Before / After / How".
 - Every stage has tests for each task and screenshots of new UI (`media/`), in one theme unless colors or layout tokens change; README.md gets a section for the stage.
 - The owner tests live on a Mac (sound, external audio interface, MIDI keyboard) after each stage and sends feedback in one message. The owner installs the DMG when told "можно ставить" (ready to install), not after every merge.
-- Codex is used only for isolated tasks (icons, illustrations), not for the engine or the UI.
+- Codex may work on any part of the project, the UI design included. Agents never edit the same files at the same time: each works on its own branch (or worktree) and says in `docs/HANDOFF.md` which files it is changing. Glass UI work follows the rules in [docs/design/GLASS-UI.md](docs/design/GLASS-UI.md).

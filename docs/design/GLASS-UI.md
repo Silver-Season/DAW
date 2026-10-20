@@ -59,3 +59,18 @@ DAW_LANG=en DAW_UI_SNAPSHOTS=/absolute/output DAW_UI_SNAPSHOT_SCALE=2 /path/to/D
 This builds a demo in memory with its own settings and library inside the output folder, captures Session, MIDI editor and Arrangement in all six themes plus Appearance and the built-in synth in both glass themes, and quits. `DAW_UI_SNAPSHOT_SCALE` (1–3, default 1) renders at Retina density for close inspection; the committed captures in `media/ui-glass/` are at 1×. A snapshot run may start next to a running copy of the app.
 
 Build outside the repository. `PRISMA_COPY_AFTER_BUILD` defaults to OFF so a verification build does not install the synth into the user's plugin folders; `scripts/build-mac.sh` turns it on.
+
+## Design rules agreed with the owner
+
+These hold for every screen; the shared painters in `app/Source/ui/GlassMaterial.cpp` and `app/Source/ui/Kit.cpp` implement them, so a screen should paint through them rather than draw its own glass.
+
+- Two themes only: `glass-light` and `glass-dark` (dark is a neutral graphite, never navy).
+- Glass on glass: each layer up is less see-through and more matte. The window has a soft ground of accent glows (`glass::windowBackdrop`); plates over it are a little see-through (`glass::plateColour`); cards on plates are matte (`kit::card`); controls on cards are more matte still (`glass::pane`, `glass::bead`). The element of attention (the selection, an active control, the control in hand) is clear refracting glass again (`glass::Liquid` lens).
+- Glass reads as glass by its rim, not by outlines: two edges a few pixels apart with a lighter band between them, the outer edge catching the light, the inner one where it leaves (`glass::rimLight`). Keep drawn lines faint.
+- Colour never fills glass or spills past its edge. It lives in a thin edge line and a little light inside the glass: Play green, record red, everything else the accent. Turning on is animated (the pane comes forward over about a quarter of a second).
+- The spectrum (prism) is permanent only on the view switch. Elsewhere it appears only while the pointer is near or the control is held, rises quickly and fades out slowly.
+- Never paint a shadow or glow outside a control's own shape: the component clips it into a square, which reads as a bug. No blurred content showing through panels.
+- Only light and highlights follow the pointer, fading smoothly with distance. Text and icons never move.
+- Corners: 10 px on buttons and rows (not pills), rounded bars for the transport and plates; Play and knobs stay round.
+- Tracks and clips are matte glass (`glass::cell`, with a fine grain); empty slots nearly dissolve.
+
