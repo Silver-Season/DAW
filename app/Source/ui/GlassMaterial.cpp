@@ -374,43 +374,86 @@ lens (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour track, bool vert
     g.drawImage (it->second, r);
 }
 
+// The direction the light comes from for a point in the component being painted (toward the pointer while a Lit
+// scope is open and the mouse has been seen, otherwise from above and a little to the right). Defined below.
+juce::Point<float> lightFrom (juce::Point<float> local);
+
 void
 knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour colour, bool bipolar)
 {
-    // A coloured value ring with a clear glass sphere set into it: the sphere bends the inner half of the ring at its
-    // rim, a pale disc behind it gives it body, the pointer is drawn on top.
+    // A glass sphere set into a groove that carries the value in the track's colour. The sphere bends the inner edge of
+    // the ring at its rim; on top of it sit the small lights that make glass read as glass: a bright point where the
+    // light enters, a thin crescent along the lit rim, and the glow of the ring's colour gathered at the opposite edge.
     const auto& t = theme ();
+    const bool light = t.isLight ();
     const float start = -juce::MathConstants<float>::pi * 0.75f, end = -start;
     const float angle = start + value * (end - start);
     const float outer = juce::jmax (1.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f - 1.5f);
-    const float ringW = juce::jlimit (2.0f, 4.0f, outer * 0.18f);
+    const float ringW = juce::jlimit (2.0f, 4.0f, outer * 0.2f);
     const float ringR = outer - ringW * 0.5f;
     const auto c = r.getCentre ();
-    const float sphereR = juce::jmax (2.0f, outer - ringW * 0.45f);
+    const float sphereR = juce::jmax (2.0f, outer - ringW - 1.0f);
     const auto sphere = juce::Rectangle<float> (sphereR * 2.0f, sphereR * 2.0f).withCentre (c);
+    const bool lit = value > 0.001f || bipolar;
     {
         Liquid liquid (g, r.expanded (2.0f).getSmallestIntegerContainer ());
         auto& b = liquid.backdrop ();
-        auto arc = [&] (float a, float e, juce::Colour col)
+        auto arc = [&] (float a, float e, juce::Colour col, float width)
         {
             juce::Path path;
             path.addCentredArc (c.x, c.y, ringR, ringR, 0.0f, a, e, true);
             b.setColour (col);
-            b.strokePath (path, juce::PathStrokeType (ringW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            b.strokePath (path, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         };
-        arc (start, end, t.isLight () ? t.line.withAlpha (0.8f) : t.shadow ().withAlpha (0.45f));
+        // the groove, sunk into the panel
+        arc (start, end, light ? t.line.withAlpha (0.7f) : t.shadow ().withAlpha (0.5f), ringW);
         if (std::abs (angle - (bipolar ? 0.0f : start)) > 0.01f)
-            arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour);
-        // the body of the sphere: pale, lit from above
-        const auto disc = sphere.reduced (ringW * 0.9f);
-        b.setGradientFill (juce::ColourGradient (t.isLight () ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.2f), c.x, disc.getY (),
-                                                 t.isLight () ? t.panel.interpolatedWith (t.line, 0.35f) : t.panel, c.x, disc.getBottom (), false));
-        b.fillEllipse (disc);
-        liquid.lens (sphere, sphereR, 0.7f);
+            arc (juce::jmin (bipolar ? 0.0f : start, angle), juce::jmax (bipolar ? 0.0f : start, angle), colour, ringW);
+        // the sphere's body: brighter at the top, a little of the ring's colour caught in its lower half
+        b.setGradientFill (juce::ColourGradient (light ? t.panel.interpolatedWith (t.highlight (), 0.5f) : t.panel2.interpolatedWith (t.highlight (), 0.22f), c.x, sphere.getY (),
+                                                 (light ? t.panel.interpolatedWith (t.line, 0.75f) : t.panel.interpolatedWith (t.shadow (), 0.25f)),
+                                                 c.x, sphere.getBottom (), false));
+        b.fillEllipse (sphere);
+        liquid.lens (sphere, sphereR, 0.0f);
     }
-    g.setColour (t.text);
-    g.drawLine (c.x + std::sin (angle) * sphereR * 0.15f, c.y - std::cos (angle) * sphereR * 0.15f,
-                c.x + std::sin (angle) * sphereR * 0.62f, c.y - std::cos (angle) * sphereR * 0.62f, juce::jmax (1.4f, sphereR * 0.12f));
+    // where the sphere meets the groove: a fine dark seam, so it sits in the ring rather than on it
+    g.setColour (t.shadow ().withAlpha (light ? 0.16f : 0.45f));
+    g.drawEllipse (sphere.expanded (0.4f), 0.8f);
+
+    const auto dir = lightFrom (c);
+    const float k = t.material > 0.0f ? t.material : 0.0f;
+    if (k > 0.0f)
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        juce::Path clip;
+        clip.addEllipse (sphere);
+        g.reduceClipRegion (clip);
+        // the ring's colour gathered at the edge away from the light: light that passed through the glass
+        if (lit)
+        {
+            const auto far = c - dir * sphereR * 0.85f;
+            g.setGradientFill (juce::ColourGradient (colour.withAlpha ((light ? 0.35f : 0.45f) * k), far, colour.withAlpha (0.0f), c, true));
+            g.fillEllipse (sphere);
+        }
+        // the crescent along the lit rim
+        juce::Path crescent;
+        const float towards = std::atan2 (dir.x, -dir.y);
+        crescent.addCentredArc (c.x, c.y, sphereR - 1.2f, sphereR - 1.2f, 0.0f, towards - 1.05f, towards + 1.05f, true);
+        g.setColour (t.highlight ().withAlpha ((light ? 0.95f : 0.55f) * k));
+        g.strokePath (crescent, juce::PathStrokeType (juce::jmax (1.0f, sphereR * 0.09f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    // the pointer
+    g.setColour (t.text.withAlpha (0.9f));
+    g.drawLine (c.x + std::sin (angle) * sphereR * 0.2f, c.y - std::cos (angle) * sphereR * 0.2f,
+                c.x + std::sin (angle) * sphereR * 0.7f, c.y - std::cos (angle) * sphereR * 0.7f, juce::jmax (1.4f, sphereR * 0.13f));
+    // the bright point where the light enters
+    if (k > 0.0f)
+    {
+        const auto spot = c + dir * sphereR * 0.48f;
+        const float sr = juce::jmax (1.2f, sphereR * 0.2f);
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.95f : 0.8f) * k), spot, t.highlight ().withAlpha (0.0f), spot.translated (sr, 0.0f), true));
+        g.fillEllipse (juce::Rectangle<float> (sr * 2.0f, sr * 2.0f).withCentre (spot));
+    }
 }
 }
 
@@ -550,6 +593,19 @@ Lit::Lit (juce::Component& c)
 Lit::~Lit ()
 {
     litStack.pop_back();
+}
+
+juce::Point<float> lightFrom (juce::Point<float> local)
+{
+    if (! litStack.empty())
+        if (const auto p = LightTracker::get().pointer())
+        {
+            const auto d = litStack.back()->getLocalPoint (nullptr, *p) - local;
+            const float len = d.getDistanceFromOrigin();
+            if (len > 0.01f)
+                return d / len;
+        }
+    return { -0.45f, -0.89f };
 }
 
 Liquid::Liquid (juce::Graphics& g, juce::Rectangle<int> a, juce::Colour behind) : target (g), area (a)
