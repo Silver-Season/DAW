@@ -98,7 +98,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         // a toggle that is on, record armed: the glass lit from inside by its colour, the label in that colour
         glass::litBead (g, r, radius, false, litColour, s.down ? 0.8f : 1.0f);
         // the middle of the lit glass is about the body with the glow over it; the label keeps 3:1 against it
-        const auto middle = (t.isLight() ? t.highlight() : t.panel2).interpolatedWith (litColour, t.isLight() ? 0.42f : 0.55f);
+        const auto middle = (t.isLight() ? t.highlight() : t.panel2).interpolatedWith (litColour, t.isLight() ? 0.47f : 0.62f);
         ink = t.text;
         for (const auto candidate : { t.isLight() ? litColour.interpolatedWith (t.text, 0.35f) : litColour.interpolatedWith (t.highlight(), 0.45f),
                                       t.text, t.background })
@@ -314,7 +314,7 @@ void card (juce::Graphics& g, juce::Rectangle<float> r, bool selected)
     const float radius = t.metrics.panelRadius;
     if (t.glass)
     {
-        juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.06f : 0.3f), 10, { 0, 2 }).drawForRectangle (g, r.toNearestInt().reduced (3));
+        // no outer shadow: cards often fill their component, and the shadow would be cut square at its edge
         glass::surface (g, r, t.panel, radius);
     }
     else

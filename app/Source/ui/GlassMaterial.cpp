@@ -188,8 +188,8 @@ bead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juc
             p.addRoundedRectangle (b, rad);
         return p;
     };
-    if (light)
-        juce::DropShadow (t.shadow ().withAlpha (0.07f), 4, { 0, 1 }).drawForPath (g, shape (r, radius));
+    // No shadow outside the shape: controls fill their components, and anything painted past r would be cut square at
+    // the component's edge. Depth comes from the rim instead.
     const auto top = light ? t.highlight () : t.panel2.interpolatedWith (t.highlight (), 0.10f);
     const auto bottom = light ? t.panel.interpolatedWith (t.highlight (), 0.4f) : t.panel2.interpolatedWith (t.panel, 0.5f);
     g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
@@ -243,19 +243,20 @@ litBead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, 
         shape.addEllipse (r);
     else
         shape.addRoundedRectangle (r, radius);
-    if (strength > 0.0f)
-        juce::DropShadow (colour.withAlpha ((t.isLight () ? 0.30f : 0.45f) * strength), juce::roundToInt (juce::jmin (r.getWidth (), r.getHeight ()) * 0.45f), {})
-          .drawForPath (g, shape);
+    // the light stays inside the glass (a glow outside would be cut square at the edge of the component)
     bead (g, r, radius, round);
     if (strength <= 0.0f)
         return;
     {
         juce::Graphics::ScopedSaveState save (g);
         g.reduceClipRegion (shape);
-        juce::ColourGradient glow (colour.withAlpha ((t.isLight () ? 0.42f : 0.55f) * strength), r.getCentreX (), r.getCentreY () + r.getHeight () * 0.15f,
-                                   colour.withAlpha (0.08f * strength), r.getX (), r.getY (), true);
+        juce::ColourGradient glow (colour.withAlpha ((t.isLight () ? 0.45f : 0.6f) * strength), r.getCentreX (), r.getCentreY () + r.getHeight () * 0.15f,
+                                   colour.withAlpha (0.12f * strength), r.getX (), r.getY (), true);
         g.setGradientFill (glow);
         g.fillRect (r);
+        // the light gathers along the rim inside, as in lit glass
+        g.setColour (colour.withAlpha (0.35f * strength));
+        g.strokePath (shape, juce::PathStrokeType (juce::jlimit (2.0f, 4.0f, juce::jmin (r.getWidth (), r.getHeight ()) * 0.12f)));
     }
     g.setColour (colour.withAlpha (0.55f * strength));
     g.strokePath (shape, juce::PathStrokeType (1.0f));
@@ -291,7 +292,7 @@ capsule (juce::Graphics& g, juce::Rectangle<float> r)
         return;
     }
     // A soft drop shadow, a frosted body lighter at the top, a bright upper rim and a darker lower one.
-    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.10f : 0.35f), 14, { 0, 4 })
+    juce::DropShadow (t.shadow ().withAlpha (t.isLight () ? 0.08f : 0.25f), 6, { 0, 2 })
       .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (r, radius); return p; } ());
     const auto body = t.panel;
     g.setGradientFill (juce::ColourGradient (body.interpolatedWith (t.highlight (), t.isLight () ? 0.55f : 0.08f),

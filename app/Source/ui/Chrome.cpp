@@ -288,7 +288,8 @@ void ComingSoonView::paint (juce::Graphics& g)
     }
     // the card
     const auto c = card.toFloat();
-    juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.14f : 0.5f), 24, { 0, 6 }).drawForRectangle (g, card);
+    juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.14f : 0.45f), 24, { 0, 6 })
+        .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (card.toFloat(), 16.0f); return p; }());
     glass::surface (g, c, t.panel, 16.0f);
     g.setColour (t.line.withAlpha (0.7f));
     g.drawRoundedRectangle (c, 16.0f, 1.0f);
