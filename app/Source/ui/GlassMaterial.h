@@ -21,13 +21,17 @@ void frosted (juce::Graphics&, juce::Rectangle<float> r, float radius, const juc
 // near-white body, a thick bright rim whose lower edge bends the light into a cyan fringe, a gloss on top and a caustic
 // glow along the bottom. `round` draws a circle in r.
 void bead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round = false, juce::Colour fringe = juce::Colour());
-// The edge of a glass plate or card, kept quiet: a faint hairline, a bevel lit along the top just inside it, and one
-// soft glint where the top edge catches the light. `strength` 0..1 scales the light (cards less than plates).
+// The edge of a glass plate or card: a faint hairline and the rim catching the light (rimLight). `strength` 0..1
+// scales the light (cards less than plates).
 void edge (juce::Graphics&, juce::Rectangle<float> r, float radius, float strength = 1.0f);
 // A translucent pane of glass under a button (the transport row): a frosted body you can see the panel through, a
 // hairline and a lit top bevel; `presence` 0..1 fades the whole pane in, `lit` 0..1 adds a quiet edge and light in
 // `colour` (the button is on).
 void pane (juce::Graphics&, juce::Rectangle<float> r, float radius, juce::Colour colour, float lit, float presence);
+// The light caught by the rim of glass, as on the lenses: bright where the rim faces the light (upper left), a second,
+// fainter catch where the light leaves the glass (lower right), nothing in between; a soft glow just inside the lit
+// part. This, not a drawn outline, is what makes a pane read as glass. `strength` 0..1.
+void rimLight (juce::Graphics&, juce::Rectangle<float> r, float radius, float strength = 1.0f);
 // A thin line of spectrum round a rounded rectangle (the hue turns with the direction of the rim): the prism edge of
 // glass that is lit or being touched. `alpha` 0 draws nothing.
 void spectrumRim (juce::Graphics&, juce::Rectangle<float> r, float radius, float alpha, float width = 1.2f);

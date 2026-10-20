@@ -194,7 +194,9 @@ bead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juc
     const auto bottom = light ? t.panel.interpolatedWith (t.highlight (), 0.4f) : t.panel2.interpolatedWith (t.panel, 0.5f);
     g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
     g.fillPath (shape (r, radius));
-    if (k > 0.0f)
+    if (k > 0.0f && ! round)
+        rimLight (g, r, radius, 1.0f);
+    else if (k > 0.0f)
     {
         juce::ColourGradient rim (t.highlight ().withAlpha ((light ? 1.0f : 0.42f) * k), 0.0f, r.getY (),
                                   t.highlight ().withAlpha ((light ? 0.55f : 0.14f) * k), 0.0f, r.getBottom (), false);
@@ -216,23 +218,11 @@ edge (juce::Graphics& g, juce::Rectangle<float> r, float radius, float strength)
     const bool light = t.isLight ();
     const float k = (t.material > 0.0f ? t.material : 0.0f) * strength;
     radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
-    // a quiet hairline and a faint bevel just inside it: enough to read as thick glass, without drawing lines
+    // a quiet hairline, then the rim catching the light as on the lenses (no drawn bevel line)
     g.setColour (light ? t.line.withAlpha (0.3f) : t.highlight ().withAlpha (0.05f));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
-    juce::ColourGradient bevel (t.highlight ().withAlpha ((light ? 0.6f : 0.07f) * k), 0.0f, r.getY (),
-                                t.highlight ().withAlpha (0.0f), 0.0f, r.getY () + juce::jmin (60.0f, r.getHeight () * 0.5f), false);
-    g.setGradientFill (bevel);
-    g.drawRoundedRectangle (r.reduced (1.5f), juce::jmax (0.0f, radius - 1.5f), 0.8f);
-    if (k <= 0.0f)
-        return;
-    // one soft glint where the top edge catches the light, fading out at both ends
-    const float y = r.getY () + 0.75f, w = r.getWidth ();
-    const auto from = juce::Point<float> (r.getX () + radius + w * 0.06f, y), to = from.translated (juce::jmin (200.0f, w * 0.34f), 0.0f);
-    const auto glintColour = t.highlight ().withAlpha ((light ? 0.7f : 0.35f) * k);
-    juce::ColourGradient glint (glintColour.withAlpha (0.0f), from, glintColour.withAlpha (0.0f), to, false);
-    glint.addColour (0.5, glintColour);
-    g.setGradientFill (glint);
-    g.drawLine ({ from, to }, 1.2f);
+    if (k > 0.0f)
+        rimLight (g, r, radius, 0.7f * strength);
 }
 
 void
@@ -263,16 +253,49 @@ pane (juce::Graphics& g, juce::Rectangle<float> r, float radius, juce::Colour co
     // the hairline round it and the bevel lit along the top
     g.setColour ((light ? t.line.withAlpha (0.65f) : t.highlight ().withAlpha (0.13f)).withMultipliedAlpha (presence));
     g.strokePath (shape, juce::PathStrokeType (1.0f));
-    juce::Path bevel;
-    bevel.addRoundedRectangle (r.reduced (1.25f), juce::jmax (0.0f, radius - 1.25f));
-    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.95f : 0.2f) * presence), 0.0f, r.getY (),
-                                             t.highlight ().withAlpha (0.0f), 0.0f, r.getCentreY (), false));
-    g.strokePath (bevel, juce::PathStrokeType (1.0f));
+    rimLight (g, r, radius, presence);
     if (lit > 0.0f)
     {
         g.setColour (colour.withAlpha ((light ? 0.8f : 0.7f) * lit));
         g.strokePath (shape, juce::PathStrokeType (1.2f));
     }
+}
+
+void
+rimLight (juce::Graphics& g, juce::Rectangle<float> r, float radius, float strength)
+{
+    const auto& t = theme ();
+    const float k = (t.material > 0.0f ? t.material : 0.0f) * strength;
+    if (k <= 0.0f || r.getWidth () < 4.0f || r.getHeight () < 4.0f)
+        return;
+    const bool light = t.isLight ();
+    radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
+    const juce::Point<float> from { -0.45f, -0.89f }; // the resting light, as on the lenses
+    const auto c = r.getCentre ();
+    const float hx = r.getWidth () * 0.5f - radius, hy = r.getHeight () * 0.5f - radius;
+    const auto rimAt = [&] (float inset, float width, float main, float back)
+    {
+        juce::Path p;
+        p.addRoundedRectangle (r.reduced (inset), juce::jmax (0.0f, radius - inset));
+        juce::PathFlatteningIterator it (p, {}, 0.4f);
+        while (it.next ())
+        {
+            // the normal of the rim here: from the nearest point of the inner box to this point
+            const float mx = (it.x1 + it.x2) * 0.5f - c.x, my = (it.y1 + it.y2) * 0.5f - c.y;
+            const float nx0 = mx - juce::jlimit (-hx, hx, mx), ny0 = my - juce::jlimit (-hy, hy, my);
+            const float nl = std::sqrt (nx0 * nx0 + ny0 * ny0);
+            if (nl < 0.001f)
+                continue;
+            const float facing = (nx0 * from.x + ny0 * from.y) / nl;
+            const float a = std::pow (juce::jmax (facing, 0.0f), 2.2f) * main + std::pow (juce::jmax (-facing, 0.0f), 3.0f) * back;
+            if (a < 0.01f)
+                continue;
+            g.setColour (t.highlight ().withAlpha (juce::jmin (1.0f, a * k)));
+            g.drawLine (it.x1, it.y1, it.x2, it.y2, width);
+        }
+    };
+    rimAt (0.8f, 1.3f, light ? 1.0f : 0.55f, light ? 0.55f : 0.22f); // the catch on the rim
+    rimAt (2.4f, 2.6f, light ? 0.35f : 0.10f, 0.0f);                   // its glow just inside
 }
 
 void
