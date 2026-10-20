@@ -433,7 +433,7 @@ juce::Rectangle<int> BrowserPanel::previewButtonRect() const
 void BrowserPanel::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
+    g.fillAll (glass::plateColour()); // the plate: a little of the window's ground shows through
 
     if (t.glass)
         kit::field (g, searchArea.toFloat(), { false, false, false, search.hasKeyboardFocus (true) });
@@ -455,13 +455,29 @@ void BrowserPanel::paint (juce::Graphics& g)
         const bool selected = ! searching && sameNav (n.kind, n.index, current.kind, current.index);
         if (t.glass && n.kind != Nav::label)
         {
-            // glass: a line icon, a larger label, the selection a soft tinted pill
-            kit::row (g, r.toFloat(), { i == hoveredNav, false, selected });
-            g.setColour (selected ? t.accent : t.text.withAlpha (0.75f));
-            g.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
-            g.setColour (t.text);
-            g.setFont (t.uiFont (13.5f, selected ? 500 : 400));
-            g.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
+            // glass: a line icon and the label; the selection is the element of attention, so it is clear glass that
+            // bends what lies under it (the rest of the list sits on matte layers)
+            const auto drawRow = [&] (juce::Graphics& to)
+            {
+                to.setColour (selected ? t.accent : t.text.withAlpha (0.75f));
+                to.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
+                to.setColour (t.text);
+                to.setFont (t.uiFont (13.5f, selected ? 500 : 400));
+                to.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
+            };
+            if (selected)
+            {
+                const float radius = juce::jmin (t.metrics.controlRadius - 2.0f, (float) r.getHeight() * 0.5f);
+                {
+                    glass::Liquid liquid (g, r.expanded (2));
+                    drawRow (liquid.backdrop());
+                    liquid.lens (r.toFloat(), radius, 0.0f, 0.0f);
+                }
+                glass::rimLight (g, r.toFloat(), radius, 1.0f);
+                continue;
+            }
+            kit::row (g, r.toFloat(), { i == hoveredNav, false, false });
+            drawRow (g);
             continue;
         }
         if (selected)

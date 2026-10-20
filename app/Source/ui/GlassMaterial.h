@@ -16,6 +16,13 @@ bool capturing ();
 // the centre so the rim bends it, a tint of the panel colour, the gloss and the rim. Falls back to `surface` when the
 // material is off (reduce transparency) or the image is empty.
 void frosted (juce::Graphics&, juce::Rectangle<float> r, float radius, const juce::Image& behind, juce::Colour tint);
+// The ground under the glass (glass themes): the background colour with a few large, soft glows in the accent colours
+// laid out over the whole window, so the see-through plates have light to let through. Paints `c`'s bounds with the
+// part of the window it covers; the window, the top bar, the info bar and the card corners call it.
+void windowBackdrop (juce::Graphics&, juce::Component& c);
+// The colour of a plate (the first layer of glass, the most see-through): the theme's chrome, a little transparent over
+// the window backdrop. Opaque in the classic look or with Reduce transparency.
+juce::Colour plateColour ();
 
 // A liquid-glass body for a raised control (the selected segment, framed buttons, thumbs, knobs): a soft shadow, a
 // near-white body, a thick bright rim whose lower edge bends the light into a cyan fringe, a gloss on top and a caustic

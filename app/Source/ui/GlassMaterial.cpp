@@ -80,6 +80,42 @@ juce::Image backdrop (juce::Component& source, juce::Rectangle<int> area, float 
     return image;
 }
 
+void windowBackdrop (juce::Graphics& g, juce::Component& c)
+{
+    const auto& t = theme ();
+    g.fillAll (t.background);
+    if (!t.glass || t.material <= 0.0f)
+        return;
+    auto* top = c.getTopLevelComponent ();
+    const auto window = (top != nullptr ? top->getLocalBounds () : c.getLocalBounds ()).toFloat ();
+    const auto origin = top != nullptr && top != &c ? top->getLocalPoint (&c, juce::Point<int> ()).toFloat () : juce::Point<float> ();
+    const float w = window.getWidth (), h = window.getHeight (), reach = juce::jmax (w, h);
+    const float strength = t.material * (t.isLight () ? 0.34f : 0.22f);
+    const auto warm = t.record.withRotatedHue (0.04f).withMultipliedSaturation (0.7f);
+    // where each glow sits (fractions of the window), its radius (fraction of the long side) and its colour
+    const std::tuple<float, float, float, juce::Colour> glows[] = {
+        { 0.08f, 0.10f, 0.50f, t.accentFill },
+        { 0.94f, 0.25f, 0.45f, t.accentFill2 },
+        { 0.55f, 1.00f, 0.50f, warm },
+    };
+    for (const auto& [x, y, radius, colour] : glows)
+    {
+        const juce::Point<float> centre (x * w - origin.x, y * h - origin.y);
+        juce::ColourGradient glow (colour.withAlpha (strength), centre, colour.withAlpha (0.0f), centre.translated (radius * reach, 0.0f), true);
+        glow.addColour (0.5, colour.withAlpha (strength * 0.35f));
+        g.setGradientFill (glow);
+        g.fillRect (c.getLocalBounds ());
+    }
+}
+
+juce::Colour plateColour ()
+{
+    const auto& t = theme ();
+    if (!t.glass || t.material <= 0.0f)
+        return t.chrome;
+    return t.chrome.withAlpha (juce::jlimit (0.7f, 1.0f, (t.isLight () ? 0.78f : 0.84f) + 0.2f * (1.0f - t.material)));
+}
+
 void frosted (juce::Graphics& g, juce::Rectangle<float> r, float radius, const juce::Image& behind, juce::Colour tint)
 {
     const auto& t = theme ();
@@ -238,8 +274,9 @@ pane (juce::Graphics& g, juce::Rectangle<float> r, float radius, juce::Colour co
     juce::Path shape;
     shape.addRoundedRectangle (r, radius);
     // the frosted body: the panel shows through it
-    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.62f : 0.09f) * presence), 0.0f, r.getY (),
-                                             t.highlight ().withAlpha ((light ? 0.38f : 0.04f) * presence), 0.0f, r.getBottom (), false));
+    // a control is a layer above its card, so it is more matte than the card: less of what is under it shows through
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.82f : 0.13f) * presence), 0.0f, r.getY (),
+                                             t.highlight ().withAlpha ((light ? 0.62f : 0.08f) * presence), 0.0f, r.getBottom (), false));
     g.fillPath (shape);
     if (lit > 0.0f)
     {

@@ -1174,7 +1174,7 @@ juce::String utf8Arrow() { return juce::String::fromUTF8 (" \xe2\x96\xbe"); }
 void DetailPanel::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
+    g.fillAll (glass::plateColour());
     g.setColour (t.line);
     if (! t.glass) // glass: the card has its own rim
         g.fillRect (0, 0, getWidth(), 1);

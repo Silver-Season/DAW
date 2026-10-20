@@ -1779,7 +1779,7 @@ void SessionView::tick()
 void SessionView::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
+    g.fillAll (glass::plateColour());
 
     // the master column header
     fillCell (g, masterHeaderArea.toFloat(), t.panel2);

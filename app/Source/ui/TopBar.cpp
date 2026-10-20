@@ -804,7 +804,10 @@ void TopBar::tick()
 void TopBar::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.glass ? t.background : t.chrome); // glass: the window background, the capsule and cards float on it
+    if (t.glass)
+        glass::windowBackdrop (g, *this); // the window's ground; the capsule and cards float on it
+    else
+        g.fillAll (t.chrome);
     if (! t.glass)
     {
         g.setColour (t.line);

@@ -63,7 +63,10 @@ void InfoBar::timerCallback()
 void InfoBar::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.glass ? t.background : t.chrome);
+    if (t.glass)
+        glass::windowBackdrop (g, *this);
+    else
+        g.fillAll (t.chrome);
     if (! t.glass)
     {
         g.setColour (t.line);
@@ -337,8 +340,11 @@ void CardFrames::paint (juce::Graphics& g)
         corners.addRectangle (r);
         corners.setUsingNonZeroWinding (false);
         corners.addPath (rounded);
-        g.setColour (t.background);
-        g.fillPath (corners);
+        {
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion (corners);
+            glass::windowBackdrop (g, *this);
+        }
         // a soft shadow below the card, kept out of the card itself
         {
             juce::Graphics::ScopedSaveState save (g);

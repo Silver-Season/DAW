@@ -7,6 +7,7 @@
 #include "engine/PluginFolders.h"
 #include "project/AudioImport.h"
 #include "ui/Dialogs.h"
+#include "ui/GlassMaterial.h"
 #include "ui/ThemeLookAndFeel.h"
 
 #include "daw/synth/PrismaParams.h"
@@ -858,7 +859,7 @@ void MainComponent::timerCallback()
 
 void MainComponent::paint (juce::Graphics& g)
 {
-    g.fillAll (theme().background);
+    ui::glass::windowBackdrop (g, *this);
 }
 
 void MainComponent::resized()
