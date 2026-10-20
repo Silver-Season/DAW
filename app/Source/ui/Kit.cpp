@@ -81,8 +81,8 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         // in the transport capsule: only the icon; lit is a soft tint with the icon in the accent
         if (s.on)
         {
-            g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.22f : 0.3f));
-            g.fillRoundedRectangle (r, radius);
+            // lit like the other glass: the accent gathered in a small bead, the icon in the accent
+            glass::litBead (g, r.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f), false, t.accentFill, 0.75f);
             ink = t.accent;
         }
         else if ((s.hover || s.down) && s.enabled)
