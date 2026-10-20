@@ -2,7 +2,9 @@
 
 This file is updated at every notable step. A new chat, Codex or a person continues from here: what is done, what is in progress, what the next step is. The state lives in the repository, not in a chat.
 
-## Track controls, Prisma bank and Distortion (2026-10-21, local review)
+## Track controls, Prisma bank and Distortion (2026-10-21, publication)
+
+Publication authorized by the owner on 2026-10-21. This supersedes the earlier local-only restriction for the completed work on `codex/track-controls-presets`, including its glass prerequisites. Integrating `origin/main` (`badc739`, effects-area split #30) before pushing: keep `FxStrings.h`, registry-owned key parameters and the new effect contract tests; migrate Distortion's translated name and key parameters to those shared entry points. Preserve both sets of handoff notes and the current area instructions. No DSP or UI changes are needed for this integration. Next: complete the native build/tests, publish the branch and a Before / After / How PR to `main`, then CI and Claude review. Codex does not merge this PR. The earlier local preview archive remains the tested pre-integration build. Integration is complete: native arm64 Release build succeeds and all 10 ctest suites pass, including both languages and the new shared effect contracts (`/private/tmp/prisma-publish-build.log`, `/private/tmp/prisma-publish-tests.log`). No Linux runtime is available on this Mac; Linux validation is delegated to the PR CI. Existing compiler warnings remain documented below.
 
 Owner request: visible per-track stop and on/off in Arrangement, a factory sound bank for the existing Prisma, and Distortion. Local branch `codex/track-controls-presets` starts at `9b225c5` (both glass passes retained). No push or PR until requested. Scope: expose the existing mute/stop/return commands without changing playback semantics or project schema; append presets without changing the first 16 programs or synth DSP; expose a separate Distortion using the existing oversampled drive DSP with harder defaults. Small related improvements: state-specific help and header context actions. No broad stage-09 synth rewrite.
 
@@ -45,6 +47,14 @@ The owner subsequently requested a separate, freer dark concept, allowing future
 ## UI kit (2026-10-19, in progress)
 
 The owner agreed to lay the interface down once instead of restyling screens one by one: tokens for sizes, one set of control painters (`ui::kit`), then the screens moved onto them, then a GPU glass backdrop. Plan and progress: [UI-KIT.md](design/UI-KIT.md). Branch `claude/project-thread-ayt3r1`; round three (glossy material, sphere knobs) went out as a bundle for its own PR.
+
+## Areas and agents (2026-10-19)
+
+The owner split the work into areas with one owner each (table in [AGENTS.md](../AGENTS.md)); `AGENTS.md` is now the one instruction for every agent and `CLAUDE.md` imports it. Codex owns the effects area: guide [docs/agents/EFFECTS.md](agents/EFFECTS.md), tasks [docs/agents/EFFECTS-BACKLOG.md](agents/EFFECTS-BACKLOG.md) (FX-1 Utility first). To keep that area self-contained, the Russian names of the effects moved from `Strings.h` to `app/Source/FxStrings.h`, the key knobs of each effect moved from `BuiltInEffectProcessor` into the registry (`EffectType::keyParams`), and `core/tests/fx/ContractTests.cpp` checks every registered effect (no allocation on the audio thread, extremes, rates, block sizes). Claude reviews and merges Codex's PRs.
+
+### Effects area (Codex)
+
+Distortion is complete in the owner-requested track/preset batch above. Its registry metadata and EN/RU names are being reconciled with this area split for publication. Next backlog item remains FX-1.
 
 ## Glass round two (2026-10-19, after PR #27)
 
