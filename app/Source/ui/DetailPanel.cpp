@@ -420,10 +420,14 @@ public:
 
         auto body = getLocalBounds().withTrimmedTop (kDeviceHeaderHeight).reduced (12, 10);
         const int rows = 2, cols = 4;
-        const int gridW = cols * kKnobCellWidth, gridH = rows * kKnobCellHeight + 8;
+        // a low panel squeezes the rows (down to small knobs) rather than cutting them off
+        const int gap = juce::jlimit (2, 8, body.getHeight() - rows * 34);
+        const int cellH = juce::jlimit (30, kKnobCellHeight, (body.getHeight() - gap) / rows);
+        const int gridW = cols * kKnobCellWidth, gridH = rows * cellH + gap;
         if (wavetable != nullptr)
         {
-            wavetable->setBounds (juce::Rectangle<int> (150, 120).withCentre ({ body.getX() + 75, body.getCentreY() }));
+            const int side = juce::jlimit (60, 120, body.getHeight());
+            wavetable->setBounds (juce::Rectangle<int> (side * 5 / 4, side).withCentre ({ body.getX() + 75, body.getCentreY() }));
             body.removeFromLeft (150 + 12);
         }
         auto grid = juce::Rectangle<int> (gridW, gridH).withCentre (body.getCentre());
@@ -432,7 +436,7 @@ public:
         for (size_t i = 0; i < knobs.size(); ++i)
         {
             const int col = (int) i % cols, row = (int) i / cols;
-            knobs[i]->knob.setBounds (grid.getX() + col * kKnobCellWidth, grid.getY() + row * (kKnobCellHeight + 8), kKnobCellWidth, kKnobCellHeight);
+            knobs[i]->knob.setBounds (grid.getX() + col * kKnobCellWidth, grid.getY() + row * (cellH + gap), kKnobCellWidth, cellH);
         }
     }
 
@@ -647,7 +651,9 @@ public:
     {
         constexpr int pad = 12;
         int x = pad;
-        const int h = juce::jmax (40, getHeight() > 0 ? getHeight() : owner.viewport.getMaximumVisibleHeight());
+        // the height of the visible chain, so the devices follow the panel when it is made smaller or larger
+        const int visible = owner.viewport.getMaximumVisibleHeight();
+        const int h = juce::jmax (40, visible > 0 ? visible : getHeight());
         for (auto& v : views)
         {
             const int w = v->preferredWidth();
@@ -965,14 +971,22 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
-        fillCell (g, r, t.panel);
+        if (t.glass)
+            kit::field (g, r, {}); // a well with the chosen half as glass in it
+        else
+            fillCell (g, r, t.panel);
         auto left = r.removeFromLeft (r.getWidth() * 0.5f);
         const auto cell = [&] (juce::Rectangle<float> area, const juce::String& text, bool active, bool enabled) {
             if (active)
             {
-                fillCell (g, area.reduced (1.5f), t.panel2);
-                g.setColour (t.accent);
-                g.fillRect (area.reduced (4.0f, 0.0f).removeFromBottom (2.0f));
+                if (t.glass)
+                    glass::bead (g, area.reduced (1.5f), t.metrics.controlRadius - 1.5f); // the chosen half is a pane of glass
+                else
+                {
+                    fillCell (g, area.reduced (1.5f), t.panel2);
+                    g.setColour (t.accent);
+                    g.fillRect (area.reduced (4.0f, 0.0f).removeFromBottom (2.0f));
+                }
             }
             g.setColour (active ? t.text : (enabled ? t.dimText : t.dimText.withAlpha (0.5f)));
             g.setFont (t.uiFont (11.5f, 500));
@@ -980,7 +994,8 @@ public:
         };
         cell (left, Strings::recording::sourceMidi, source != "audio", true);
         cell (r, Strings::recording::sourceAudio, source == "audio", false);
-        strokeCell (g, getLocalBounds().toFloat(), t.line);
+        if (! t.glass)
+            strokeCell (g, getLocalBounds().toFloat(), t.line);
     }
 
     void mouseDown (const juce::MouseEvent& e) override

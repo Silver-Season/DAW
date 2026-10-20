@@ -123,7 +123,6 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
             {
                 g.setColour ((s.down ? t.shadow() : t.highlight()).withAlpha (s.down ? 0.06f : (t.isLight() ? 0.25f : 0.06f)));
                 g.fillRoundedRectangle (r, radius);
-                glass::spectrumRim (g, r, radius, s.down ? 0.45f : 0.3f); // touched glass splits the light at its edge
             }
         }
         else
@@ -210,7 +209,7 @@ int segmentAt (juce::Rectangle<float> r, int count, float x)
 }
 
 void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringArray& labels, int selected, int hover, int drop,
-                float position, float flare)
+                float position, float flare, bool spectrum)
 {
     const auto& t = theme();
     const int n = juce::jmax (1, labels.size());
@@ -256,7 +255,7 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
                 // while it slides the lens stretches a little and its spectrum flares, then settles
                 const auto home = juce::Rectangle<float> (r.getX() + w * at, r.getY(), w, r.getHeight()).reduced (1.0f, 0.0f);
                 const auto box = home.withSizeKeepingCentre (home.getWidth() * (1.0f + 0.12f * flare), home.getHeight() * (1.0f - 0.04f * flare));
-                liquid.lens (box, box.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.12f : 0.0f, 2.2f + 1.6f * flare);
+                liquid.lens (box, box.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.12f : 0.0f, spectrum ? 2.2f + 1.6f * flare : 1.0f);
             }
         }
         return;
@@ -352,19 +351,11 @@ void row (juce::Graphics& g, juce::Rectangle<float> r, State s)
     if (t.glass)
     {
         // the selection a soft tinted pill with a faint lit top edge; hover only a breath of light
-        const float radius = juce::jmin (t.metrics.controlRadius + 2.0f, r.getHeight() * 0.5f);
+        const float radius = juce::jmin (t.metrics.controlRadius - 2.0f, r.getHeight() * 0.5f);
         if (s.on)
-        {
-            // the selection is a piece of glass laid on the list, faintly tinted with the accent
-            glass::bead (g, r, radius);
-            g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.10f : 0.12f));
-            g.fillRoundedRectangle (r, radius);
-        }
+            glass::bead (g, r, radius); // the selection is a plain piece of glass laid on the list
         else
-        {
-            g.setColour (t.isLight() ? t.highlight().withAlpha (0.55f) : t.highlight().withAlpha (0.05f));
-            g.fillRoundedRectangle (r, radius);
-        }
+            glass::pane (g, r, radius, t.accentFill, 0.0f, 0.55f); // hover: a faint pane
         return;
     }
     g.setColour (s.on ? t.panel2 : t.panel);

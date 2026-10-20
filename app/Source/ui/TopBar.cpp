@@ -458,7 +458,7 @@ public:
         const float p = slideProgress();
         kit::segmented (g, getLocalBounds().toFloat().reduced (0.5f),
                         { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab },
-                        view, -1, hovering ? (int) arrangementView : -1, slidePosition(), std::sin (juce::MathConstants<float>::pi * p));
+                        view, -1, hovering ? (int) arrangementView : -1, slidePosition(), std::sin (juce::MathConstants<float>::pi * p), true);
     }
 
 private:

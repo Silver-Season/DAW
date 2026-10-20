@@ -216,47 +216,23 @@ edge (juce::Graphics& g, juce::Rectangle<float> r, float radius, float strength)
     const bool light = t.isLight ();
     const float k = (t.material > 0.0f ? t.material : 0.0f) * strength;
     radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
-    // the hairline outside and the bevel just inside: two edges make the glass read as thick
-    g.setColour (light ? t.line.withAlpha (0.55f) : t.highlight ().withAlpha (0.09f));
+    // a quiet hairline and a faint bevel just inside it: enough to read as thick glass, without drawing lines
+    g.setColour (light ? t.line.withAlpha (0.3f) : t.highlight ().withAlpha (0.05f));
     g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
-    juce::ColourGradient bevel (t.highlight ().withAlpha ((light ? 0.85f : 0.10f) * k), 0.0f, r.getY (),
-                                t.highlight ().withAlpha ((light ? 0.25f : 0.03f) * k), 0.0f, r.getBottom (), false);
+    juce::ColourGradient bevel (t.highlight ().withAlpha ((light ? 0.6f : 0.07f) * k), 0.0f, r.getY (),
+                                t.highlight ().withAlpha (0.0f), 0.0f, r.getY () + juce::jmin (60.0f, r.getHeight () * 0.5f), false);
     g.setGradientFill (bevel);
-    g.drawRoundedRectangle (r.reduced (1.75f), juce::jmax (0.0f, radius - 1.75f), 0.8f);
+    g.drawRoundedRectangle (r.reduced (1.5f), juce::jmax (0.0f, radius - 1.5f), 0.8f);
     if (k <= 0.0f)
         return;
-    // glints: short lights along the edge that fade at both ends, white at the centre with a cyan and a violet fringe
-    const auto glint = [&] (juce::Point<float> a, juce::Point<float> b, float alpha, float width)
-    {
-        const auto core = t.highlight ().withAlpha (alpha * k);
-        for (const auto& [offset, colour] : { std::pair<float, juce::Colour> { -0.9f, t.accentFill.withAlpha (alpha * 0.35f * k) },
-                                              std::pair<float, juce::Colour> { 0.9f, t.accentFill2.withAlpha (alpha * 0.25f * k) },
-                                              std::pair<float, juce::Colour> { 0.0f, core } })
-        {
-            const auto n = juce::Point<float> (-(b - a).y, (b - a).x) / juce::jmax (0.001f, a.getDistanceFrom (b)) * offset;
-            juce::ColourGradient line (colour.withAlpha (0.0f), a + n, colour.withAlpha (0.0f), b + n, false);
-            line.addColour (0.5, colour);
-            g.setGradientFill (line);
-            g.drawLine ({ a + n, b + n }, width);
-        }
-    };
-    const float y = r.getY () + 0.75f, w = r.getWidth (), h = r.getHeight ();
-    const float glow = light ? 1.0f : 0.75f;
-    glint ({ r.getX () + radius + w * 0.08f, y }, { r.getX () + radius + w * 0.08f + juce::jmin (220.0f, w * 0.36f), y }, glow, 1.3f);
-    glint ({ r.getRight () - radius - juce::jmin (80.0f, w * 0.14f), y }, { r.getRight () - radius, y }, glow * 0.6f, 1.1f);
-    // the lit corner, top left, as a short arc
-    {
-        juce::Path corner;
-        corner.addCentredArc (r.getX () + radius, r.getY () + radius, radius - 0.75f, radius - 0.75f, 0.0f,
-                              -juce::MathConstants<float>::halfPi * 0.95f, -juce::MathConstants<float>::halfPi * 0.15f, true);
-        g.setColour (t.highlight ().withAlpha (glow * 0.7f * k));
-        g.strokePath (corner, juce::PathStrokeType (1.2f));
-    }
-    // light leaving the glass at the bottom, opposite the lit corner
-    const float by = r.getBottom () - 0.75f;
-    glint ({ r.getRight () - radius - juce::jmin (180.0f, w * 0.3f), by }, { r.getRight () - radius - w * 0.04f, by }, glow * 0.45f, 1.0f);
-    if (h > 80.0f)
-        glint ({ r.getRight () - 0.75f, r.getY () + radius + h * 0.08f }, { r.getRight () - 0.75f, r.getY () + radius + juce::jmin (90.0f, h * 0.3f) }, glow * 0.4f, 1.0f);
+    // one soft glint where the top edge catches the light, fading out at both ends
+    const float y = r.getY () + 0.75f, w = r.getWidth ();
+    const auto from = juce::Point<float> (r.getX () + radius + w * 0.06f, y), to = from.translated (juce::jmin (200.0f, w * 0.34f), 0.0f);
+    const auto glintColour = t.highlight ().withAlpha ((light ? 0.7f : 0.35f) * k);
+    juce::ColourGradient glint (glintColour.withAlpha (0.0f), from, glintColour.withAlpha (0.0f), to, false);
+    glint.addColour (0.5, glintColour);
+    g.setGradientFill (glint);
+    g.drawLine ({ from, to }, 1.2f);
 }
 
 void
@@ -410,7 +386,7 @@ void
 capsule (juce::Graphics& g, juce::Rectangle<float> r)
 {
     const auto& t = theme ();
-    const float radius = r.getHeight () * 0.5f;
+    const float radius = juce::jmin (r.getHeight () * 0.5f, t.metrics.panelRadius + 2.0f); // a rounded bar, like the cards
     if (!t.glass || t.material <= 0.0f)
     {
         g.setColour (t.panel);

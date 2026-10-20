@@ -21,9 +21,8 @@ void frosted (juce::Graphics&, juce::Rectangle<float> r, float radius, const juc
 // near-white body, a thick bright rim whose lower edge bends the light into a cyan fringe, a gloss on top and a caustic
 // glow along the bottom. `round` draws a circle in r.
 void bead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round = false, juce::Colour fringe = juce::Colour());
-// The edge of a glass plate or card, where its thickness shows: a hairline outside, a bevel line just inside it, and
-// the light caught on the edge in a few glints (the top edge, the lit corner, faintly the opposite bottom edge), each
-// a little split toward cyan and violet, as a prism would. `strength` 0..1 scales the light (cards less than plates).
+// The edge of a glass plate or card, kept quiet: a faint hairline, a bevel lit along the top just inside it, and one
+// soft glint where the top edge catches the light. `strength` 0..1 scales the light (cards less than plates).
 void edge (juce::Graphics&, juce::Rectangle<float> r, float radius, float strength = 1.0f);
 // A translucent pane of glass under a button (the transport row): a frosted body you can see the panel through, a
 // hairline and a lit top bevel; `presence` 0..1 fades the whole pane in, `lit` 0..1 adds a quiet edge and light in
