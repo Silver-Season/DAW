@@ -375,13 +375,28 @@ public:
 
     std::function<void (int view)> onSwitch;
 
+    std::function<bool()> animationsEnabled; // Settings → animations; the lens jumps when they are off
+
     void setView (int v)
     {
-        if (v != view)
+        if (v == view)
+            return;
+        from = slidePosition();
+        view = v;
+        if (animationsEnabled != nullptr && ! animationsEnabled())
         {
-            view = v;
+            slide.reset();
             repaint();
+            return;
         }
+        slideStart = juce::Time::getMillisecondCounterHiRes();
+        if (slide == nullptr)
+            slide = std::make_unique<juce::VBlankAttachment> (this, [this] {
+                if (slideProgress() >= 1.0f)
+                    slide.reset();
+                repaint();
+            });
+        repaint();
     }
 
     juce::String helpAt (juce::Point<int> p) const override
@@ -400,13 +415,32 @@ public:
     void paint (juce::Graphics& g) override
     {
         glass::Lit lit (*this);
+        const float p = slideProgress();
         kit::segmented (g, getLocalBounds().toFloat().reduced (0.5f),
                         { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab },
-                        view, -1, hovering ? (int) arrangementView : -1);
+                        view, -1, hovering ? (int) arrangementView : -1, slidePosition(), std::sin (juce::MathConstants<float>::pi * p));
     }
 
 private:
+    static constexpr double kSlideMs = 320.0;
     int segmentAt (int x) const { return juce::jlimit (0, 2, x * 3 / juce::jmax (1, getWidth())); }
+    float slideProgress() const
+    {
+        return slide == nullptr ? 1.0f : (float) juce::jlimit (0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - slideStart) / kSlideMs);
+    }
+    // where the lens is now: eased out with a slight overshoot, like glass that slides and settles
+    float slidePosition() const
+    {
+        const float p = slideProgress();
+        if (p >= 1.0f)
+            return (float) view;
+        const float c = 1.4f, q = p - 1.0f;
+        const float eased = 1.0f + (c + 1.0f) * q * q * q + c * q * q;
+        return from + ((float) view - from) * eased;
+    }
+    std::unique_ptr<juce::VBlankAttachment> slide;
+    double slideStart = 0.0;
+    float from = 0.0f;
     int view = session;
     bool hovering = false;
 };
@@ -563,6 +597,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     spectrum = std::make_unique<Spectrum> (engine);
     addChildComponent (*spectrum);
     tabs = std::make_unique<Tabs>();
+    tabs->animationsEnabled = [this] { return engine.getSettings().animations(); };
     tabs->onSwitch = [this] (int view) {
         if (view == Tabs::mix)
         {

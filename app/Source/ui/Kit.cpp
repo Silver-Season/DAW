@@ -213,7 +213,8 @@ int segmentAt (juce::Rectangle<float> r, int count, float x)
     return juce::jlimit (0, juce::jmax (0, count - 1), (int) ((x - r.getX()) / juce::jmax (1.0f, r.getWidth() / (float) juce::jmax (1, count))));
 }
 
-void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringArray& labels, int selected, int hover, int drop)
+void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringArray& labels, int selected, int hover, int drop,
+                float position, float flare)
 {
     const auto& t = theme();
     const int n = juce::jmax (1, labels.size());
@@ -244,14 +245,23 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
                 b.setColour (t.accent.withAlpha (0.22f));
                 b.fillRoundedRectangle (seg (drop).withY (track.getY()).withHeight (track.getHeight()), pill);
             }
+            const float at = juce::jlimit (-0.06f, (float) n - 0.94f, position >= 0.0f ? position : (float) selected);
+            flare = juce::jlimit (0.0f, 1.0f, flare);
             for (int i = 0; i < labels.size(); ++i)
             {
-                b.setColour (i == selected ? t.accent : t.dimText);
+                // a label turns to the accent as the lens arrives over it
+                const float near = selected >= 0 ? juce::jmax (0.0f, 1.0f - std::abs ((float) i - at)) : 0.0f;
+                b.setColour (t.dimText.interpolatedWith (t.accent, near));
                 b.setFont (labelFont (i));
                 b.drawText (labels[i], seg (i), juce::Justification::centred, false);
             }
             if (selected >= 0)
-                liquid.lens (seg (selected).reduced (1.0f, 0.0f), r.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.12f : 0.0f, 2.2f);
+            {
+                // while it slides the lens stretches a little and its spectrum flares, then settles
+                const auto home = juce::Rectangle<float> (r.getX() + w * at, r.getY(), w, r.getHeight()).reduced (1.0f, 0.0f);
+                const auto box = home.withSizeKeepingCentre (home.getWidth() * (1.0f + 0.12f * flare), home.getHeight() * (1.0f - 0.04f * flare));
+                liquid.lens (box, box.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.12f : 0.0f, 2.2f + 1.6f * flare);
+            }
         }
         return;
     }

@@ -595,8 +595,15 @@ void Liquid::compose ()
     if (! litStack.empty())
         if (const auto p = LightTracker::get().pointer())
             pointer = litStack.back()->getLocalPoint (nullptr, *p);
-    for (const auto& b : boxes)
+    // touched glass splits the light: a lens of the component under the pointer shows a spectrum at its rim, more while
+    // it is held (dragging a fader or a knob); lenses that are prisms already (the view switch) keep their own
+    float touch = 0.0f;
+    if (! litStack.empty() && litStack.back()->isEnabled())
+        touch = litStack.back()->isMouseButtonDown (true) ? 1.0f : (litStack.back()->isMouseOver (true) ? 0.45f : 0.0f);
+    for (auto b : boxes)
     {
+        if (b.prism <= 1.0f && touch > 0.0f)
+            b.prism = 1.0f + 0.9f * touch;
         float lx = 0.24f, ly = -0.97f;
         if (pointer)
         {
@@ -671,7 +678,8 @@ void Liquid::compose ()
                         // the rim, brightest where the light falls on it and opposite (the light leaving the glass)
                         const float hue = std::fmod (std::atan2 (ny, nx) / juce::MathConstants<float>::twoPi + 1.25f, 1.0f);
                         const auto c = juce::Colour::fromHSV (hue, dark ? 0.75f : 0.85f, 1.0f, 1.0f);
-                        const float band = std::exp (-juce::square ((inset - 1.2f) / 1.1f)) * (0.25f + 0.55f * std::abs (facing)) * (dark ? 0.55f : 0.45f);
+                        const float band = std::exp (-juce::square ((inset - 1.2f) / 1.1f)) * (0.25f + 0.55f * std::abs (facing)) * (dark ? 0.55f : 0.45f)
+                                         * juce::jlimit (1.0f, 1.8f, b.prism / 2.2f);
                         glassCol = over ({ c.getFloatRed () * band, c.getFloatGreen () * band, c.getFloatBlue () * band, band }, glassCol);
                     }
                     const float dim = 1.0f - juce::jmax (-facing, 0.0f) * rim * 0.18f;

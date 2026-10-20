@@ -43,7 +43,10 @@ void label (juce::Graphics&, juce::Rectangle<float>, const juce::String&, juce::
 // A switch: its track and thumb inside `area` (right-aligned), label not included.
 void switchControl (juce::Graphics&, juce::Rectangle<float> area, State);
 // A segmented control (view switch, editor modes). `drop`: a segment highlighted while something is dragged over it.
-void segmented (juce::Graphics&, juce::Rectangle<float>, const juce::StringArray& labels, int selected, int hover = -1, int drop = -1);
+// Glass: `position` puts the lens between segments while it slides (a fractional index; negative = on `selected`), and
+// `flare` (0..1) stretches it and brightens its spectrum while it moves.
+void segmented (juce::Graphics&, juce::Rectangle<float>, const juce::StringArray& labels, int selected, int hover = -1, int drop = -1,
+                float position = -1.0f, float flare = 0.0f);
 int segmentAt (juce::Rectangle<float>, int count, float x);
 // The background of a text field or a combo box.
 void field (juce::Graphics&, juce::Rectangle<float>, State);
