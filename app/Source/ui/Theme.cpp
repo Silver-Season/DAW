@@ -311,7 +311,7 @@ juce::StringArray ThemeManager::reload (const juce::File& userDir)
 
     // Built-in themes in a fixed order, then anything else that is embedded.
     const char* order[] = {
-        "prism_json", "neon_json", "studio_json", "paper_json", "glasslight_json", "glassdark_json"
+        "glasslight_json", "glassdark_json"
     };
     for (const char* name : order)
     {

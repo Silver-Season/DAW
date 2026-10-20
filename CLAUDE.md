@@ -31,13 +31,13 @@ cmake -S . -B ../build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build ../build && ctest --test-dir ../build --output-on-failure
 ```
 
-UI screenshots: `Xvfb :99 -screen 0 1600x1000x24 &`, then `HOME=<empty folder> DAW_NULL_AUDIO=1 DAW_THEME=prism|neon|studio|paper DAW_LANG=en|ru ../build/app/DAW_artefacts/Release/DAW`. The window is named after the project ("Untitled"), resize it with `xdotool windowsize`, capture with `import -window root`. On a Mac, `./scripts/build-mac.sh` builds; CI builds macOS and Linux and publishes a nightly DMG from `main`.
+UI screenshots: `Xvfb :99 -screen 0 1600x1000x24 &`, then `HOME=<empty folder> DAW_NULL_AUDIO=1 DAW_THEME=glass-light|glass-dark DAW_LANG=en|ru ../build/app/DAW_artefacts/Release/DAW`. The window is named after the project ("Untitled"), resize it with `xdotool windowsize`, capture with `import -window root`. On a Mac, `./scripts/build-mac.sh` builds; CI builds macOS and Linux and publishes a nightly DMG from `main`.
 
 ## Pitfalls we already hit
 
 - **Keys are read by key code, not by character.** The owner types with a Russian layout: `getTextCharacter()` returns Cyrillic while `getKeyCode()` stays Latin. Every new shortcut compares the key code (see `keyLetter` in `plugins/prisma/Source/PrismaEditor.cpp` and `app/Source/ui/ComputerKeys.cpp`).
 - **Engine tests without a real audio device:** tests create `AudioEngine` with `openDevices = false`. On macOS CI a real CoreAudio callback raced the hand-driven one and broke the tests.
-- **Colors only from the theme.** The whole UI takes colors through `theme()` (JSON tokens in `app/Resources/themes`), so a new screen looks right in all four themes. No hard-coded colors. The one exception for now is the Prisma window, which moves to themes in the synth stage.
+- **Colors only from the theme.** The whole UI takes colors through `theme()` (JSON tokens in `app/Resources/themes`), so a new screen looks right in both themes (light and dark glass). No hard-coded colors. The one exception for now is the Prisma window, which moves to themes in the synth stage.
 - **Every UI string lives in `app/Source/Strings.h`** as `tr ("English", "Русский")`. A new string needs both languages; when word order or plurals differ, branch on `isRussian()`. The engine tests run in both languages (`daw_engine_tests` and `daw_engine_tests_ru`), so a test that checks UI text compares against `Strings::...` or `Strings::tr (...)`, never a bare literal.
 - **Audio thread:** no allocation, no locks, no `juce::String`, no `ValueTree`. Debug has `DAW_RT_CHECKS`, and the "no heap use" test must stay green.
 - **One action = one undo transaction**; a mouse gesture is one transaction too.

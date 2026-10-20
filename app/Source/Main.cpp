@@ -168,7 +168,7 @@ private:
     // Opt-in native component captures. Uses its own settings and null audio; no user's project is opened.
     void timerCallback () override
     {
-        static const char* themes[]{ "prism", "neon", "studio", "paper", "glass-light", "glass-dark" };
+        static const char* themes[]{ "glass-light", "glass-dark" };
         auto* content = dynamic_cast<MainComponent*> (mainWindow->getContentComponent ());
         if (snapshotStep >= 56)
         {
@@ -182,7 +182,7 @@ private:
             snapshotWindow.reset ();
             if (capture < 18)
             {
-                ThemeManager::get ().setCurrent (themes[capture / 3]);
+                ThemeManager::get ().setCurrent (themes[(capture / 3) % 2]);
                 if (content->isArrangementShown ())
                     content->getCommandManager ().invokeDirectly (ui::commands::switchView, false);
                 content->getDetailPanel ().setEditorMode (false);

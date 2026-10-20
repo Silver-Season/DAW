@@ -20,62 +20,24 @@ using namespace tests;
 
 namespace
 {
-juce::String hex (juce::Colour c)
-{
-    return "#" + juce::String::toHexString ((int) (c.getARGB() & 0xffffff)).paddedLeft ('0', 6).toLowerCase();
-}
-
 //==============================================================================
 void testThemes()
 {
-    std::printf ("[test 12] themes: six JSON files, all tokens, 16-colour palette\n");
+    std::printf ("[test 12] themes: the two glass JSON files, all tokens, 16-colour palette\n");
     auto& manager = ThemeManager::get();
     const auto problems = manager.reload();
     check (problems.isEmpty(), "all built-in theme files parse");
-    check (manager.all ().size () == 6, "six built-in themes");
+    check (manager.all ().size () == 2 && manager.all ()[0].id == "glass-light" && manager.all ()[1].id == "glass-dark", "two built-in themes, light and dark glass");
 
-    struct Expected
+    for (const auto& t : manager.all())
     {
-        const char *id, *background, *chrome, *panel, *panel2, *line, *text, *dimText, *accent, *accent2, *record, *play, *clipInk;
-        int saturation, lightness;
-        float glow, radius;
-        bool scanlines;
-        const char *fontUi, *fontNum;
-    };
-    const Expected table[] {
-        { "prism", "#07080d", "#0c0e15", "#121520", "#181c29", "#232838", "#e6e8f2", "#7f869c", "#8be9ff", "#c59bff", "#ff4d6d", "#6bf0a6", "#0b0d14", 78, 62, 1.0f, 6.0f, false, "Onest", "JetBrains Mono" },
-        { "neon", "#040208", "#090511", "#0f0919", "#160d24", "#2d1946", "#f4eaff", "#8e7aab", "#00f0ff", "#ff2bd6", "#ff2b4f", "#c3ff1a", "#07030d", 100, 58, 1.6f, 0.0f, true, "JetBrains Mono", "JetBrains Mono" },
-        { "studio", "#161718", "#232426", "#2b2c2f", "#333438", "#3e4044", "#dcd8cf", "#8f8a82", "#ffb547", "#7fc8b2", "#e5484d", "#93d36c", "#1a1b1c", 42, 62, 0.0f, 3.0f, false, "Onest", "JetBrains Mono" },
-        { "paper", "#e3e7ee", "#f6f7f9", "#ffffff", "#eef1f5", "#d5dae3", "#1b2130", "#667085", "#2457e6", "#b5179e", "#e5243f", "#0f9a4c", "#141a26", 72, 74, 0.0f, 6.0f, false, "Onest", "JetBrains Mono" },
-    };
-    for (const auto& e : table)
-    {
-        const Theme* found = nullptr;
-        for (const auto& t : manager.all())
-            if (t.id == e.id)
-                found = &t;
-        check (found != nullptr, juce::String ("theme present: ") + e.id);
-        if (found == nullptr)
-            continue;
-        const auto& t = *found;
-        const juce::String name = e.id;
-        check (hex (t.background) == e.background && hex (t.chrome) == e.chrome && hex (t.panel) == e.panel && hex (t.panel2) == e.panel2,
-               name + ": surface colours match the table");
-        check (hex (t.line) == e.line && hex (t.text) == e.text && hex (t.dimText) == e.dimText, name + ": line and text colours match");
-        check (hex (t.accent) == e.accent && hex (t.accent2) == e.accent2 && hex (t.record) == e.record && hex (t.play) == e.play
-                   && hex (t.clipInk) == e.clipInk,
-               name + ": accent, record, play and clip ink match");
-        check (std::abs (t.clipSaturation * 100.0f - (float) e.saturation) < 0.01f && std::abs (t.clipLightness * 100.0f - (float) e.lightness) < 0.01f,
-               name + ": palette saturation and lightness");
-        check (std::abs (t.glow - e.glow) < 1e-4f && std::abs (t.radius - e.radius) < 1e-4f && t.scanlines == e.scanlines, name + ": glow, radius, scanlines");
-        check (t.fontUi == e.fontUi && t.fontNum == e.fontNum, name + ": fonts");
-
+        const juce::String name = t.id;
         std::set<juce::uint32> distinct;
         for (int i = 0; i < Theme::kPaletteSize; ++i)
             distinct.insert (t.palette (i).getARGB());
         check ((int) distinct.size() == Theme::kPaletteSize, name + ": palette has 16 distinct colours");
         check (t.palette (0) == juce::Colour::fromHSL (t.hues[0] / 360.0f, t.clipSaturation, t.clipLightness, 1.0f), name + ": palette colour 0 is HSL of hue 0");
-        check (t.clipColour (3, false).getAlpha() == 140 && t.clipColour (3, true).getAlpha() == 255, name + ": inactive clips are drawn at 55 % opacity");
+        check (t.glass, name + ": the built-in themes are glass");
     }
 
     for (const auto& th : manager.all())
@@ -83,44 +45,39 @@ void testThemes()
             check (Theme::contrast (th.textPalette (i), th.panel) >= 4.5f && Theme::contrast (th.textPalette (i), th.chrome) >= 4.5f,
                    th.id + ": palette colour " + juce::String (i) + " as text has contrast 4.5:1");
 
-    const auto prism = manager.all()[0];
-    const auto neon = manager.all()[1];
-    check ((int) prism.hues[0] == 350 && (int) prism.hues[15] == 328 && (int) neon.hues[0] == 318 && (int) neon.hues[15] == 335, "spectrum and neon hue lists");
 
     // A theme without a token is refused with the name of the token.
     Theme broken;
     juce::String error;
     check (! Theme::fromJson ("{\"id\":\"x\",\"name\":\"X\"}", broken, error) && error.contains ("background"), "missing token is reported by name");
     check (! Theme::fromJson ("not json", broken, error), "garbage is not a theme");
-    auto json = juce::String::fromUTF8 (BinaryData::prism_json, BinaryData::prism_jsonSize);
+    auto json = juce::String::fromUTF8 (BinaryData::glassdark_json, BinaryData::glassdark_jsonSize);
     check (! Theme::fromJson (json.replace ("\"accent\": \"#8be9ff\"", "\"accent\": \"zzz\""), broken, error) && error.contains ("accent"), "bad colour is reported");
 
     // User themes from a folder: valid ones join the list, a broken one is reported and skipped.
     auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("daw-theme-test-" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
     dir.createDirectory();
-    dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"prism\"", "\"id\": \"mine\"").replace ("\"name\": \"Prism\"", "\"name\": \"Mine\""));
+    dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"glass-dark\"", "\"id\": \"mine\"").replace ("\"name\": \"Glass · Dark\"", "\"name\": \"Mine\""));
     dir.getChildFile ("broken.json").replaceWithText ("{ \"id\": \"broken\" }");
     const auto userProblems = manager.reload (dir);
-    check (manager.all ().size () == 7 && manager.all ().back ().id == "mine",
+    check (manager.all ().size () == 3 && manager.all ().back ().id == "mine",
            "a theme from User Library/Themes appears in the list");
     check (userProblems.size() == 1 && userProblems[0].startsWith ("broken.json"), "a broken user theme is reported, the others load");
     manager.setCurrent ("mine");
     check (theme().id == "mine", "current theme can be switched");
     manager.setCurrent ("no-such-theme");
-    check (theme().id == "prism", "unknown theme id falls back to the first theme");
+    check (theme().id == "glass-light", "unknown theme id falls back to the first theme");
     dir.deleteRecursively();
     manager.reload();
 
     // Fonts come from the embedded files, with different weights.
-    manager.setCurrent ("prism");
+    manager.setCurrent ("glass-light");
     const auto regular = theme().uiFont (13.0f, 400), semibold = theme().uiFont (13.0f, 600), mono = theme().numFont (13.0f);
     check (regular.getTypefacePtr() != nullptr && regular.getTypefacePtr()->getName().startsWith ("Onest"), "UI font is Onest");
     check (semibold.getTypefacePtr() != nullptr && semibold.getTypefacePtr() != regular.getTypefacePtr(), "semibold is a different face than regular");
     check (mono.getTypefacePtr() != nullptr && mono.getTypefacePtr()->getName().startsWith ("JetBrains Mono"), "number font is JetBrains Mono");
     check (std::abs (juce::GlyphArrangement::getStringWidth (mono, "1111") - juce::GlyphArrangement::getStringWidth (mono, "8888")) < 0.01f, "digits of the number font have equal widths");
-    manager.setCurrent ("neon");
-    check (theme().uiFont (13.0f).getTypefacePtr()->getName().startsWith ("JetBrains Mono"), "Neon uses the monospace font for the UI");
-    manager.setCurrent ("prism");
+    manager.setCurrent ("glass-dark");
 }
 
 void
@@ -195,12 +152,12 @@ testAppearance ()
         check (pixels > 100, "current native prism mark renders in both glass themes");
     }
     manager.setAppearance (Appearance ());
-    manager.setCurrent ("prism");
+    manager.setCurrent ("glass-dark");
 }
 
 void testKit()
 {
-    std::printf ("[test kit] every control kind in every state paints in all six themes; labels stay readable\n");
+    std::printf ("[test kit] every control kind in every state paints in both themes; labels stay readable\n");
     auto& manager = ThemeManager::get();
     manager.reload();
     using ui::kit::Kind;
@@ -239,8 +196,7 @@ void testKit()
     }
     manager.setCurrent ("glass-light");
     check (theme().metrics.pill && std::abs (theme().metrics.controlHeight - 28.0f) < 0.01f, "glass themes read their size tokens from the file");
-    manager.setCurrent ("prism");
-    check (! theme().metrics.pill && std::abs (theme().metrics.controlRadius - theme().radius) < 0.01f, "classic themes keep their own radius");
+    manager.setCurrent ("glass-dark");
 }
 
 //==============================================================================

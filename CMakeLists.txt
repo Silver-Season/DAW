@@ -51,10 +51,6 @@ if(DAW_BUILD_JUCE)
         app/Resources/fonts/Onest-SemiBold.ttf
         app/Resources/fonts/JetBrainsMono-Regular.ttf
         app/Resources/fonts/JetBrainsMono-Bold.ttf
-        app/Resources/themes/prism.json
-        app/Resources/themes/neon.json
-        app/Resources/themes/studio.json
-        app/Resources/themes/paper.json
         app/Resources/themes/glasslight.json
         app/Resources/themes/glassdark.json
         app/Resources/brand/AppIcon-1024.png)
