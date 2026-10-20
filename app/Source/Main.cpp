@@ -3,6 +3,7 @@
 #include "MainComponent.h"
 #include "Settings.h"
 #include "engine/AudioEngine.h"
+#include "engine/BuiltInEffectProcessor.h"
 #include "engine/NullAudioDriver.h"
 #include "library/UserLibrary.h"
 #include "model/ArrangementEdit.h"
@@ -249,6 +250,19 @@ private:
                 editor->setLookAndFeel (lookAndFeel.get ());
                 save (*editor, theme ().id + "-synth");
                 editor->setLookAndFeel (nullptr);
+                PrismaProcessor bass;
+                for (int i = 0; i < bass.getNumPrograms (); ++i)
+                    if (bass.getProgramName (i) == "Neon Grid Bass")
+                        bass.setCurrentProgram (i);
+                std::unique_ptr<juce::AudioProcessorEditor> bassEditor (bass.createEditor ());
+                bassEditor->setLookAndFeel (lookAndFeel.get ());
+                save (*bassEditor, theme ().id + "-cyberbass");
+                bassEditor->setLookAndFeel (nullptr);
+                BuiltInEffectProcessor distortion ("distortion");
+                std::unique_ptr<juce::AudioProcessorEditor> fxEditor (distortion.createEditor ());
+                fxEditor->setLookAndFeel (lookAndFeel.get ());
+                save (*fxEditor, theme ().id + "-distortion");
+                fxEditor->setLookAndFeel (nullptr);
             }
         }
         ++snapshotStep;

@@ -66,22 +66,13 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
-        if (t.glass && style == Style::activator)
+        if (style == Style::activator)
         {
-            // glass: the track number as plain text, as the design writes "01 Drums"; a muted track shows it dim
-            // on a grey pill, struck through
-            const bool muted = ! on;
-            if (muted || isMouseOver())
-            {
-                g.setColour (t.panel2.withAlpha (muted ? 0.9f : 0.6f));
-                g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
-            }
-            const auto label = text.length() == 1 ? "0" + text : text;
-            g.setColour (muted ? t.dimText : t.text);
-            g.setFont (t.uiFont (12.5f, 500));
-            g.drawText (label, getLocalBounds(), juce::Justification::centred, false);
-            if (muted)
-                g.fillRect (r.getCentreX() - 8.0f, r.getCentreY(), 16.0f, 1.2f);
+            kit::State state;
+            state.on = on;
+            state.hover = isMouseOver();
+            g.setColour (kit::button (g, r, kit::Kind::toggle, state));
+            g.fillPath (icons::power (r.withSizeKeepingCentre (11.0f, 11.0f)));
             return;
         }
         if (t.glass)
@@ -253,8 +244,18 @@ public:
           activator (juce::String(), Strings::help::activator, MiniButton::Style::activator),
           solo ("S", Strings::help::solo, MiniButton::Style::solo), arm (juce::String(), Strings::help::arm, MiniButton::Style::arm),
           chooser (Strings::arrangement::autoVolume, Strings::help::arrAutomationChooser),
-          live ([] (juce::Rectangle<float> a) { return icons::play (a); }, Strings::help::arrLiveToSession)
+          live ([] (juce::Rectangle<float> a) { return icons::play (a); }, Strings::help::arrLiveToSession),
+          stop ([] (juce::Rectangle<float> a) { return icons::stop (a); }, Strings::help::arrStopTrack)
     {
+        activator.setComponentID ("track-power");
+        stop.setComponentID ("track-stop");
+        live.setComponentID ("track-source");
+        stop.onClick = [this] (const juce::MouseEvent&) {
+            if (auto* rt = view.engine.findRuntime (trackId); rt != nullptr && rt->inSession.load() && rt->playingSlot.load() < 0)
+                view.engine.backToArrangement (trackId);
+            else
+                view.engine.stopTrack (trackId);
+        };
         // Session or timeline, per track: the switch launches the track's clip on the next bar, or gives it back.
         live.onClick = [this] (const juce::MouseEvent&) {
             const auto track = view.model.findTrack (trackId);
@@ -304,10 +305,10 @@ public:
             if (auto track = view.model.findTrack (trackId); track.isValid())
                 view.actions.setTrackArm (trackId, ! track.arm(), ! e.mods.isCommandDown());
         };
-        for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &volume, &pan })
+        for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &stop, &volume, &pan })
             addAndMakeVisible (c);
         if (isMaster())
-            for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &pan })
+            for (auto* c : std::initializer_list<juce::Component*> { &activator, &solo, &arm, &live, &stop, &pan })
                 c->setVisible (false); // the master row: a volume and the envelope chooser
         refreshValues (true);
     }
@@ -341,11 +342,18 @@ public:
         }
         chooser.setText (targetName);
         activator.setOn (! track.mute());
-        activator.setText (juce::String (view.model.indexOfTrack (trackId) + 1));
+        activator.setHelpText (track.mute() ? Strings::help::trackEnable : Strings::help::trackDisable);
         solo.setOn (track.solo());
         arm.setOn (track.arm());
         auto* rt = view.engine.findRuntime (trackId);
         const bool inSession = rt != nullptr && rt->inSession.load();
+        const bool stopped = inSession && rt->playingSlot.load() < 0;
+        if (stopped != stop.on)
+        {
+            stop.setOn (stopped);
+            stop.setIcon ([stopped] (juce::Rectangle<float> a) { return stopped ? icons::play (a) : icons::stop (a); });
+        }
+        stop.setHelpText (stopped ? Strings::help::arrResumeTrack : Strings::help::arrStopTrack);
         if (rt != nullptr && rt->playingSlot.load() >= 0)
             lastPlayedScene = rt->playingSlot.load();
         if (inSession != live.on)
@@ -360,7 +368,7 @@ public:
                                         : (liveScene (track) >= 0 ? Strings::help::arrLiveToSession : Strings::help::arrLiveNoClips);
         if (live.getHelpText() != liveHelp)
             live.setHelpText (liveHelp);
-        const auto summary = track.name() + "|" + juce::String (track.colour());
+        const auto summary = track.name() + "|" + juce::String (track.colour()) + "|" + juce::String ((int) track.mute());
         if (summary != shown)
         {
             shown = summary;
@@ -402,7 +410,7 @@ public:
         }
         if (editor == nullptr)
         {
-            g.setColour (t.text);
+            g.setColour (track.mute() ? t.dimText : t.text);
             g.setFont (t.uiFont (12.5f, 600));
             g.drawText (track.name(), nameBounds, juce::Justification::centredLeft, true);
         }
@@ -430,13 +438,23 @@ public:
             chooser.setBounds (juce::Rectangle<int> (r.getX(), r.getY() + 5, r.getWidth(), 20));
             return;
         }
-        // right to left: record, solo, Session / timeline, on
+        // Return buses have no clips to stop or switch to Session.
+        const auto track = view.model.findTrack (trackId);
+        const bool clips = track.type() == "midi" || track.type() == "audio";
+        stop.setVisible (clips);
+        live.setVisible (clips);
+        // Keep stop distinct from the Session/timeline source switch.
         arm.setBounds (top.removeFromRight (btn));
         top.removeFromRight (3);
         solo.setBounds (top.removeFromRight (btn));
         top.removeFromRight (3);
-        live.setBounds (top.removeFromRight (btn));
-        top.removeFromRight (3);
+        if (clips)
+        {
+            live.setBounds (top.removeFromRight (btn));
+            top.removeFromRight (3);
+            stop.setBounds (top.removeFromRight (btn));
+            top.removeFromRight (3);
+        }
         activator.setBounds (top.removeFromLeft (btn + 2));
         top.removeFromLeft (6);
         nameBounds = top;
@@ -570,6 +588,23 @@ private:
                 safe->beginRename();
         });
         const auto track = view.model.findTrack (trackId);
+        menu.addItem (track.mute() ? Strings::trackEnable : Strings::trackDisable, [safe, id] {
+            if (safe != nullptr)
+                if (auto t = safe->view.model.findTrack (id); t.isValid())
+                    safe->view.actions.setTrackMute (id, ! t.mute());
+        });
+        if (track.type() == "midi" || track.type() == "audio")
+        {
+            menu.addItem (Strings::trackStop, [safe, id] {
+                if (safe != nullptr)
+                    safe->view.engine.stopTrack (id);
+            });
+            menu.addItem (Strings::trackResume, [safe, id] {
+                if (safe != nullptr)
+                    safe->view.engine.backToArrangement (id);
+            });
+        }
+        menu.addSeparator();
         menu.addSubMenu (Strings::menu::colour, makePaletteMenu (track.colour(), [safe, id] (int index) {
             if (safe != nullptr)
                 safe->view.actions.setTrackColour (id, index);
@@ -597,7 +632,7 @@ private:
 
     ArrangementView& view;
     int64_t trackId;
-    MiniButton activator, solo, arm, chooser, live;
+    MiniButton activator, solo, arm, chooser, live, stop;
     int lastPlayedScene = -1;
     bool shownAutomation = false;
     NumberField volume;

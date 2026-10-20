@@ -21,6 +21,11 @@ inline const juce::String trackTypeAudio = tr ("Audio track", "Аудиодор�
 inline const juce::String trackTypeReturn = tr ("Return track", "Возвратная дорожка");
 inline const juce::String trackTypeGroup = tr ("Group track", "Групповая дорожка");
 
+inline const juce::String trackEnable = tr ("Enable track", "Включить дорожку");
+inline const juce::String trackDisable = tr ("Disable track", "Выключить дорожку");
+inline const juce::String trackStop = tr ("Stop track", "Остановить дорожку");
+inline const juce::String trackResume = tr ("Resume Arrangement", "Вернуть в аранжировку");
+
 // Default names of new objects
 inline juce::String defaultTrackName (int number) { return utf8 ("MIDI ") + juce::String (number); }
 inline juce::String defaultAudioTrackName (int number) { return tr ("Audio ", "Аудио ") + juce::String (number); }
@@ -707,12 +712,12 @@ inline juce::String effectName (const juce::String& type)
 {
     static const std::map<juce::String, const char*> names {
         { "eq8", "Эквалайзер" }, { "comp", "Компрессор" }, { "gate", "Гейт" }, { "limiter", "Лимитер" }, { "reverb", "Ревербератор" },
-        { "delay", "Дилей" }, { "drive", "Сатуратор" }, { "crush", "Биткрашер" }, { "filter", "Фильтр" }, { "chorus", "Хорус" },
+        { "delay", "Дилей" }, { "drive", "Сатуратор" }, { "distortion", "Дисторшн" }, { "crush", "Биткрашер" }, { "filter", "Фильтр" }, { "chorus", "Хорус" },
         { "flanger", "Фланжер" }, { "phaser", "Фейзер" }, { "autopan", "Автопан" },
     };
     static const std::map<juce::String, const char*> namesEn {
         { "eq8", "EQ" }, { "comp", "Compressor" }, { "gate", "Gate" }, { "limiter", "Limiter" }, { "reverb", "Reverb" },
-        { "delay", "Delay" }, { "drive", "Saturator" }, { "crush", "Bitcrusher" }, { "filter", "Filter" }, { "chorus", "Chorus" },
+        { "delay", "Delay" }, { "drive", "Saturator" }, { "distortion", "Distortion" }, { "crush", "Bitcrusher" }, { "filter", "Filter" }, { "chorus", "Chorus" },
         { "flanger", "Flanger" }, { "phaser", "Phaser" }, { "autopan", "Auto Pan" },
     };
     const auto& map = isRussian() ? names : namesEn;
@@ -1311,6 +1316,10 @@ inline const juce::String arrMarkerLane = make (tr ("Markers", "Маркеры")
 inline const juce::String arrMarker = make (tr ("Marker", "Маркер"), tr ("Click to jump to the marker, drag to move, double-click to rename, right-click for color and delete.", "Щелчок переходит к маркеру, перетаскивание двигает, двойной щелчок переименовывает, правая кнопка открывает цвет и удаление."));
 inline const juce::String arrAddMidiTrack = make (tr ("Add MIDI track", "Добавить MIDI-дорожку"), tr ("A new MIDI track with Prisma at the bottom of the song. Cmd+T does the same.", "Новая MIDI-дорожка с Prisma внизу песни. То же делает Cmd+T."));
 inline const juce::String arrAddAudioTrack = make (tr ("Add audio track", "Добавить аудиодорожку"), tr ("A new empty audio track at the bottom of the song, for recording or dropping sounds. Cmd+Shift+T does the same.", "Новая пустая аудиодорожка внизу песни, для записи или звуков из браузера. То же делает Cmd+Shift+T."));
+inline const juce::String trackEnable = make (Strings::trackEnable, tr ("Restore the track output in Session and Arrangement. Undo restores the previous state.", "Включить звук дорожки в Session и Arrangement. Действие можно отменить."));
+inline const juce::String trackDisable = make (Strings::trackDisable, tr ("Silence the track output in Session and Arrangement. Clips and devices are kept; the state is saved with the project.", "Выключить звук дорожки в Session и Arrangement. Клипы и устройства сохраняются; состояние записывается в проект."));
+inline const juce::String arrStopTrack = make (Strings::trackStop, tr ("Stop this track's clips while the other tracks and transport keep playing. Click again to resume its Arrangement at the next launch boundary. Session clips stop at the launch boundary.", "Остановить клипы этой дорожки, остальные дорожки и транспорт продолжают играть. Повторный щелчок возвращает аранжировку на ближайшей границе запуска. Клипы Session останавливаются на границе запуска."));
+inline const juce::String arrResumeTrack = make (Strings::trackResume, tr ("This track is stopped. Resume its timeline at the next launch boundary; the other tracks stay as they are.", "Дорожка остановлена. Возобновить её аранжировку на ближайшей границе запуска; остальные дорожки продолжат как прежде."));
 inline const juce::String arrLiveToSession = make (tr ("Play Session clips", "Играть клипы Session"), tr ("This track plays the timeline. Click to switch it to Session: its last played clip (or its first one) starts on the next bar, the other tracks keep playing the timeline.", "Дорожка играет шкалу. Щелчок переключает её на Session: последний игравший клип (или первый) стартует со следующего такта, остальные дорожки продолжают играть шкалу."));
 inline const juce::String arrLiveToArrangement = make (tr ("Back to timeline", "Вернуть на шкалу"), tr ("This track plays Session clips. Click to give it back to the timeline at the next launch boundary; the other tracks stay as they are.", "Дорожка играет клипы Session. Щелчок возвращает её на шкалу на ближайшей границе запуска; остальные дорожки остаются как есть."));
 inline const juce::String arrLiveNoClips = make (tr ("Play Session clips", "Играть клипы Session"), tr ("This track has no Session clips yet: put a clip into one of its slots in the Session View first.", "У дорожки ещё нет клипов Session: сначала положите клип в один из её слотов в Session View."));

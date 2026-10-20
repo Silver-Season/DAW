@@ -7,6 +7,16 @@ Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ![Session View, Prism theme](media/session-prism.png)
 
+## Track playback controls and expanded factory bank
+
+Arrangement headers have a **power** button and a separate **Stop / Resume** button. Power silences the track output in both views, is saved in the project and supports undo. Stop suspends that track's clips while the other tracks and the transport continue; click again to resume its timeline at the next launch boundary. Session clips stop at their launch boundary. The existing Session/timeline source switch remains beside Stop. The header context menu offers the same commands. Session mixer strips use the same power symbol and state-specific help.
+
+Prisma has **44 factory programs**, including 28 new sounds: basses, leads, pads, plucks, keys, organ, bells, strings, brass and evolving FX. **Neon Grid Bass, Razor Bass, Chrome Wobble Bass and Overload Bass** provide driven, mono bass sounds with sub oscillators, glide and filter/wavetable motion. Use the modulation wheel to open or reshape them. All sounds appear in the Presets browser and the synth's program selector. The original 16 program numbers and every parameter value are preserved.
+
+**Distortion** is a separate built-in effect in Effects → Colour, opening with Hard clipping and 18 dB drive. It shares the existing 8× oversampled Saturator engine, level compensation, tone, bias, input, mix and output controls. Saturator keeps its original type, defaults and saved states. Distortion supports device bypass, automation and saved projects through the existing effects framework.
+
+![Distortion in Glass Dark](media/ui-glass/glass-dark-distortion.png)
+
 ## Glass appearance
 
 Glass · Light uses a silver-blue ground with soft lavender light; Glass · Dark uses neutral graphite with restrained blue and lavender accents. Satin panels, thin directional highlights and flat tinted browser selections keep the controls and text clear. The layout and control gestures are shared by both themes.

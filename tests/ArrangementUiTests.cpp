@@ -8,6 +8,8 @@
 #include "../app/Source/model/Automation.h"
 #include "../app/Source/model/ProjectActions.h"
 #include "../app/Source/ui/ArrangementLanes.h"
+#include "../app/Source/ui/ArrangementHeaders.h"
+#include "../app/Source/ui/SessionView.h"
 #include "../app/Source/ui/ArrangementView.h"
 #include "../app/Source/ui/Theme.h"
 
@@ -60,6 +62,110 @@ struct ViewRig
 
 const juce::ModifierKeys kCmd (juce::ModifierKeys::commandModifier);
 const juce::ModifierKeys kCmdShift (juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+
+void testTrackControls()
+{
+    std::printf ("[3.3] explicit track power, stop and resume; other tracks keep playing\n");
+    ViewRig r;
+    FakeDevice device;
+    r.fx.engine.audioDeviceAboutToStart (&device);
+    r.fx.model.setLaunchQuantise (0.0);
+    r.fx.engine.rebuildGraphIfNeeded();
+    Runner runner (r.fx.engine);
+    runner.run (1);
+    ui::ArrangementHeaders* headers = nullptr;
+    for (auto* child : r.view->getChildren())
+        if (auto* h = dynamic_cast<ui::ArrangementHeaders*> (child))
+            headers = h;
+    check (headers != nullptr, "Arrangement owns headers");
+    if (headers == nullptr)
+        return;
+    juce::Component* row = nullptr;
+    for (auto* child : headers->getChildren())
+        if (child->getBounds() == headers->rowBounds (r.a.id()))
+            row = child;
+    check (row != nullptr, "the track has a header");
+    if (row == nullptr)
+        return;
+    auto* power = row->findChildWithID ("track-power");
+    auto* stop = row->findChildWithID ("track-stop");
+    auto* source = row->findChildWithID ("track-source");
+    check (power != nullptr && stop != nullptr && source != nullptr, "power, stop and source are distinct visible controls");
+    if (power == nullptr || stop == nullptr || source == nullptr)
+        return;
+    auto click = [] (juce::Component& button) {
+        const auto p = button.getLocalBounds().getCentre().toFloat();
+        const auto now = juce::Time::getCurrentTime();
+        button.mouseUp (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), p,
+                       juce::ModifierKeys::leftButtonModifier, 0, 0, 0, 0, 0, &button, &button, now, p, now, 1, false));
+    };
+    r.fx.model.undo.clearUndoHistory();
+    click (*power);
+    r.view->tick();
+    check (r.a.mute() && ! r.b.mute(), "power silences only its track");
+    check (power->getHelpText() == Strings::help::trackEnable, "disabled track explains how to enable it");
+    check (r.undoDepth() == 1, "track power is one undo transaction");
+    r.fx.model.undo.undo();
+    r.view->tick();
+    check (! r.a.mute() && ! r.b.mute(), "undo restores track power");
+    r.fx.engine.play();
+    runner.run (2);
+    click (*stop);
+    runner.run (2);
+    r.view->tick();
+    check (r.fx.engine.findRuntime (r.a.id())->inSession.load()
+               && ! r.fx.engine.findRuntime (r.b.id())->inSession.load() && r.fx.engine.isPlaying(),
+           "stop suspends only this timeline and leaves transport running");
+    check (stop->getHelpText() == Strings::help::arrResumeTrack, "stop becomes resume");
+    check (! r.a.mute(), "stopping clips does not disable track output");
+    click (*stop);
+    runner.run (2);
+    r.view->tick();
+    check (! r.fx.engine.anyTrackInSession() && r.fx.engine.isPlaying(), "second click returns only that track to Arrangement");
+    check (! r.fx.model.undo.canUndo(), "playback commands do not add edit history");
+    for (const int height : { 24, 52, 84, 240 })
+    {
+        row->setSize (ui::ArrangementView::kHeaderWidth, height);
+        check (row->getLocalBounds().contains (power->getBounds()) && row->getLocalBounds().contains (stop->getBounds()), "controls fit every supported header height");
+        check (! stop->getBounds().intersects (source->getBounds()) && ! power->getBounds().intersects (stop->getBounds()), "controls have separate hit targets");
+    }
+    ui::EditCommands edits (r.fx.engine, r.fx.model, r.actions, r.selection);
+    ui::SessionView session (r.fx.engine, r.fx.model, r.actions, r.selection, edits);
+    session.setBounds (0, 0, 1400, 700);
+    session.tick();
+    std::function<juce::Component* (juce::Component&)> findPower = [&] (juce::Component& parent) -> juce::Component* {
+        if (parent.getComponentID() == "track-power")
+            return &parent;
+        for (auto* child : parent.getChildren())
+            if (auto* button = findPower (*child))
+                return button;
+        return nullptr;
+    };
+    auto* sessionPower = findPower (session);
+    check (sessionPower != nullptr, "Session exposes the same explicit power control");
+    if (sessionPower != nullptr)
+    {
+        click (*sessionPower);
+        session.tick(); r.view->tick();
+        check (r.a.mute() && ! r.b.mute() && power->getHelpText() == Strings::help::trackEnable,
+               "Session power updates Arrangement and silences only the same track");
+        r.fx.model.undo.undo();
+        session.tick(); r.view->tick();
+        check (! r.a.mute() && sessionPower->getHelpText() == Strings::help::trackDisable, "undo restores power in both views");
+    }
+    const auto bus = r.fx.model.addTrack ("return");
+    r.view->tick();
+    for (auto* child : headers->getChildren())
+        if (child->getBounds() == headers->rowBounds (bus.id()))
+        {
+            check (child->findChildWithID ("track-power")->isVisible(), "return bus has power");
+            check (! child->findChildWithID ("track-stop")->isVisible() && ! child->findChildWithID ("track-source")->isVisible(),
+                   "return bus has no misleading clip controls");
+        }
+    r.fx.engine.stop();
+    runner.run (2);
+    r.fx.engine.audioDeviceStopped();
+}
 
 void testGeometry()
 {
@@ -361,6 +467,7 @@ namespace tests
 {
 void runArrangementUiTests()
 {
+    testTrackControls();
     testGeometry();
     testClipCommands();
     testGestures();

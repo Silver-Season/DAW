@@ -4,6 +4,17 @@ namespace ui
 {
 namespace icons
 {
+juce::Path power (juce::Rectangle<float> a)
+{
+    juce::Path path, outline;
+    path.addCentredArc (5.5f, 6.0f, 4.5f, 4.5f, 0, 0.65f, juce::MathConstants<float>::twoPi - 0.65f, true);
+    path.startNewSubPath (5.5f, 0.0f);
+    path.lineTo (5.5f, 5.5f);
+    juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath (outline, path);
+    outline.scaleToFit (a.getX(), a.getY(), a.getWidth(), a.getHeight(), true);
+    return outline;
+}
+
 juce::Path play (juce::Rectangle<float> a)
 {
     juce::Path p;

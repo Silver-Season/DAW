@@ -107,24 +107,30 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
+        if (role == Role::activator)
+        {
+            kit::State state;
+            state.on = on;
+            state.hover = isMouseOver();
+            g.setColour (kit::button (g, r, kit::Kind::toggle, state));
+            g.fillPath (icons::power (r.withSizeKeepingCentre (11.0f, 11.0f)));
+            return;
+        }
         if (t.glass)
         {
-            // glass, from the kit: the number on a glass button (dim and struck through when muted), solo in the
-            // second accent, arm in red
+            // Solo uses the second accent; arm stays red.
             kit::State st;
-            st.on = on && role != Role::activator;
+            st.on = on;
             st.hover = isMouseOver();
             const auto ink = kit::button (g, r, role == Role::arm ? kit::Kind::danger : kit::Kind::toggle, st,
                                           role == Role::solo ? std::optional<juce::Colour> (t.accentFill2) : std::nullopt);
-            g.setColour (role == Role::activator && ! on ? t.dimText : ink);
+            g.setColour (ink);
             if (role == Role::arm)
                 g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (r.getCentre()));
             else
             {
                 g.setFont (t.uiFont (t.metrics.small, 600));
                 g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
-                if (role == Role::activator && ! on)
-                    g.fillRect (r.getCentreX() - 7.0f, r.getCentreY(), 14.0f, 1.2f);
             }
             return;
         }
@@ -1225,6 +1231,7 @@ public:
         };
         addAndMakeVisible (dbField);
 
+        activator.setComponentID ("track-power");
         activator.onClick = [this] (const juce::MouseEvent&) {
             if (auto track = view.model.findTrack (trackId); track.isValid())
                 view.actions.setTrackMute (trackId, ! track.mute());
@@ -1258,7 +1265,7 @@ public:
             dbField.setValue ((double) track.volumeDb());
         pan.setRingColour (theme().text);
         activator.setState (! track.mute());
-        activator.setText (juce::String (view.model.indexOfTrack (trackId) + 1));
+        activator.setHelpText (track.mute() ? Strings::help::trackEnable : Strings::help::trackDisable);
         solo.setState (track.solo());
         arm.setState (track.arm());
         sendA.setRingColour (theme().palette (track.colour()));

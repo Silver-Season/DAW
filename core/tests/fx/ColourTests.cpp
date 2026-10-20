@@ -34,6 +34,34 @@ double largestStep (const std::vector<float>& x, size_t from = 1)
 // Drive
 // ---------------------------------------------------------------------------------------------------------------------
 
+FX_TEST ("distortion: dedicated defaults, preserved saturator, hard harmonics and shared DSP")
+{
+    auto distortion = make ("distortion");
+    auto saturator = make ("drive");
+    check (distortion != nullptr && saturator != nullptr, "both effects are available");
+    if (distortion == nullptr || saturator == nullptr)
+        return;
+    check (distortion->type() == "distortion" && saturator->type() == "drive", "distinct stable effect types");
+    check (distortion->getParam (distortion->paramIndex ("mode")) == 3.0f
+               && distortion->getParam (distortion->paramIndex ("drive")) == 18.0f, "Distortion opens in Hard at 18 dB");
+    check (saturator->getParam (saturator->paramIndex ("mode")) == 0.0f
+               && saturator->getParam (saturator->paramIndex ("drive")) == 6.0f, "Saturator retains its original defaults");
+    const auto input = sine (300, -12, 48000);
+    const auto out = run (*distortion, input);
+    const double fundamental = toneAmplitude (out.l, 300, 24000, 24000);
+    const double third = toneAmplitude (out.l, 900, 24000, 24000);
+    check (finite (out) && fundamental > 0.05 && third / fundamental > 0.1, "default distortion adds strong third harmonic");
+    check (peak (out.l) < 1.0, "level compensation leaves headroom");
+    set (*saturator, "mode", 3); set (*saturator, "drive", 18);
+    saturator->reset(); distortion->reset();
+    const auto reference = run (*saturator, input);
+    const auto equivalent = run (*distortion, input);
+    double error = 0;
+    for (size_t i = 0; i < out.size(); ++i)
+        error = std::max (error, (double) std::abs (reference.l[i] - equivalent.l[i]));
+    check (error < 1.0e-7, "same controls produce identical oversampled audio");
+}
+
 FX_TEST ("drive: a 15 kHz sine at drive 24 dB has no aliasing products above -80 dB (Soft and Hard, spec test 5)")
 {
     // 15 kHz at 48 kHz repeats every 16 samples, so every component of the output is a multiple of 3 kHz. The harmonics of

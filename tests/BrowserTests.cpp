@@ -55,6 +55,9 @@ void testSearch()
     const auto& catalog = sources.catalog();
 
     check (contains (catalog.items (Category::presets), "Reese Bass"), "the factory preset Reese Bass is in Presets");
+    for (const auto* name : { "Neon Grid Bass", "Razor Bass", "Chrome Wobble Bass", "Overload Bass", "Aurora Pad", "Felt Keys" })
+        check (contains (catalog.items (Category::presets), name), juce::String (name) + " is available in the browser");
+    check (contains (catalog.items (Category::effects), Strings::fx::effectName ("distortion")), "Distortion is available as a separate effect");
     check (contains (catalog.items (Category::instruments), "Prisma"), "Prisma is in Instruments");
     check (contains (catalog.items (Category::presets), juce::String::fromUTF8 ("Реестр-бас")), "the user preset is in Presets");
     check (contains (catalog.items (Category::effects), Strings::fx::effectName ("eq8")) && contains (catalog.items (Category::effects), Strings::fx::effectName ("reverb")),

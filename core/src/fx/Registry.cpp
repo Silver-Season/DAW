@@ -8,6 +8,7 @@ std::unique_ptr<Effect> makeLimiter();
 std::unique_ptr<Effect> makeReverb();
 std::unique_ptr<Effect> makeDelay();
 std::unique_ptr<Effect> makeDrive();
+std::unique_ptr<Effect> makeDistortion();
 std::unique_ptr<Effect> makeCrush();
 std::unique_ptr<Effect> makeFilter();
 std::unique_ptr<Effect> makeChorus();
@@ -31,6 +32,7 @@ const std::vector<EffectType>& effectTypes()
         { "flanger", "Flanger", "modulation" },
         { "phaser", "Phaser", "modulation" },
         { "autopan", "Auto Pan", "modulation" },
+        { "distortion", "Distortion", "colour" },
     };
     return types;
 }
@@ -51,6 +53,8 @@ std::unique_ptr<Effect> createEffect (std::string_view type)
         return makeDelay();
     if (type == "drive")
         return makeDrive();
+    if (type == "distortion")
+        return makeDistortion();
     if (type == "crush")
         return makeCrush();
     if (type == "filter")

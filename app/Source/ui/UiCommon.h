@@ -18,6 +18,7 @@ struct HelpProvider
 // Icons are drawn as paths: the embedded fonts do not carry the geometric symbols.
 namespace icons
 {
+juce::Path power (juce::Rectangle<float> area);
 juce::Path play (juce::Rectangle<float> area);
 juce::Path stop (juce::Rectangle<float> area);
 juce::Path record (juce::Rectangle<float> area);

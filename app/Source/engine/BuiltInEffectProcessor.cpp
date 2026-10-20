@@ -160,6 +160,7 @@ std::vector<int> BuiltInEffectProcessor::defaultMacros() const
         { "reverb", { "size", "decay", "predelay", "damping", "lowCut", "width", "diffusion", "mix" } },
         { "delay", { "divL", "divR", "feedback", "pingPong", "hp", "lp", "ducking", "mix" } },
         { "drive", { "mode", "drive", "tone", "bias", "input", "mix", "output" } },
+        { "distortion", { "mode", "drive", "tone", "bias", "input", "mix", "output" } },
         { "crush", { "bits", "rate", "dither", "mix", "output" } },
         { "filter", { "type", "freq", "resonance", "drive", "lfoDepth", "lfoRate", "envDepth", "mix" } },
         { "chorus", { "voices", "rate", "depth", "delay", "width", "feedback", "mix", "output" } },
