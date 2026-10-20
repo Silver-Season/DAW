@@ -360,6 +360,7 @@ ThemeLookAndFeel::drawLinearSlider (juce::Graphics& g,
     const auto bounds = juce::Rectangle<float> ((float)x, (float)y, (float)w, (float)h);
     const auto track = vertical ? bounds.withSizeKeepingCentre (4.0f, bounds.getHeight ())
                                 : bounds.withSizeKeepingCentre (bounds.getWidth (), 4.0f);
+    ui::glass::Lit lit (s);
     ui::glass::Liquid liquid (g, s.getLocalBounds ());
     auto& lg = liquid.backdrop ();
     lg.setColour (t.line);
@@ -393,6 +394,7 @@ ThemeLookAndFeel::drawRotarySlider (juce::Graphics& g,
         LookAndFeel_V4::drawRotarySlider (g, x, y, w, h, pos, start, end, s);
         return;
     }
+    ui::glass::Lit lit (s);
     const float diameter = juce::jmax (12.0f, (float)juce::jmin (w, h) - 5.0f);
     ui::glass::knob (g,
                      juce::Rectangle<float> (diameter, diameter)
@@ -413,6 +415,7 @@ ThemeLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bo
         return;
     }
     // glass: the kit's switch on the left, the label after it
+    ui::glass::Lit lit (b);
     kit::State st;
     st.on = b.getToggleState ();
     st.hover = over;

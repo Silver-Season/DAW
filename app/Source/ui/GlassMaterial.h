@@ -46,6 +46,17 @@ namespace ui::glass
 // spectrum, light the rim and cast a soft shadow. Paint the content under the glass into backdrop(), add the lenses,
 // and the destructor puts the result into the target. Draw labels and icons afterwards, straight into the target, so
 // they stay sharp. Classic themes (and Reduce transparency) get the backdrop as painted plus a plain glass body.
+// The light of the glass follows the mouse, as in the optics study: a component that paints lenses opens a Lit scope
+// in its paint, the lenses then take their light from the direction of the pointer (smoothed, a little behind it), and
+// the component is repainted while the pointer moves near it.
+class Lit
+{
+public:
+    explicit Lit (juce::Component&);
+    ~Lit ();
+    JUCE_DECLARE_NON_COPYABLE (Lit)
+};
+
 class Liquid
 {
 public:

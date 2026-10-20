@@ -34,6 +34,7 @@ public:
     juce::Rectangle<float> segments() const { return { 10.0f, 5.0f, 300.0f, (float) getHeight() - 10.0f }; }
     void paint (juce::Graphics& g) override
     {
+        glass::Lit lit (*this);
         kit::segmented (g, segments(), { Strings::transport::modePianoRoll, Strings::transport::modeScore, Strings::transport::modeStep },
                         owner.editorMode);
     }

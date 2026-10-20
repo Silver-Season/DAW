@@ -3,6 +3,8 @@
 #include <map>
 #include <tuple>
 #include <vector>
+#include <optional>
+#include <algorithm>
 
 namespace ui::glass
 {
@@ -409,6 +411,92 @@ Rgba over (Rgba top, Rgba under)
 }
 } // namespace
 
+//==============================================================================
+namespace
+{
+std::vector<juce::Component*> litStack; // the components painting lenses right now (message thread)
+
+class LightTracker final : private juce::MouseListener, private juce::Timer
+{
+public:
+    static LightTracker& get()
+    {
+        static LightTracker tracker;
+        return tracker;
+    }
+
+    void enrol (juce::Component& c)
+    {
+        if (! installed)
+        {
+            juce::Desktop::getInstance().addGlobalMouseListener (this);
+            installed = true;
+        }
+        for (auto& w : lit)
+            if (w.getComponent() == &c)
+                return;
+        lit.erase (std::remove_if (lit.begin(), lit.end(), [] (const auto& w) { return w.getComponent() == nullptr; }), lit.end());
+        lit.emplace_back (&c);
+    }
+
+    // The smoothed pointer in screen coordinates, if the mouse has been seen.
+    std::optional<juce::Point<float>> pointer() const { return seen ? std::optional<juce::Point<float>> (smoothed) : std::nullopt; }
+
+private:
+    LightTracker() = default;
+    void mouseMove (const juce::MouseEvent& e) override { follow (e.getScreenPosition().toFloat()); }
+    void mouseDrag (const juce::MouseEvent& e) override { follow (e.getScreenPosition().toFloat()); }
+    void follow (juce::Point<float> p)
+    {
+        target = p;
+        if (! seen)
+        {
+            smoothed = p;
+            seen = true;
+        }
+        if (! isTimerRunning())
+        {
+            last = juce::Time::getMillisecondCounterHiRes();
+            startTimerHz (60);
+        }
+    }
+    void timerCallback() override
+    {
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        const float dt = (float) juce::jlimit (0.0, 0.05, (now - last) / 1000.0);
+        last = now;
+        const auto previous = smoothed;
+        smoothed += (target - smoothed) * (1.0f - std::exp (-dt * 13.0f)); // the study's damping
+        if (smoothed.getDistanceFrom (previous) < 0.25f)
+        {
+            stopTimer();
+            return;
+        }
+        for (auto& w : lit)
+            if (auto* c = w.getComponent(); c != nullptr && c->isShowing()
+                && c->getScreenBounds().expanded (320).toFloat().contains (smoothed))
+                c->repaint();
+    }
+
+    std::vector<juce::Component::SafePointer<juce::Component>> lit;
+    juce::Point<float> target, smoothed;
+    double last = 0.0;
+    bool installed = false, seen = false;
+};
+} // namespace
+
+Lit::Lit (juce::Component& c)
+{
+    litStack.push_back (&c);
+    if (theme().glass && juce::SystemStats::getEnvironmentVariable ("DAW_UI_SNAPSHOTS", {}).isEmpty())
+        LightTracker::get().enrol (c);
+}
+
+Lit::~Lit ()
+{
+    litStack.pop_back();
+}
+
 Liquid::Liquid (juce::Graphics& g, juce::Rectangle<int> a, juce::Colour behind) : target (g), area (a)
 {
     scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext ().getPhysicalPixelScaleFactor ());
@@ -462,10 +550,24 @@ void Liquid::compose ()
     const bool dark = !t.isLight ();
     const float depth = juce::jlimit (0.0f, 1.0f, t.material * 0.9f); // the study's depth slider, from Appearance → Glass depth
     const float highlight = 0.52f;
-    // light from above, a little from the right, as in the study
-    const float lx = 0.24f, ly = -0.97f;
+    // the light: toward the pointer when a component is lit and the mouse has been seen, otherwise from above
+    std::optional<juce::Point<float>> pointer;
+    if (! litStack.empty())
+        if (const auto p = LightTracker::get().pointer())
+            pointer = litStack.back()->getLocalPoint (nullptr, *p);
     for (const auto& b : boxes)
     {
+        float lx = 0.24f, ly = -0.97f;
+        if (pointer)
+        {
+            const auto d = *pointer - b.r.getCentre();
+            const float len = d.getDistanceFromOrigin();
+            if (len > 0.01f)
+            {
+                lx = d.x / len;
+                ly = d.y / len;
+            }
+        }
         const float hx = b.r.getWidth () * 0.5f, hy = b.r.getHeight () * 0.5f, radius = b.radius;
         const float cx = b.r.getCentreX (), cy = b.r.getCentreY ();
         const float reach = b.shadow > 0.0f ? 26.0f : 2.0f; // the shadow fades out within this distance

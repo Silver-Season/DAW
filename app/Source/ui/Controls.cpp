@@ -60,6 +60,7 @@ void Knob::setValue (double normalised)
 void Knob::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    glass::Lit lit (*this);
     auto area = getLocalBounds().toFloat();
     // Glass: a tall knob shows its value under the caption at all times, as the device cards of the design do.
     const bool twoLines = t.glass && caption.isNotEmpty() && valueText && getHeight() >= 52;
@@ -299,6 +300,7 @@ juce::Rectangle<float> Fader::thumbArea() const
 void Fader::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    glass::Lit lit (*this);
     const auto bounds = getLocalBounds().toFloat();
     const float travel = bounds.getHeight() - 10.0f;
     if (t.glass)

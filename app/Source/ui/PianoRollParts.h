@@ -43,6 +43,7 @@ public:
         st.enabled = isEnabled();
         if (t.glass && isToggle)
         {
+            glass::Lit lit (*this);
             // glass: a switch with its label on the left, no box
             kit::row (g, r, { st.hover });
             kit::switchControl (g, r.withTrimmedRight (2.0f), st);

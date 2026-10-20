@@ -120,6 +120,7 @@ void Spectrum::paint (juce::Graphics& g)
     }
     // the same optics as every glass control: the spectrum is the backdrop, the lens bends it
     {
+        glass::Lit lit (*this);
         glass::Liquid liquid (g, getLocalBounds());
         paintContent (liquid.backdrop());
         const auto lens = lensBounds();

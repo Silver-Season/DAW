@@ -399,6 +399,7 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        glass::Lit lit (*this);
         kit::segmented (g, getLocalBounds().toFloat().reduced (0.5f),
                         { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab },
                         view, -1, hovering ? (int) arrangementView : -1);
