@@ -68,13 +68,14 @@ public:
     // A lens: a rounded rectangle (radius 0..half the short side; half makes a capsule or, for a square, a circle).
     // `shadow` scales the soft shadow it casts (0 where the shadow would be cut by the edge of the component).
     // `body` paints a pale fill under the lens first (0 = perfectly clear): small controls need a body to read as solid.
-    void lens (juce::Rectangle<float> box, float radius, float shadow = 1.0f, float body = 0.0f);
+    // `prism` scales the bend at the rim and the spectrum it splits there (1 = the study; the view switch uses more).
+    void lens (juce::Rectangle<float> box, float radius, float shadow = 1.0f, float body = 0.0f, float prism = 1.0f);
 
 private:
     struct Box
     {
         juce::Rectangle<float> r;
-        float radius, shadow;
+        float radius, shadow, prism;
     };
     juce::Graphics& target;
     juce::Rectangle<int> area;

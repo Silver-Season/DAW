@@ -208,41 +208,36 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
     const auto labelFont = [&] (int i) { return t.uiFont (t.glass ? t.metrics.text + 1.0f : 12.0f, i == selected && t.glass ? 600 : 500); };
     if (t.glass)
     {
-        // A sunken track with the labels; the selected segment is a clear lens over it (the labels under the lens bend
-        // with the track), and its own label is drawn sharp on top.
-        const float pill = r.getHeight() * 0.5f;
+        // A sunken track with all the labels, the selected one in the accent colour. The selected segment is a clear
+        // lens a little taller than the track: the rim bends the labels and the edges of the track and splits them into
+        // a spectrum, as a prism does; the middle only magnifies a little, so the label under it stays readable.
+        const auto track = r.reduced (0.0f, 3.0f);
+        const float pill = track.getHeight() * 0.5f;
         {
-            glass::Liquid liquid (g, r.expanded (2.0f, 2.0f).withTrimmedBottom (-12.0f).getSmallestIntegerContainer(), t.background);
+            glass::Liquid liquid (g, r.expanded (2.0f, 2.0f).getSmallestIntegerContainer());
             auto& b = liquid.backdrop();
             b.setColour (t.panel2.interpolatedWith (t.line, t.isLight() ? 0.35f : 0.2f));
-            b.fillRoundedRectangle (r, pill);
-            b.setColour (t.shadow().withAlpha (t.isLight() ? 0.06f : 0.25f));
-            b.drawRoundedRectangle (r.reduced (0.5f), pill, 1.0f);
+            b.fillRoundedRectangle (track, pill);
+            b.setColour (t.shadow().withAlpha (t.isLight() ? 0.08f : 0.3f));
+            b.drawRoundedRectangle (track.reduced (0.5f), pill, 1.0f);
             if (hover >= 0 && hover != selected)
             {
                 b.setColour (t.panel.withAlpha (0.45f));
-                b.fillRoundedRectangle (seg (hover).reduced (3.0f), pill - 3.0f);
+                b.fillRoundedRectangle (seg (hover).withY (track.getY()).withHeight (track.getHeight()).reduced (3.0f), pill - 3.0f);
             }
-            for (int i = 0; i < labels.size(); ++i)
-                if (i != selected)
-                {
-                    b.setColour (t.dimText);
-                    b.setFont (labelFont (i));
-                    b.drawText (labels[i], seg (i), juce::Justification::centred, false);
-                }
             if (drop >= 0)
             {
                 b.setColour (t.accent.withAlpha (0.22f));
-                b.fillRoundedRectangle (seg (drop), pill);
+                b.fillRoundedRectangle (seg (drop).withY (track.getY()).withHeight (track.getHeight()), pill);
+            }
+            for (int i = 0; i < labels.size(); ++i)
+            {
+                b.setColour (i == selected ? t.accent : t.dimText);
+                b.setFont (labelFont (i));
+                b.drawText (labels[i], seg (i), juce::Justification::centred, false);
             }
             if (selected >= 0)
-                liquid.lens (seg (selected).reduced (2.5f), pill, 0.0f, t.isLight() ? 0.9f : 0.5f);
-        }
-        if (selected >= 0)
-        {
-            g.setColour (t.text);
-            g.setFont (labelFont (selected));
-            g.drawText (labels[selected], seg (selected), juce::Justification::centred, false);
+                liquid.lens (seg (selected).reduced (1.0f, 0.0f), r.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.12f : 0.0f, 2.2f);
         }
         return;
     }

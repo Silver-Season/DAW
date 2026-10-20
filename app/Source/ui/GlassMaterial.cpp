@@ -526,7 +526,7 @@ Liquid::~Liquid ()
         }
 }
 
-void Liquid::lens (juce::Rectangle<float> box, float radius, float shadow, float body)
+void Liquid::lens (juce::Rectangle<float> box, float radius, float shadow, float body, float prism)
 {
     radius = juce::jlimit (0.0f, juce::jmin (box.getWidth (), box.getHeight ()) * 0.5f, radius);
     if (body > 0.0f && graphics != nullptr)
@@ -536,7 +536,7 @@ void Liquid::lens (juce::Rectangle<float> box, float radius, float shadow, float
         graphics->setGradientFill (juce::ColourGradient (pale.withAlpha (body), 0.0f, box.getY (), pale.withAlpha (body * 0.75f), 0.0f, box.getBottom (), false));
         graphics->fillRoundedRectangle (box.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f));
     }
-    boxes.push_back ({ box, radius, shadow });
+    boxes.push_back ({ box, radius, shadow, prism });
 }
 
 void Liquid::compose ()
@@ -576,11 +576,12 @@ void Liquid::compose ()
         const int y0 = juce::jmax (0, (int) std::floor (pixels.getY ())), y1 = juce::jmin (dst.height, (int) std::ceil (pixels.getBottom ()));
         // small lenses bend less: the study's numbers are for a lens about 50 px tall
         const float size = juce::jlimit (0.2f, 1.0f, juce::jmin (hx, hy) / 30.0f);
-        const float shiftMax = (3.0f + depth * 22.0f) * size, zoomBase = 0.025f + depth * 0.07f;
+        const float shiftMax = (3.0f + depth * 22.0f) * size * (b.prism > 1.0f ? 0.8f : 1.0f), zoomBase = 0.025f + depth * 0.07f;
         // the shadow fades out before the edge of the painted area, so it never ends in a hard line
         const float room = juce::jmax (1.0f, juce::jmin (b.r.getX () - (float) area.getX (), b.r.getY () - (float) area.getY (),
                                                          (float) area.getRight () - b.r.getRight (), (float) area.getBottom () - b.r.getBottom ()));
-        const float edgeWidth = juce::jmin (radius * 0.9f, 34.0f, juce::jmin (hx, hy));
+        // a prism lens keeps a clear middle: the bend and the spectrum stay in a band along the rim
+        const float edgeWidth = b.prism > 1.0f ? juce::jmax (4.0f, juce::jmin (hx, hy) * 0.42f) : juce::jmin (radius * 0.9f, 34.0f, juce::jmin (hx, hy));
         for (int yy = y0; yy < y1; ++yy)
             for (int xx = x0; xx < x1; ++xx)
             {
@@ -609,7 +610,7 @@ void Liquid::compose ()
                     const float sx = px - nx * shiftMax * curve - lxp * zoomBase * (1.0f - edge);
                     const float sy = py - ny * shiftMax * curve - lyp * zoomBase * (1.0f - edge);
                     // the spectrum at the rim: five samples spread along the normal, red outward, violet inward
-                    const float spread = (0.6f + depth * 2.6f) * curve * size;
+                    const float spread = (0.6f + depth * 2.6f) * curve * size * b.prism * 1.5f;
                     const auto at = [&] (float k) { return fetch (src, (sx - (float) area.getX () + nx * spread * k) * scale, (sy - (float) area.getY () + ny * spread * k) * scale); };
                     const Rgba s0 = at (-1.0f), s1 = at (-0.5f), s2 = at (0.0f), s3 = at (0.5f), s4 = at (1.0f);
                     Rgba glassCol { s0.r * 0.45f + s1.r * 0.35f + s2.r * 0.2f, s1.g * 0.25f + s2.g * 0.5f + s3.g * 0.25f,
@@ -624,6 +625,15 @@ void Liquid::compose ()
                     const float power = 0.18f + highlight * 0.75f;
                     const float add = juce::jlimit (0.0f, 1.0f, rim * 0.11f + spec * power + inner * 0.07f + caustic);
                     glassCol = over ({ add, add, add, add }, glassCol); // light: white over the glass
+                    if (b.prism > 1.0f)
+                    {
+                        // a prism rim: a thin line of spectrum round the edge, its hue turning with the direction of
+                        // the rim, brightest where the light falls on it and opposite (the light leaving the glass)
+                        const float hue = std::fmod (std::atan2 (ny, nx) / juce::MathConstants<float>::twoPi + 1.25f, 1.0f);
+                        const auto c = juce::Colour::fromHSV (hue, dark ? 0.75f : 0.85f, 1.0f, 1.0f);
+                        const float band = std::exp (-juce::square ((inset - 1.2f) / 1.1f)) * (0.25f + 0.55f * std::abs (facing)) * (dark ? 0.55f : 0.45f);
+                        glassCol = over ({ c.getFloatRed () * band, c.getFloatGreen () * band, c.getFloatBlue () * band, band }, glassCol);
+                    }
                     const float dim = 1.0f - juce::jmax (-facing, 0.0f) * rim * 0.18f;
                     glassCol = over ({ 0, 0, 0, 1.0f - dim }, glassCol);
                     col = { col.r + (glassCol.r - col.r) * coverage, col.g + (glassCol.g - col.g) * coverage, col.b + (glassCol.b - col.b) * coverage,
