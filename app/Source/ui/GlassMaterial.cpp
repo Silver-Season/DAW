@@ -599,6 +599,28 @@ namespace
 {
 std::vector<juce::Component*> litStack; // the components painting lenses right now (message thread)
 
+// How far the pointer's light reaches: full within kNear of a lens, fading out smoothly to nothing at kFar, so glass
+// further away rests in its own light instead of keeping a direction from the last time it was repainted.
+constexpr float kNear = 160.0f, kFar = 460.0f;
+
+float pointerWeight (float distance)
+{
+    const float x = juce::jlimit (0.0f, 1.0f, (distance - kNear) / (kFar - kNear));
+    return 1.0f - x * x * (3.0f - 2.0f * x);
+}
+
+// The direction of the light for a lens: toward the pointer when it is near, the resting direction when it is far.
+juce::Point<float> blendLight (juce::Point<float> toPointer, juce::Point<float> rest)
+{
+    const float len = toPointer.getDistanceFromOrigin();
+    if (len < 0.01f)
+        return rest;
+    const float w = pointerWeight (len);
+    auto d = rest * (1.0f - w) + toPointer / len * w;
+    const float l = d.getDistanceFromOrigin();
+    return l > 0.001f ? d / l : rest;
+}
+
 class LightTracker final : private juce::MouseListener, private juce::Timer
 {
 public:
@@ -619,7 +641,7 @@ public:
             if (w.component.getComponent() == &c)
                 return;
         lit.erase (std::remove_if (lit.begin(), lit.end(), [] (const auto& w) { return w.component.getComponent() == nullptr; }), lit.end());
-        lit.push_back ({ &c, 0.0f });
+        lit.push_back ({ &c, 0.0f, 0.0f, 0.0f });
     }
 
     // The smoothed pointer in screen coordinates, if the mouse has been seen.
@@ -640,6 +662,7 @@ private:
     {
         juce::Component::SafePointer<juce::Component> component;
         float touch = 0.0f;
+        float angle = 0.0f, weight = 0.0f; // the light it was last painted with
     };
 
     LightTracker() = default;
@@ -677,6 +700,7 @@ private:
             if (c == nullptr)
                 continue;
             float goal = 0.0f;
+            bool repaintNow = false;
             if (c->isShowing())
             {
                 const auto bounds = c->getScreenBounds().toFloat();
@@ -684,6 +708,19 @@ private:
                 const float dy = juce::jmax (0.0f, juce::jmax (bounds.getY() - target.y, target.y - bounds.getBottom()));
                 const float near = juce::jlimit (0.0f, 1.0f, 1.0f - std::sqrt (dx * dx + dy * dy) / kReach);
                 goal = c->isMouseButtonDown (true) && c->isMouseOver (true) ? 1.0f : 0.6f * near * near;
+                // repaint only when the light it shows has visibly changed: its direction or how much the pointer
+                // reaches it (far glass settles into its resting light once and is then left alone)
+                const auto toPointer = smoothed - bounds.getCentre();
+                const float weight = pointerWeight (toPointer.getDistanceFromOrigin());
+                const float angle = std::atan2 (toPointer.y, toPointer.x);
+                float turn = std::abs (angle - w.angle);
+                turn = juce::jmin (turn, juce::MathConstants<float>::twoPi - turn);
+                if (std::abs (weight - w.weight) > 0.015f || (weight > 0.01f && turn * weight > 0.03f))
+                {
+                    w.weight = weight;
+                    w.angle = angle;
+                    repaintNow = true;
+                }
             }
             // quick to answer, slower to let go
             const float rate = goal > w.touch ? 12.0f : 4.0f;
@@ -691,9 +728,8 @@ private:
             w.touch += (goal - w.touch) * (1.0f - std::exp (-dt * rate));
             if (std::abs (goal - w.touch) < 0.002f)
                 w.touch = goal;
-            const bool changed = std::abs (w.touch - before) > 0.001f;
             settling = settling || w.touch != goal;
-            if (c->isShowing() && (changed || (moving && c->getScreenBounds().expanded (320).toFloat().contains (smoothed))))
+            if (c->isShowing() && (repaintNow || std::abs (w.touch - before) > 0.001f))
                 c->repaint();
         }
         if (! moving && ! settling)
@@ -709,16 +745,15 @@ private:
 
 juce::Point<float> parallax (juce::Component& c, float depth)
 {
+    // the layer leans toward the pointer while it is near, and rests where it is when the pointer is far away
     const auto p = LightTracker::get().pointer();
-    auto* top = c.getTopLevelComponent();
-    if (! p || top == nullptr || depth == 0.0f)
+    if (! p || depth == 0.0f || ! c.isShowing())
         return {};
-    const auto window = top->getScreenBounds().toFloat();
-    if (window.isEmpty())
+    const auto d = *p - c.getScreenBounds().toFloat().getCentre();
+    const float len = d.getDistanceFromOrigin();
+    if (len < 0.01f)
         return {};
-    const auto d = (*p - window.getCentre());
-    return { juce::jlimit (-1.0f, 1.0f, d.x / (window.getWidth() * 0.5f)) * depth,
-             juce::jlimit (-1.0f, 1.0f, d.y / (window.getHeight() * 0.5f)) * depth };
+    return d / len * (juce::jmin (1.0f, len / kNear) * pointerWeight (len) * depth);
 }
 
 Lit::Lit (juce::Component& c)
@@ -735,15 +770,11 @@ Lit::~Lit ()
 
 juce::Point<float> lightFrom (juce::Point<float> local)
 {
+    const juce::Point<float> rest { -0.45f, -0.89f };
     if (! litStack.empty())
         if (const auto p = LightTracker::get().pointer())
-        {
-            const auto d = litStack.back()->getLocalPoint (nullptr, *p) - local;
-            const float len = d.getDistanceFromOrigin();
-            if (len > 0.01f)
-                return d / len;
-        }
-    return { -0.45f, -0.89f };
+            return blendLight (litStack.back()->getLocalPoint (nullptr, *p) - local, rest);
+    return rest;
 }
 
 Liquid::Liquid (juce::Graphics& g, juce::Rectangle<int> a, juce::Colour behind) : target (g), area (a)
@@ -818,13 +849,9 @@ void Liquid::compose ()
         float lx = 0.24f, ly = -0.97f;
         if (pointer)
         {
-            const auto d = *pointer - b.r.getCentre();
-            const float len = d.getDistanceFromOrigin();
-            if (len > 0.01f)
-            {
-                lx = d.x / len;
-                ly = d.y / len;
-            }
+            const auto d = blendLight (*pointer - b.r.getCentre(), { lx, ly });
+            lx = d.x;
+            ly = d.y;
         }
         const float hx = b.r.getWidth () * 0.5f, hy = b.r.getHeight () * 0.5f, radius = b.radius;
         const float cx = b.r.getCentreX (), cy = b.r.getCentreY ();
