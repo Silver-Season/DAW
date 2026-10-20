@@ -114,6 +114,11 @@ public:
         // the look comes from the kit: a framed button, a capsule switch, record/punch in red, play round in glass
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat().reduced (0.5f);
+        // glass: the icon floats a little above the glass, so it moves a little with the pointer (parallax)
+        std::optional<glass::Lit> lit;
+        if (t.glass)
+            lit.emplace (*this);
+        const auto floatBy = t.glass ? glass::parallax (*this, 1.2f) : juce::Point<float>();
         using K = kit::Kind;
         const K idle = framed || ! t.glass ? K::plain : K::ghost; // how a button of this place looks while off
         const K kind = role == Role::play && icon && text.isEmpty() ? K::play
@@ -131,7 +136,7 @@ public:
         {
             const float s = juce::jmin (r.getWidth(), r.getHeight()) * 0.36f;
             g.setColour (ink);
-            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (r.getCentre().translated (s * 0.08f, 0.0f))));
+            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (r.getCentre().translated (s * 0.08f, 0.0f) + floatBy)));
             return;
         }
         kit::LabelStyle style;
@@ -140,7 +145,7 @@ public:
         style.iconColour = iconColour.has_value() && isEnabled() ? iconColour : std::nullopt;
         style.leftAligned = leftAligned;
         style.chevron = chevron && t.glass;
-        kit::label (g, r, text, ink, icon ? kit::Icon (icon) : kit::Icon(), style);
+        kit::label (g, r + floatBy, text, ink, icon ? kit::Icon (icon) : kit::Icon(), style);
     }
 
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }

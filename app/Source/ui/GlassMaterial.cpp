@@ -526,6 +526,20 @@ private:
 };
 } // namespace
 
+juce::Point<float> parallax (juce::Component& c, float depth)
+{
+    const auto p = LightTracker::get().pointer();
+    auto* top = c.getTopLevelComponent();
+    if (! p || top == nullptr || depth == 0.0f)
+        return {};
+    const auto window = top->getScreenBounds().toFloat();
+    if (window.isEmpty())
+        return {};
+    const auto d = (*p - window.getCentre());
+    return { juce::jlimit (-1.0f, 1.0f, d.x / (window.getWidth() * 0.5f)) * depth,
+             juce::jlimit (-1.0f, 1.0f, d.y / (window.getHeight() * 0.5f)) * depth };
+}
+
 Lit::Lit (juce::Component& c)
 {
     litStack.push_back (&c);
@@ -601,6 +615,8 @@ void Liquid::compose ()
     float touch = 0.0f;
     if (! litStack.empty() && litStack.back()->isEnabled())
         touch = litStack.back()->isMouseButtonDown (true) ? 1.0f : (litStack.back()->isMouseOver (true) ? 0.45f : 0.0f);
+    // what lies under the lens sits a little deeper than the glass: it moves against the pointer (parallax)
+    const auto under = litStack.empty() ? juce::Point<float>() : parallax (*litStack.back(), 2.0f);
     for (auto b : boxes)
     {
         if (b.prism <= 1.0f && touch > 0.0f)
@@ -655,8 +671,8 @@ void Liquid::compose ()
                     const float inset = juce::jmax (-dist, 0.0f);
                     const float edge = 1.0f - juce::jlimit (0.0f, 1.0f, inset / juce::jmax (1.0f, edgeWidth));
                     const float curve = std::pow (edge, 1.65f);
-                    const float sx = px - nx * shiftMax * curve - lxp * zoomBase * (1.0f - edge);
-                    const float sy = py - ny * shiftMax * curve - lyp * zoomBase * (1.0f - edge);
+                    const float sx = px - nx * shiftMax * curve - lxp * zoomBase * (1.0f - edge) + under.x * (1.0f - edge * 0.5f);
+                    const float sy = py - ny * shiftMax * curve - lyp * zoomBase * (1.0f - edge) + under.y * (1.0f - edge * 0.5f);
                     // the spectrum at the rim: five samples spread along the normal, red outward, violet inward
                     const float spread = (0.6f + depth * 2.6f) * curve * size * b.prism * 1.5f;
                     const auto at = [&] (float k) { return fetch (src, (sx - (float) area.getX () + nx * spread * k) * scale, (sy - (float) area.getY () + ny * spread * k) * scale); };

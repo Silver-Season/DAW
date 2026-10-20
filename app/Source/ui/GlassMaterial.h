@@ -55,6 +55,11 @@ namespace ui::glass
 // The light of the glass follows the mouse, as in the optics study: a component that paints lenses opens a Lit scope
 // in its paint, the lenses then take their light from the direction of the pointer (smoothed, a little behind it), and
 // the component is repainted while the pointer moves near it.
+// Parallax: how far a layer `depth` pixels deep moves for the pointer's place over the window (smoothed, the same
+// pointer the light follows). Layers under glass move against the glass, nearer layers more than farther ones, so the
+// glass reads as floating over its content. Zero until the mouse has been seen.
+juce::Point<float> parallax (juce::Component&, float depth);
+
 class Lit
 {
 public:
