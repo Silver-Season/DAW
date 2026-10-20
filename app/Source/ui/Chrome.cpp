@@ -157,6 +157,8 @@ Splitter::Splitter (bool verticalBar) : vertical (verticalBar)
 void Splitter::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    if (t.glass && ! hover && ! dragging)
+        return;
     g.setColour (hover || dragging ? t.accent : t.line);
     const auto r = getLocalBounds();
     if (vertical)
@@ -350,7 +352,7 @@ void CardFrames::paint (juce::Graphics& g)
             juce::Graphics::ScopedSaveState save (g);
             for (const auto& other : cards)
                 g.excludeClipRegion (other.reduced (2));
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.07f : 0.30f), 12, { 0, 3 }).drawForPath (g, rounded);
+            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.045f : 0.18f), 12, { 0, 3 }).drawForPath (g, rounded);
         }
         // a faint sheen across the matte plate from its lit corner, then its edge
         {

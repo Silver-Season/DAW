@@ -238,6 +238,20 @@ bool Theme::fromJson (const juce::String& json, Theme& result, juce::String& err
               juce::Colour (0xff000000u | (juce::uint32)hex.getHexValue32 ());
         }
     t.metrics.controlRadius = t.metrics.panelRadius = t.radius;
+    t.glassTint = t.accentFill;
+    t.glassTint2 = t.accentFill2;
+    for (const auto* key : { "glassTint", "glassTint2" })
+        if (obj->hasProperty (key))
+        {
+            const auto hex = obj->getProperty (key).toString().trimCharactersAtStart ("#");
+            if (hex.length() != 6 || ! hex.containsOnly ("0123456789abcdefABCDEF"))
+            {
+                error = juce::String ("bad colour in token ") + key;
+                return false;
+            }
+            (juce::String (key) == "glassTint" ? t.glassTint : t.glassTint2) =
+                juce::Colour (0xff000000u | (juce::uint32) hex.getHexValue32());
+        }
     if (const auto* m = obj->getProperty ("metrics").getDynamicObject())
     {
         const auto read = [m] (const char* key, float& value, float lo, float hi) {

@@ -36,6 +36,9 @@ struct Theme
     bool glass = false, gradients = false;
     float material = 0.0f, gradientAngle = 25.0f;
     juce::Colour accentFill, accentFill2;
+    // Ambient light belongs to the material, independently of transport and custom accent colours.
+    // Optional in user themes; defaults to their two accent fills.
+    juce::Colour glassTint, glassTint2;
     // Sizes of the interface (docs/design/UI-KIT.md). Optional in a theme file ("metrics": { ... }); the defaults are
     // the sizes the classic skins always had, with the corner radius taken from "radius".
     struct Metrics

@@ -2,6 +2,24 @@
 
 This file is updated at every notable step. A new chat, Codex or a person continues from here: what is done, what is in progress, what the next step is. The state lives in the repository, not in a chat.
 
+## Glass material refinement (2026-10-21, local review)
+
+Codex owns branch `codex/glass-theme`, created from the owner's committed `claude/gpu-glass` (`fa8968b`). The owner is not editing this checkout during the work. Scope: match the approved light Arrangement mockup with a silver-blue/lavender ground, quieter panel and control edges, and flat blue browser selection, retaining layout and control behaviour. The owner also requested a corresponding dark-theme colour pass: neutral graphite, restrained blue/lavender accents and softer edges. The latest reference supersedes the clear-lens selection rule for browser rows.
+
+Files being changed: `app/Resources/themes/glasslight.json`, `glassdark.json`, `app/Source/ui/Theme.h`, `Theme.cpp`, `GlassMaterial.h`, `GlassMaterial.cpp`, `Kit.cpp`, `BrowserPanel.cpp`, `Chrome.cpp`, `tests/UiTests.cpp`, this handoff, `docs/design/GLASS-UI.md`, `README.md`, and verified captures under `media/ui-glass/`. No engine, DSP, project format or plugin changes are planned. Next: implement shared material changes, build without plugin installation, run ctest and capture both themes. Existing untracked design assets belong to the owner and stay out of commits.
+
+Additional files: `app/Source/ui/DetailPanel.cpp` paints its own ambient ground; `SessionView.cpp` keeps the mixer plate opaque beneath satin cards. Owner's final correction: hide resting splitter guide lines, showing them on hover/drag only (`Chrome.cpp`).
+
+Publication override (owner, 2026-10-21): develop and review locally for longer before uploading. Do not push this work or create a PR until the owner asks. Nothing from this branch has been published. A local preview build and captures are the next deliverable; local commits are allowed.
+
+Implemented: silver-blue/lavender light material, neutral graphite dark material with softer clip saturation, theme-owned ambient colours independent of custom control accents (optional tokens with backwards-compatible parsing), narrower rims and calmer control bodies, flat tinted browser rows, sharp labels above the view-switch lens, hidden resting splitter guides, and an opaque ambient ground beneath Session mixer controls. Layout and all hit areas/gestures are unchanged.
+
+Verification: native arm64 Release app and tests build with plugin installation OFF. `ctest` passes all 10 suites, including both UI languages, after the final splitter/mixer changes. New checks cover optional token validation, legacy themes, text contrast, ambient continuity (three composited gradients can differ by up to three byte levels at different raster clip origins), custom-accent isolation, opaque reduced-transparency fallback, neutral graphite and splitter hover/drag visibility. Full screenshots are captured separately from UI tests, whose synthetic keyboard events can otherwise affect the snapshot app. The tests and captures need macOS system-service access: sandboxed CoreMIDI tests crash; the native run passes.
+
+Warning-free verification is not achieved: this base has existing warnings in `Strings.h`, other unchanged sources and JUCE 8.0.4 with the installed AppleClang/SDK. No warnings were suppressed. Local build logs: `/private/tmp/prisma-glass-theme-build.log`, `/private/tmp/prisma-glass-theme-local-build.log`; final tests: `/private/tmp/prisma-glass-theme-local-tests.log`. Xcode's MacOSX26.5 SDK is selected explicitly because the command-line default SDK is incompatible with this linker. Local review app: `dist/glass-theme-preview-2026-10-21/DAW.zip` (ad-hoc signature verified before archiving; unpacked copy at `/private/tmp/prisma-glass-theme-preview/DAW.app`). Next: owner's local visual review, then address remaining warnings before publication. No push, PR or merge.
+
+The owner subsequently requested a separate, freer dark concept, allowing future features, and clarified the material: the large base surfaces are very matte, almost opaque glass; only selected details are clearer. This is image exploration, not authorization to add those features to this implementation.
+
 ## UI kit (2026-10-19, in progress)
 
 The owner agreed to lay the interface down once instead of restyling screens one by one: tokens for sizes, one set of control painters (`ui::kit`), then the screens moved onto them, then a GPU glass backdrop. Plan and progress: [UI-KIT.md](design/UI-KIT.md). Branch `claude/project-thread-ayt3r1`; round three (glossy material, sphere knobs) went out as a bundle for its own PR.

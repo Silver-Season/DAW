@@ -25,10 +25,16 @@ Stage 2: the piano roll has a Piano Roll / Score / Step bar (Score and Step are 
 
 ## Rendering
 
+The 2026-10-21 material pass on `codex/glass-theme` follows the owner's approved light mockup and corresponding dark-theme request. Light plates use a silver-blue/lavender ambient ground; dark plates remain neutral graphite with quieter colour and highlights. `glassTint` and `glassTint2` are optional theme tokens, independent of custom control accents; older user themes fall back to their accent fills. Browser navigation and list selections now use the same flat tinted `kit::row`, with labels painted above the material. Cards call one shared surface/rim painter. Layout, hit areas, gestures, track colours and transport colours are retained.
+
+The browser and device panel explicitly paint their portion of the window-space ground before their translucent plate. This keeps their colour independent of repaint order and works through the existing JUCE renderer without screen capture, backdrop blur or a new GPU pipeline. Reduced transparency paints opaque cards, plates and fields and removes ambient glows.
+
+The Session mixer and master strip paint their ambient ground before the satin cards, keeping their combined surface opaque over musical data. Splitter hit areas and gestures are unchanged; their guide lines appear only on hover or during a drag. The dark palette retains its hues with lower clip saturation.
+
 `app/Source/ui/GlassMaterial.*` is the shared material, used through `UiCommon`, the app look and feel and the existing controls:
 
 - `cell`: flat fill with a soft top light and no rim, for clip slots, fields and meters (`fillCell` in glass themes). A grid of them stays calm; outlines come only from `strokeCell` where a view asks for one.
-- `surface`: frosted body with a bright upper rim, for buttons and panels.
+- `surface`: an even satin body with a narrow directional rim, for panels and cards.
 - `capsule`: the transport row of the top bar, with a soft drop shadow.
 - `accent`: lit buttons and track headers, the accent gradient when enabled; the label colour is chosen for 4.5:1 contrast.
 - `thumb`: the knob of a switch, the fader thumb and the thumb of the level bars.
@@ -65,9 +71,9 @@ Build outside the repository. `PRISMA_COPY_AFTER_BUILD` defaults to OFF so a ver
 These hold for every screen; the shared painters in `app/Source/ui/GlassMaterial.cpp` and `app/Source/ui/Kit.cpp` implement them, so a screen should paint through them rather than draw its own glass.
 
 - Two themes only: `glass-light` and `glass-dark` (dark is a neutral graphite, never navy).
-- Glass on glass: each layer up is less see-through and more matte. The window has a soft ground of accent glows (`glass::windowBackdrop`); plates over it are a little see-through (`glass::plateColour`); cards on plates are matte (`kit::card`); controls on cards are more matte still (`glass::pane`, `glass::bead`). The element of attention (the selection, an active control, the control in hand) is clear refracting glass again (`glass::Liquid` lens).
-- Glass reads as glass by its rim, not by outlines: two edges a few pixels apart with a lighter band between them, the outer edge catching the light, the inner one where it leaves (`glass::rimLight`). Keep drawn lines faint.
-- Colour never fills glass or spills past its edge. It lives in a thin edge line and a little light inside the glass: Play green, record red, everything else the accent. Turning on is animated (the pane comes forward over about a quarter of a second).
+- Glass on glass: the window has a soft ground of theme ambient light (`glass::windowBackdrop`); plates over it are a little see-through (`glass::plateColour`); cards on plates are satin (`kit::card`); controls on cards are more matte (`glass::pane`, `glass::bead`). Moving thumbs and the selected view retain the existing refracting lenses. Browser selections use a flat blue/accent tint, as agreed with the owner's latest reference.
+- Glass reads by a narrow directional rim (`glass::rimLight`): an outer highlight and a softer inner reflection. Keep the intervening band and drawn lines faint; avoid stacking the rim twice on a card.
+- Transport colour stays within the glass: Play green, record red, other controls the accent. Turning on is animated (the pane comes forward over about a quarter of a second). Browser selection uses a restrained tinted fill; its text and icons stay sharp above the material.
 - The spectrum (prism) is permanent only on the view switch. Elsewhere it appears only while the pointer is near or the control is held, rises quickly and fades out slowly.
 - Never paint a shadow or glow outside a control's own shape: the component clips it into a square, which reads as a bug. No blurred content showing through panels.
 - Only light and highlights follow the pointer, fading smoothly with distance. Text and icons never move.

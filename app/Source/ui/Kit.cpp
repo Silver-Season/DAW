@@ -27,7 +27,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
 {
     const auto& t = theme();
     const float radius = controlRadius (r);
-    const bool lit = s.on || kind == Kind::primary;
+    const bool isLit = s.on || kind == Kind::primary;
     juce::Colour litColour = colour.value_or (kind == Kind::danger ? t.record : (t.glass ? t.accentFill : t.accent));
     juce::Colour ink = t.text;
 
@@ -62,22 +62,22 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
     if (! t.glass)
     {
         // the classic skins: a filled cell with a one-pixel border, the accent when lit
-        auto fill = lit ? litColour : (s.down ? t.panel2.brighter (0.1f) : (s.hover ? t.panel2 : t.panel));
-        auto border = lit ? litColour : t.line;
-        if (kind == Kind::ghost && ! lit && ! s.hover)
+        auto fill = isLit ? litColour : (s.down ? t.panel2.brighter (0.1f) : (s.hover ? t.panel2 : t.panel));
+        auto border = isLit ? litColour : t.line;
+        if (kind == Kind::ghost && ! isLit && ! s.hover)
             fill = t.panel;
         if (! s.enabled)
         {
             fill = fill.withMultipliedAlpha (0.5f);
             border = border.withMultipliedAlpha (0.6f);
         }
-        if (lit && t.glow > 0.0f && kind != Kind::plain)
+        if (isLit && t.glow > 0.0f && kind != Kind::plain)
             juce::DropShadow (litColour.withAlpha (0.45f), juce::roundToInt (10.0f * t.glow), {}).drawForRectangle (g, r.toNearestInt().reduced (3));
         g.setColour (fill);
         g.fillRoundedRectangle (r, radius);
         g.setColour (border);
         g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
-        ink = lit ? inkFor (litColour) : (s.enabled ? t.text : t.dimText.withAlpha (0.6f));
+        ink = isLit ? inkFor (litColour) : (s.enabled ? t.text : t.dimText.withAlpha (0.6f));
     }
     else if (kind == Kind::ghost)
     {
@@ -89,7 +89,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         glass::pane (g, r.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f), litColour, lit, presence);
         ink = s.enabled ? t.text.interpolatedWith (colour.value_or (t.accent), lit) : t.dimText.withAlpha (0.6f);
     }
-    else if (lit && kind != Kind::primary && s.enabled)
+    else if (isLit && kind != Kind::primary && s.enabled)
     {
         // a toggle that is on, record armed: the glass lit from inside by its colour, the label in that colour
         glass::litBead (g, r, radius, false, litColour, (s.down ? 0.8f : 1.0f) * juce::jlimit (0.0f, 1.0f, s.amount));
@@ -104,7 +104,7 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
                 break;
             }
     }
-    else if (lit)
+    else if (isLit)
     {
         glass::accent (g, r, s.enabled ? litColour : t.panel2, radius);
         if (s.hover || s.down)
@@ -226,9 +226,9 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
         {
             glass::Liquid liquid (g, r.expanded (2.0f, 2.0f).getSmallestIntegerContainer());
             auto& b = liquid.backdrop();
-            b.setColour (t.panel2.interpolatedWith (t.line, t.isLight() ? 0.35f : 0.2f));
+            b.setColour (t.panel2.withAlpha (t.isLight() ? 0.65f : 0.8f));
             b.fillRoundedRectangle (track, pill);
-            b.setColour (t.shadow().withAlpha (t.isLight() ? 0.08f : 0.3f));
+            b.setColour (t.line.withAlpha (0.25f));
             b.drawRoundedRectangle (track.reduced (0.5f), pill, 1.0f);
             if (hover >= 0 && hover != selected)
             {
@@ -242,21 +242,22 @@ void segmented (juce::Graphics& g, juce::Rectangle<float> r, const juce::StringA
             }
             const float at = juce::jlimit (-0.06f, (float) n - 0.94f, position >= 0.0f ? position : (float) selected);
             flare = juce::jlimit (0.0f, 1.0f, flare);
-            for (int i = 0; i < labels.size(); ++i)
-            {
-                // a label turns to the accent as the lens arrives over it
-                const float near = selected >= 0 ? juce::jmax (0.0f, 1.0f - std::abs ((float) i - at)) : 0.0f;
-                b.setColour (t.dimText.interpolatedWith (t.accent, near));
-                b.setFont (labelFont (i));
-                b.drawText (labels[i], seg (i), juce::Justification::centred, false);
-            }
             if (selected >= 0)
             {
                 // while it slides the lens stretches a little and its spectrum flares, then settles
                 const auto home = juce::Rectangle<float> (r.getX() + w * at, r.getY(), w, r.getHeight()).reduced (1.0f, 0.0f);
                 const auto box = home.withSizeKeepingCentre (home.getWidth() * (1.0f + 0.12f * flare), home.getHeight() * (1.0f - 0.04f * flare));
-                liquid.lens (box, box.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.12f : 0.0f, spectrum ? 2.2f + 1.6f * flare : 1.0f);
+                b.setColour (t.accentFill.withAlpha (t.isLight() ? 0.12f : 0.10f));
+                b.fillRoundedRectangle (box, box.getHeight() * 0.5f);
+                liquid.lens (box, box.getHeight() * 0.5f, 0.0f, t.isLight() ? 0.08f : 0.0f, spectrum ? 0.55f + 0.8f * flare : 0.5f);
             }
+        }
+        // Labels stay above the optical layer, exactly like icons on the other controls.
+        for (int i = 0; i < labels.size(); ++i)
+        {
+            g.setColour (i == selected ? t.text : t.dimText);
+            g.setFont (labelFont (i));
+            g.drawText (labels[i], seg (i), juce::Justification::centred, false);
         }
         return;
     }
@@ -314,7 +315,6 @@ void card (juce::Graphics& g, juce::Rectangle<float> r, bool selected)
     {
         // no outer shadow: cards often fill their component, and the shadow would be cut square at its edge
         glass::surface (g, r, t.panel, radius);
-        glass::edge (g, r, radius, 0.6f);
     }
     else
     {
@@ -335,12 +335,19 @@ void row (juce::Graphics& g, juce::Rectangle<float> r, State s)
         return;
     if (t.glass)
     {
-        // the selection a soft tinted pill with a faint lit top edge; hover only a breath of light
+        // Flat tinted selection keeps the label sharp and the browser part of one continuous plate.
         const float radius = juce::jmin (t.metrics.controlRadius - 2.0f, r.getHeight() * 0.5f);
         if (s.on)
-            glass::bead (g, r, radius); // the selection is a plain piece of glass laid on the list
+        {
+            const auto fill = t.panel2.interpolatedWith (t.accentFill, t.isLight() ? 0.27f : 0.24f);
+            g.setColour (t.material > 0.0f ? fill.withAlpha (t.isLight() ? 0.80f : 0.85f) : fill);
+            g.fillRoundedRectangle (r, radius);
+        }
         else
-            glass::pane (g, r, radius, t.accentFill, 0.0f, 0.55f); // hover: a faint pane
+        {
+            g.setColour (t.highlight().withAlpha (t.isLight() ? 0.20f : 0.035f));
+            g.fillRoundedRectangle (r, radius);
+        }
         return;
     }
     g.setColour (s.on ? t.panel2 : t.panel);

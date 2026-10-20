@@ -433,6 +433,7 @@ juce::Rectangle<int> BrowserPanel::previewButtonRect() const
 void BrowserPanel::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    glass::windowBackdrop (g, *this);
     g.fillAll (glass::plateColour()); // the plate: a little of the window's ground shows through
 
     if (t.glass)
@@ -455,8 +456,7 @@ void BrowserPanel::paint (juce::Graphics& g)
         const bool selected = ! searching && sameNav (n.kind, n.index, current.kind, current.index);
         if (t.glass && n.kind != Nav::label)
         {
-            // glass: a line icon and the label; the selection is the element of attention, so it is clear glass that
-            // bends what lies under it (the rest of the list sits on matte layers)
+            // Paint labels above the shared flat selection, keeping navigation crisp in both themes.
             const auto drawRow = [&] (juce::Graphics& to)
             {
                 to.setColour (selected ? t.accent : t.text.withAlpha (0.75f));
@@ -465,18 +465,7 @@ void BrowserPanel::paint (juce::Graphics& g)
                 to.setFont (t.uiFont (13.5f, selected ? 500 : 400));
                 to.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
             };
-            if (selected)
-            {
-                const float radius = juce::jmin (t.metrics.controlRadius - 2.0f, (float) r.getHeight() * 0.5f);
-                {
-                    glass::Liquid liquid (g, r.expanded (2));
-                    drawRow (liquid.backdrop());
-                    liquid.lens (r.toFloat(), radius, 0.0f, 0.0f);
-                }
-                glass::rimLight (g, r.toFloat(), radius, 1.0f);
-                continue;
-            }
-            kit::row (g, r.toFloat(), { i == hoveredNav, false, false });
+            kit::row (g, r.toFloat(), { i == hoveredNav, false, selected });
             drawRow (g);
             continue;
         }

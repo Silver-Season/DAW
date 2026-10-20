@@ -24,9 +24,8 @@ void windowBackdrop (juce::Graphics&, juce::Component& c);
 // the window backdrop. Opaque in the classic look or with Reduce transparency.
 juce::Colour plateColour ();
 
-// A liquid-glass body for a raised control (the selected segment, framed buttons, thumbs, knobs): a soft shadow, a
-// near-white body, a thick bright rim whose lower edge bends the light into a cyan fringe, a gloss on top and a caustic
-// glow along the bottom. `round` draws a circle in r.
+// A satin body for a raised control, with restrained highlights and a thin lit edge. The surrounding plate supplies
+// the ambient colour; transport colours are added separately by litBead. `round` draws a circle in r.
 void bead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round = false, juce::Colour fringe = juce::Colour());
 // The edge of a glass plate or card: a faint hairline and the rim catching the light (rimLight). `strength` 0..1
 // scales the light (cards less than plates).
@@ -35,9 +34,8 @@ void edge (juce::Graphics&, juce::Rectangle<float> r, float radius, float streng
 // hairline and a lit top bevel; `presence` 0..1 fades the whole pane in, `lit` 0..1 adds a quiet edge and light in
 // `colour` (the button is on).
 void pane (juce::Graphics&, juce::Rectangle<float> r, float radius, juce::Colour colour, float lit, float presence);
-// The rim of a pane of glass, where its thickness shows: two edges a few pixels apart (the outer one catching the light
-// where it faces it, the inner one where the light leaves the glass) and a lighter band between them. This, not a
-// single drawn outline, is what makes a pane read as glass. `strength` 0..1.
+// A narrow band between an outer highlight and a softer inner reflection. Their brightness varies with direction,
+// keeping large surfaces distinct without a heavy double outline. `strength` 0..1.
 void rimLight (juce::Graphics&, juce::Rectangle<float> r, float radius, float strength = 1.0f);
 // A thin line of spectrum round a rounded rectangle (the hue turns with the direction of the rim): the prism edge of
 // glass that is lit or being touched. `alpha` 0 draws nothing.

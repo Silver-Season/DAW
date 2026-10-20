@@ -9,7 +9,11 @@ Architecture and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Glass appearance
 
-Glass · Light and Glass · Dark sit alongside the original four themes. **Appearance** in the top bar sets two accent colours, the gradient and its angle, glass depth, playback glow and an opaque fallback (Reduce transparency). The choice is kept in the app settings, not in the project; record, play and track colours keep their meaning.
+Glass · Light uses a silver-blue ground with soft lavender light; Glass · Dark uses neutral graphite with restrained blue and lavender accents. Satin panels, thin directional highlights and flat tinted browser selections keep the controls and text clear. The layout and control gestures are shared by both themes.
+
+Panel divider guides appear on hover and while dragging, leaving the gaps clear at rest. The Session mixer has an opaque ambient plate beneath its cards so clips cannot show through its labels and controls. Dark-theme track colours use a softer saturation while retaining their palette hues.
+
+**Appearance** in the top bar sets two accent colours, the gradient and its angle, glass depth, playback glow and an opaque fallback (Reduce transparency). The choice is kept in the app settings, not in the project; record, play and track colours keep their meaning. Custom control accents do not recolour the ambient ground. User themes can set the optional `glassTint` and `glassTint2` colours; themes without them use their accent fills.
 
 - **Floating cards.** The browser, the Session/Arrangement area and the bottom panel are rounded glass cards with gaps between them on the window background.
 - **Top bar in two rows.** Above: the mark and project name, the Session/Arrangement switch, version, undo/redo, export and settings. Below: the Library button over the browser column and one glass capsule with the transport in groups (stop, a round green play, record; position, tempo, metre; scale, metronome, loop, punch, follow), the capture ribbon, the spectrum, the lamps and CPU. Buttons inside the capsule are just their icons until they are lit or under the mouse.
@@ -17,9 +21,10 @@ Glass · Light and Glass · Dark sit alongside the original four themes. **Appea
 - **Clips in pastel.** Session cells and Arrangement clips are tinted with the track colour; notes and waveforms are drawn in the deeper track colour, and a Session clip shows a miniature of its notes under its name. Empty slots are neutral.
 - **Mixer and headers.** Faders are thin tracks with a frosted thumb and a dB scale beside them; meters are two thin bars. Arrangement headers show the volume as a green level slider.
 
-[Rendering details and verification](docs/design/GLASS-UI.md) · [Captures in all six themes](media/ui-glass/index.html)
+[Rendering details and verification](docs/design/GLASS-UI.md) · [Interface captures](media/ui-glass/index.html)
 
 ![Session in Glass Light](media/ui-glass/glass-light-session.png)
+![Arrangement in Glass Light](media/ui-glass/glass-light-arrangement.png)
 ![Arrangement in Glass Dark](media/ui-glass/glass-dark-arrangement.png)
 
 ## Packaging a macOS build
