@@ -195,7 +195,8 @@ void testKit()
                th.id + ": a click finds its segment");
     }
     manager.setCurrent ("glass-light");
-    check (theme().metrics.pill && std::abs (theme().metrics.controlHeight - 28.0f) < 0.01f, "glass themes read their size tokens from the file");
+    check (! theme().metrics.pill && std::abs (theme().metrics.controlRadius - 10.0f) < 0.01f && std::abs (theme().metrics.controlHeight - 28.0f) < 0.01f,
+           "glass themes read their size tokens from the file");
     manager.setCurrent ("glass-dark");
 }
 

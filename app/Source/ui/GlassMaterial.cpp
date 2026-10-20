@@ -260,6 +260,46 @@ edge (juce::Graphics& g, juce::Rectangle<float> r, float radius, float strength)
 }
 
 void
+pane (juce::Graphics& g, juce::Rectangle<float> r, float radius, juce::Colour colour, float lit, float presence)
+{
+    const auto& t = theme ();
+    presence = juce::jlimit (0.0f, 1.0f, juce::jmax (presence, lit));
+    lit = juce::jlimit (0.0f, 1.0f, lit);
+    if (presence <= 0.0f || r.isEmpty ())
+        return;
+    const bool light = t.isLight ();
+    radius = juce::jmin (radius, juce::jmin (r.getWidth (), r.getHeight ()) * 0.5f);
+    juce::Path shape;
+    shape.addRoundedRectangle (r, radius);
+    // the frosted body: the panel shows through it
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.62f : 0.09f) * presence), 0.0f, r.getY (),
+                                             t.highlight ().withAlpha ((light ? 0.38f : 0.04f) * presence), 0.0f, r.getBottom (), false));
+    g.fillPath (shape);
+    if (lit > 0.0f)
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (shape);
+        juce::ColourGradient glow (colour.withAlpha ((light ? 0.18f : 0.24f) * lit), r.getCentreX (), r.getBottom () - r.getHeight () * 0.15f,
+                                   colour.withAlpha (0.0f), r.getCentreX (), r.getY () - r.getHeight () * 0.3f, true);
+        g.setGradientFill (glow);
+        g.fillRect (r);
+    }
+    // the hairline round it and the bevel lit along the top
+    g.setColour ((light ? t.line.withAlpha (0.65f) : t.highlight ().withAlpha (0.13f)).withMultipliedAlpha (presence));
+    g.strokePath (shape, juce::PathStrokeType (1.0f));
+    juce::Path bevel;
+    bevel.addRoundedRectangle (r.reduced (1.25f), juce::jmax (0.0f, radius - 1.25f));
+    g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.95f : 0.2f) * presence), 0.0f, r.getY (),
+                                             t.highlight ().withAlpha (0.0f), 0.0f, r.getCentreY (), false));
+    g.strokePath (bevel, juce::PathStrokeType (1.0f));
+    if (lit > 0.0f)
+    {
+        g.setColour (colour.withAlpha ((light ? 0.8f : 0.7f) * lit));
+        g.strokePath (shape, juce::PathStrokeType (1.2f));
+    }
+}
+
+void
 spectrumRim (juce::Graphics& g, juce::Rectangle<float> r, float radius, float alpha, float width)
 {
     if (alpha <= 0.0f || r.isEmpty ())

@@ -79,21 +79,15 @@ juce::Colour button (juce::Graphics& g, juce::Rectangle<float> r, Kind kind, Sta
         g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
         ink = lit ? inkFor (litColour) : (s.enabled ? t.text : t.dimText.withAlpha (0.6f));
     }
-    else if (kind == Kind::ghost && ! (s.on && colour.has_value()))
+    else if (kind == Kind::ghost)
     {
-        // in the transport capsule: the icon on a faint pane of glass; when it turns on the glass comes forward (animated
-        // by the button through `amount`), its edge and a little light in it in the accent, the icon in the accent
+        // in the transport capsule: the icon on a translucent pane of glass; when it turns on the edge and a little light
+        // in the pane take its colour (animated by the button through `amount`), and so does the icon
         const float lit = s.on && s.enabled ? juce::jlimit (0.0f, 1.0f, s.amount) : 0.0f;
-        const auto pane = r.reduced (1.0f);
-        const float paneRadius = juce::jmax (0.0f, radius - 1.0f);
-        const float presence = juce::jmax (lit, s.enabled ? (s.down ? 0.95f : (s.hover ? 0.75f : 0.45f)) : 0.25f); // every button sits on its glass; on, the glass comes forward
-        if (presence > 0.0f)
-        {
-            g.beginTransparencyLayer (presence);
-            glass::litBead (g, pane, paneRadius, false, litColour, lit > 0.0f ? 1.0f : 0.0f);
-            g.endTransparencyLayer();
-        }
-        ink = s.enabled ? t.text.interpolatedWith (t.accent, lit) : t.dimText.withAlpha (0.6f);
+        const float rest = s.bare ? 0.0f : 0.8f; // a bare button (stop, record) shows its pane only when touched or on
+        const float presence = s.enabled ? (s.down ? 1.0f : (s.hover ? juce::jmax (rest, 0.7f) : rest)) : rest * 0.5f;
+        glass::pane (g, r.reduced (1.0f), juce::jmax (0.0f, radius - 1.0f), litColour, lit, presence);
+        ink = s.enabled ? t.text.interpolatedWith (colour.value_or (t.accent), lit) : t.dimText.withAlpha (0.6f);
     }
     else if (lit && kind != Kind::primary && s.enabled)
     {

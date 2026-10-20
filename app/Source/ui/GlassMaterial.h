@@ -25,6 +25,10 @@ void bead (juce::Graphics&, juce::Rectangle<float> r, float radius, bool round =
 // the light caught on the edge in a few glints (the top edge, the lit corner, faintly the opposite bottom edge), each
 // a little split toward cyan and violet, as a prism would. `strength` 0..1 scales the light (cards less than plates).
 void edge (juce::Graphics&, juce::Rectangle<float> r, float radius, float strength = 1.0f);
+// A translucent pane of glass under a button (the transport row): a frosted body you can see the panel through, a
+// hairline and a lit top bevel; `presence` 0..1 fades the whole pane in, `lit` 0..1 adds a quiet edge and light in
+// `colour` (the button is on).
+void pane (juce::Graphics&, juce::Rectangle<float> r, float radius, juce::Colour colour, float lit, float presence);
 // A thin line of spectrum round a rounded rectangle (the hue turns with the direction of the rim): the prism edge of
 // glass that is lit or being touched. `alpha` 0 draws nothing.
 void spectrumRim (juce::Graphics&, juce::Rectangle<float> r, float radius, float alpha, float width = 1.2f);

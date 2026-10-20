@@ -87,6 +87,7 @@ public:
     bool on = false;
     bool accentInk = false; // the label in the accent colour (the scale button while a scale is set)
     bool framed = false;    // glass themes: a button of its own (top row), not one of the capsule's row
+    bool bare = false;      // glass themes: no pane of glass at rest (stop and record, as plain icons)
     float iconSize = 0.0f;  // 0: the default size
     bool leftAligned = false; // icon and label start at the left edge (the Library button)
     std::optional<juce::Colour> iconColour; // the icon in its own colour (the red dot of Capture)
@@ -150,15 +151,17 @@ public:
         // while the pane fades out the button still draws its lit state, fading
         const bool shownOn = on || amount > 0.001f;
         const K kind = role == Role::play && icon && text.isEmpty() ? K::play
-                     : role == Role::record ? (shownOn ? K::danger : idle)
+                     : role == Role::record ? (shownOn && (framed || ! t.glass) ? K::danger : idle)
                      : role == Role::warning ? (shownOn ? K::toggle : idle)
                      : idle;
         kit::State st;
         st.on = shownOn;
         st.amount = amount;
+        st.bare = bare;
         st.hover = isMouseOver() && isEnabled();
         st.enabled = isEnabled();
-        auto ink = kit::button (g, r, kind, st, role == Role::warning ? std::optional<juce::Colour> (t.warning) : std::nullopt);
+        auto ink = kit::button (g, r, kind, st, role == Role::warning ? std::optional<juce::Colour> (t.warning)
+                                             : (role == Role::record && kind == K::ghost ? std::optional<juce::Colour> (t.record) : std::nullopt));
         if (! on && isEnabled() && (role == Role::record || accentInk))
             ink = role == Role::record ? t.record : t.accent;
         if (kind == K::play && t.glass)
@@ -526,6 +529,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     play = std::make_unique<IconButton> (I::play, juce::String(), Role::play, Strings::help::play);
     stop = std::make_unique<IconButton> (I::stop, juce::String(), Role::normal, Strings::help::stop);
     record = std::make_unique<IconButton> (I::record, juce::String(), Role::record, Strings::help::record);
+    stop->bare = record->bare = true; // plain icons in the row, as in the design; a pane appears when touched or on
     overdub = std::make_unique<IconButton> (nullptr, Strings::recording::ovr, Role::normal, Strings::help::overdub);
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
     punchIn = std::make_unique<IconButton> (nullptr, Strings::arrRec::punchIn, Role::record, Strings::help::punchIn);
