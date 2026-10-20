@@ -6,6 +6,10 @@ This file is updated at every notable step. A new chat, Codex or a person contin
 
 The owner split the work into areas with one owner each (table in [AGENTS.md](../AGENTS.md)); `AGENTS.md` is now the one instruction for every agent and `CLAUDE.md` imports it. Codex owns the effects area: guide [docs/agents/EFFECTS.md](agents/EFFECTS.md), tasks [docs/agents/EFFECTS-BACKLOG.md](agents/EFFECTS-BACKLOG.md) (FX-1 Utility first). To keep that area self-contained, the Russian names of the effects moved from `Strings.h` to `app/Source/FxStrings.h`, the key knobs of each effect moved from `BuiltInEffectProcessor` into the registry (`EffectType::keyParams`), and `core/tests/fx/ContractTests.cpp` checks every registered effect (no allocation on the audio thread, extremes, rates, block sizes). Claude reviews and merges Codex's PRs.
 
+### Repository homepage (Codex, 2026-10-21)
+
+The owner explicitly asked to update the repository landing page at `https://github.com/Silver-Season/DAW`, beyond the feature-branch README. Branch `codex/repository-page` starts from current main. Scope is documentation and media only: README, detailed feature guide, native glass capture gallery, bass audition and render notes, plus this handoff. Reuse the approved presentation from PR #31, clearly label its new visuals and functions as a preview, and retain nightly links to main. No application source or build configuration changes. Next: verify GitHub rendering and asset links, publish a docs-only PR and the homepage after its checks. The owner's direct request authorizes publishing this homepage update; it does not authorize merging the application PR #31.
+
 ### Effects area (Codex)
 
 Nothing in progress yet. Next: FX-1.
