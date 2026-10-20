@@ -395,7 +395,7 @@ int BrowserPanel::rowAt (juce::Point<int> p) const
 void BrowserPanel::resized()
 {
     searchArea = { 10, 10, getWidth() - 20, theme().glass ? 36 : 32 };
-    search.setBounds (searchArea.withTrimmedLeft (30).withTrimmedRight (theme().glass ? 44 : 8).reduced (0, 6));
+    search.setBounds (searchArea.withTrimmedLeft (30).withTrimmedRight (8).reduced (0, 6));
     const int navTop = searchArea.getBottom() + 6;
     const int navHeight = (int) navEntries().size() * navRowH();
     navArea = { 0, navTop, getWidth(), navHeight };
@@ -444,18 +444,6 @@ void BrowserPanel::paint (juce::Graphics& g)
     }
     g.setColour (t.dimText);
     g.fillPath (icons::search (juce::Rectangle<float> (13.0f, 13.0f).withCentre ({ (float) searchArea.getX() + 17.0f, (float) searchArea.getCentreY() })));
-    if (t.glass && search.getText().isEmpty() && ! search.hasKeyboardFocus (true))
-    {
-        // the shortcut as a quiet key cap at the right end of the field
-        const auto cap = juce::Rectangle<float> (30.0f, 20.0f).withCentre ({ (float) searchArea.getRight() - 24.0f, (float) searchArea.getCentreY() });
-        g.setColour (t.isLight() ? t.highlight().withAlpha (0.7f) : t.highlight().withAlpha (0.06f));
-        g.fillRoundedRectangle (cap, 5.0f);
-        g.setColour (t.line.withAlpha (0.6f));
-        g.drawRoundedRectangle (cap.reduced (0.5f), 5.0f, 1.0f);
-        g.setColour (t.dimText);
-        g.setFont (t.uiFont (11.0f, 500));
-        g.drawText (juce::String::fromUTF8 ("\xe2\x8c\x98" "F"), cap, juce::Justification::centred, false);
-    }
 
     // navigation
     const bool searching = search.getText().isNotEmpty();
@@ -472,7 +460,7 @@ void BrowserPanel::paint (juce::Graphics& g)
             g.setColour (selected ? t.accent : t.text.withAlpha (0.75f));
             g.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
             g.setColour (t.text);
-            g.setFont (t.uiFont (14.0f, selected ? 600 : 400));
+            g.setFont (t.uiFont (13.5f, selected ? 500 : 400));
             g.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
             continue;
         }

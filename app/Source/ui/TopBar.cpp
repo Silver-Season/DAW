@@ -813,6 +813,8 @@ void TopBar::paint (juce::Graphics& g)
 
     if (t.glass)
     {
+        if (! libraryPlate.isEmpty ())
+            glass::capsule (g, libraryPlate.toFloat ());
         glass::capsule (g, capsuleArea.toFloat ());
         g.setColour (t.line.withAlpha (0.8f));
         for (const int x : separators)
@@ -970,8 +972,15 @@ void TopBar::resized()
     const int libraryFull = juce::jmax (110, leftColumn - 10);
     const bool libraryCompact = getWidth () - 10 - (10 + libraryFull + 8) < 1090;
     libraryButton->text = libraryCompact ? juce::String () : Strings::transport::library;
-    libraryButton->setBounds (10, cy - 20, libraryCompact ? 40 : libraryFull, 40);
-    capsuleArea = { libraryButton->getRight () + 8, cy - 21, getWidth () - 10 - (libraryButton->getRight () + 8), 42 };
+    // glass: a plate the width of the library column, the Library button a pane resting on it, as in the design
+    const bool plated = theme ().glass && ! libraryCompact;
+    libraryPlate = plated ? juce::Rectangle<int> (10, cy - 21, libraryFull, 42) : juce::Rectangle<int>();
+    if (plated)
+        libraryButton->setBounds (libraryPlate.getX () + 6, cy - 15, 112, 30);
+    else
+        libraryButton->setBounds (10, cy - 20, libraryCompact ? 40 : libraryFull, 40);
+    const int capsuleLeft = juce::jmax (libraryButton->getRight (), libraryPlate.getRight ()) + 8;
+    capsuleArea = { capsuleLeft, cy - 21, getWidth () - 10 - capsuleLeft, 42 };
 
     separators.clear ();
     int x = capsuleArea.getX () + 12;

@@ -346,7 +346,14 @@ void CardFrames::paint (juce::Graphics& g)
                 g.excludeClipRegion (other.reduced (2));
             juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.07f : 0.30f), 12, { 0, 3 }).drawForPath (g, rounded);
         }
-        // the edge of the plate: hairline, bevel and the glints where its thickness catches the light
+        // a faint sheen across the matte plate from its lit corner, then its edge
+        {
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion (rounded);
+            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.10f : 0.025f), r.getX(), r.getY(),
+                                                     t.highlight().withAlpha (0.0f), r.getX() + r.getWidth() * 0.45f, r.getY() + r.getHeight() * 0.45f, false));
+            g.fillRect (r);
+        }
         glass::edge (g, r, kRadius, 1.0f);
     }
 }

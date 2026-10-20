@@ -291,23 +291,8 @@ void field (juce::Graphics& g, juce::Rectangle<float> r, State s)
     const float radius = t.glass ? juce::jmin (t.metrics.controlRadius, r.getHeight() * 0.5f) : t.radius;
     if (t.glass)
     {
-        // a well in the glass: a soft fill a shade off the panel, a faint shadow along its top edge where it is sunk,
-        // no hard border; focus is a soft ring of the accent
-        const bool light = t.isLight();
-        const auto well = light ? t.panel2.interpolatedWith (t.highlight(), 0.15f) : t.highlight().withAlpha (0.06f);
-        g.setColour (light ? well.withAlpha (0.85f) : well);
-        g.fillRoundedRectangle (r, radius);
-        {
-            juce::Graphics::ScopedSaveState save (g);
-            juce::Path shape;
-            shape.addRoundedRectangle (r, radius);
-            g.reduceClipRegion (shape);
-            g.setGradientFill (juce::ColourGradient (t.shadow().withAlpha (light ? 0.07f : 0.25f), 0.0f, r.getY(),
-                                                     t.shadow().withAlpha (0.0f), 0.0f, r.getY() + 5.0f, false));
-            g.fillRect (r.withHeight (5.0f));
-        }
-        g.setColour (light ? t.line.withAlpha (0.35f) : t.highlight().withAlpha (0.07f));
-        g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+        // a pane of glass on the plate, a step lighter than it, with a hairline and a lit top edge
+        glass::pane (g, r, radius, t.accentFill, 0.0f, 1.0f);
         if (s.focus)
         {
             g.setColour (t.accentFill.withAlpha (0.55f));

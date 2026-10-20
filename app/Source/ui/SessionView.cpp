@@ -537,7 +537,10 @@ public:
                     {
                         // Glass, as the design: a quiet grey cell; a faint plus in the middle (double-click makes a
                         // clip), or the red record ring when the track records.
-                        fillCell (g, cell, dropTarget ? t.accentFill.withAlpha (0.2f).overlaidWith (emptyFill) : emptyFill);
+                        if (t.glass && ! dropTarget)
+                            glass::pane (g, cell, t.radius, t.accentFill, 0.0f, 0.4f); // an empty slot nearly dissolves: a faint pane
+                        else
+                            fillCell (g, cell, dropTarget ? t.accentFill.withAlpha (0.2f).overlaidWith (emptyFill) : emptyFill);
                         if (dropTarget || selected)
                             strokeCell (g, cell, t.accent, 1.5f);
                         const auto c = cell.getCentre();
@@ -557,7 +560,10 @@ public:
                         }
                         continue;
                     }
-                    fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
+                    if (t.glass && ! dropTarget)
+                        glass::pane (g, cell, t.radius, t.accentFill, 0.0f, 0.4f);
+                    else
+                        fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
                     strokeCell (g, cell, dropTarget || selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
                     const auto mark = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
                     g.setColour (live ? (armed ? t.record : t.record.withAlpha (0.6f)) : t.line);
