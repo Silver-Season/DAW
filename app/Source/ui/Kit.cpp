@@ -296,10 +296,28 @@ void field (juce::Graphics& g, juce::Rectangle<float> r, State s)
     const float radius = t.glass ? juce::jmin (t.metrics.controlRadius, r.getHeight() * 0.5f) : t.radius;
     if (t.glass)
     {
-        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.75f : 0.6f));
+        // a well in the glass: a soft fill a shade off the panel, a faint shadow along its top edge where it is sunk,
+        // no hard border; focus is a soft ring of the accent
+        const bool light = t.isLight();
+        const auto well = light ? t.panel2.interpolatedWith (t.highlight(), 0.15f) : t.highlight().withAlpha (0.06f);
+        g.setColour (light ? well.withAlpha (0.85f) : well);
         g.fillRoundedRectangle (r, radius);
-        g.setColour (s.focus ? t.accent : t.line.withAlpha (0.7f));
-        g.drawRoundedRectangle (r.reduced (s.focus ? 0.75f : 0.5f), radius, s.focus ? 1.5f : 1.0f);
+        {
+            juce::Graphics::ScopedSaveState save (g);
+            juce::Path shape;
+            shape.addRoundedRectangle (r, radius);
+            g.reduceClipRegion (shape);
+            g.setGradientFill (juce::ColourGradient (t.shadow().withAlpha (light ? 0.07f : 0.25f), 0.0f, r.getY(),
+                                                     t.shadow().withAlpha (0.0f), 0.0f, r.getY() + 5.0f, false));
+            g.fillRect (r.withHeight (5.0f));
+        }
+        g.setColour (light ? t.line.withAlpha (0.35f) : t.highlight().withAlpha (0.07f));
+        g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+        if (s.focus)
+        {
+            g.setColour (t.accentFill.withAlpha (0.55f));
+            g.drawRoundedRectangle (r.reduced (0.75f), radius, 1.5f);
+        }
         return;
     }
     g.setColour (t.panel);
@@ -333,8 +351,21 @@ void row (juce::Graphics& g, juce::Rectangle<float> r, State s)
         return;
     if (t.glass)
     {
-        g.setColour (s.on ? t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f) : t.panel2.withAlpha (0.7f));
-        g.fillRoundedRectangle (r, t.metrics.controlRadius);
+        // the selection a soft tinted pill with a faint lit top edge; hover only a breath of light
+        const float radius = juce::jmin (t.metrics.controlRadius + 2.0f, r.getHeight() * 0.5f);
+        if (s.on)
+        {
+            g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.16f : 0.2f));
+            g.fillRoundedRectangle (r, radius);
+            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.6f : 0.12f), 0.0f, r.getY(),
+                                                     t.highlight().withAlpha (0.0f), 0.0f, r.getCentreY(), false));
+            g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
+        }
+        else
+        {
+            g.setColour (t.isLight() ? t.highlight().withAlpha (0.55f) : t.highlight().withAlpha (0.05f));
+            g.fillRoundedRectangle (r, radius);
+        }
         return;
     }
     g.setColour (s.on ? t.panel2 : t.panel);

@@ -444,7 +444,7 @@ inline const juce::String exportShort = tr ("Export", "Экспорт");
 // Browser panel (frame only; the sources come with task 1.5)
 namespace browser
 {
-inline const juce::String searchPlaceholder = tr ("Search  ⌘F", "Поиск  ⌘F");
+inline const juce::String searchPlaceholder = tr ("Search sounds, instruments…", "Поиск звуков, инструментов…");
 inline const juce::String instruments = tr ("Instruments", "Инструменты");
 inline const juce::String presets = tr ("Presets", "Пресеты");
 inline const juce::String effects = tr ("Effects", "Эффекты");
