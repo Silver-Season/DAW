@@ -485,9 +485,9 @@ juce::Point<float> lightFrom (juce::Point<float> local);
 void
 knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour colour, bool bipolar)
 {
-    // A glass sphere set into a groove that carries the value in the track's colour. The sphere bends the inner edge of
-    // the ring at its rim; on top of it sit the small lights that make glass read as glass: a bright point where the
-    // light enters, a thin crescent along the lit rim, and the glow of the ring's colour gathered at the opposite edge.
+    // A glass dome with the value in the track's colour as a thin ring round its edge; on top of it sit the small lights
+    // that make glass read as glass: a bright point where the light enters and a thin crescent along the lit rim. The
+    // colour stays in the ring (the glass is not tinted by it).
     const auto& t = theme ();
     const bool light = t.isLight ();
     const float start = -juce::MathConstants<float>::pi * 0.75f, end = -start;
@@ -499,7 +499,6 @@ knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour col
     // the sphere fills the knob; the ring is laid round its edge, as on a dial
     const float sphereR = juce::jmax (2.0f, outer - 0.5f);
     const auto sphere = juce::Rectangle<float> (sphereR * 2.0f, sphereR * 2.0f).withCentre (c);
-    const bool lit = value > 0.001f || bipolar;
     {
         Liquid liquid (g, r.expanded (2.0f).getSmallestIntegerContainer ());
         auto& b = liquid.backdrop ();
@@ -535,13 +534,6 @@ knob (juce::Graphics& g, juce::Rectangle<float> r, float value, juce::Colour col
         juce::Path clip;
         clip.addEllipse (dome);
         g.reduceClipRegion (clip);
-        // the ring's colour gathered at the edge away from the light: light that passed through the glass
-        if (lit)
-        {
-            const auto far = c - dir * domeR * 0.85f;
-            g.setGradientFill (juce::ColourGradient (colour.withAlpha ((light ? 0.35f : 0.45f) * k), far, colour.withAlpha (0.0f), c, true));
-            g.fillEllipse (dome);
-        }
         // the crescent along the lit rim
         juce::Path crescent;
         const float towards = std::atan2 (dir.x, -dir.y);
