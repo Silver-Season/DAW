@@ -31,6 +31,8 @@ The browser and device panel explicitly paint their portion of the window-space 
 
 The Session mixer and master strip paint their ambient ground before the satin cards, keeping their combined surface opaque over musical data. Splitter hit areas and gestures are unchanged; their guide lines appear only on hover or during a drag. The dark palette retains its hues with lower clip saturation.
 
+The subsequent depth pass scatters two broad, shape-clipped ambient reflections inside `surface` and raised `bead` controls, with stronger but narrow directional rim light. The dark material is lighter graphite and admits more of the opaque ambient ground below it. No musical data is sampled, no new animation or repaint timer is added, and labels are drawn after the material. Reflections scale with glass depth and disappear when it is zero or Reduce transparency is enabled. Contrast tests sample cards, fields and raised controls at zero, intermediate and maximum depth in both themes.
+
 `app/Source/ui/GlassMaterial.*` is the shared material, used through `UiCommon`, the app look and feel and the existing controls:
 
 - `cell`: flat fill with a soft top light and no rim, for clip slots, fields and meters (`fillCell` in glass themes). A grid of them stays calm; outlines come only from `strokeCell` where a view asks for one.

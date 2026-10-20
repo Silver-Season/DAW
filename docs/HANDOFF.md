@@ -2,6 +2,14 @@
 
 This file is updated at every notable step. A new chat, Codex or a person continues from here: what is done, what is in progress, what the next step is. The state lives in the repository, not in a chat.
 
+## Glass depth follow-up (2026-10-21, local review)
+
+The owner asked to bring the stronger glass impression of the new dark concept into the existing app quickly, limited to material/theme work. Kept the layout, functions, opaque matte foundation and sharp labels; strengthened diffuse colour depth and selective rim reflections in both themes. Work is local on `codex/glass-theme` from `f03b186`; no push or PR. Files: `app/Source/ui/GlassMaterial.cpp`, `app/Resources/themes/glassdark.json`, `tests/UiTests.cpp`, `docs/design/GLASS-UI.md`, `README.md`, this handoff and verified images under `media/ui-glass/`. Existing reference images and earlier local preview are retained.
+
+Implemented: two broad shape-clipped ambient reflections in shared satin panels and raised controls, brighter narrow rim reflections, a lighter graphite dark palette, more ambient light through plates and cards, and a subdued timeline grid. Reflections scale with glass depth and disappear with the opaque fallback. No content capture, new renderer, animation, timer, layout or engine change. The Session mixer's opaque ground remains intact.
+
+Verified: native arm64 Release app/tests build, all 10 ctest suites pass (1975 JUCE checks in each UI language). New tests sample main/secondary label contrast at three material depths and confirm custom accents do not recolour card reflections. Existing continuity, graphite, opaque-fallback, hidden-splitter and real-time checks stay green. Final native captures cover both themes; the local ad-hoc signed app was archived and its signature checked again after extraction. Preview: `dist/glass-depth-preview-2026-10-21/DAW.zip`; unpacked copy: `/private/tmp/prisma-glass-depth-preview/DAW.app`. Logs: `/private/tmp/prisma-glass-depth-build.log`, `/private/tmp/prisma-glass-depth-final-build.log`, `/private/tmp/prisma-glass-depth-final-tests.log`. The inherited warning limitation documented below remains; no warnings were suppressed. Next: owner's local visual review and remaining warning cleanup before any publication.
+
 ## Glass material refinement (2026-10-21, local review)
 
 Codex owns branch `codex/glass-theme`, created from the owner's committed `claude/gpu-glass` (`fa8968b`). The owner is not editing this checkout during the work. Scope: match the approved light Arrangement mockup with a silver-blue/lavender ground, quieter panel and control edges, and flat blue browser selection, retaining layout and control behaviour. The owner also requested a corresponding dark-theme colour pass: neutral graphite, restrained blue/lavender accents and softer edges. The latest reference supersedes the clear-lens selection rule for browser rows.

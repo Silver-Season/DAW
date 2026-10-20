@@ -293,6 +293,32 @@ void testGlassMaterial()
         check (Theme::contrast (theme().text, selected) >= 4.5f,
                juce::String (id) + ": selected row labels keep text contrast");
 
+        // Stronger glass must keep normal and secondary labels readable throughout each material control's range.
+        for (const float depth : { 0.0f, 0.35f, 1.0f })
+        {
+            Appearance material;
+            material.glass = depth;
+            manager.setAppearance (material);
+            const std::function<void (juce::Graphics&, juce::Rectangle<float>)> painters[] {
+                card,
+                [] (juce::Graphics& g, juce::Rectangle<float> r) { ui::kit::field (g, r, {}); },
+                [] (juce::Graphics& g, juce::Rectangle<float> r) { ui::glass::bead (g, r, theme().metrics.controlRadius); }
+            };
+            bool materialReadable = true;
+            for (const auto& painter : painters)
+            {
+                const auto image = paint (theme().chrome, painter);
+                for (const auto point : { juce::Point<int> (20, 12), { 60, 20 }, { 95, 28 } })
+                {
+                    const auto fill = image.getPixelAt (point.x, point.y);
+                    materialReadable = materialReadable && Theme::contrast (theme().text, fill) >= 4.5f
+                                                        && Theme::contrast (theme().dimText, fill) >= 4.5f;
+                }
+            }
+            check (materialReadable, juce::String (id) + ": reflections preserve label contrast at depth " + juce::String (depth));
+        }
+        manager.setAppearance (Appearance());
+
         Appearance custom;
         custom.customAccent = true;
         custom.primary = juce::Colours::yellow;
@@ -300,6 +326,8 @@ void testGlassMaterial()
         manager.setAppearance (custom);
         check (ground (window).getPixelAt (30, 30) == whole.getPixelAt (30, 30),
                juce::String (id) + ": custom control colours do not flood the ambient ground");
+        check (paint (theme().background, card).getPixelAt (60, 20) == a.getPixelAt (60, 20),
+               juce::String (id) + ": custom accents do not recolour diffuse reflections in cards");
         custom.reduceTransparency = true;
         manager.setAppearance (custom);
         const auto opaqueA = paint (theme().background, card), opaqueB = paint (theme().panel2, card);

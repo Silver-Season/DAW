@@ -12,6 +12,28 @@ namespace
 {
 int captureDepth = 0; // message thread only
 
+// Diffuse light scattered inside a matte body. Everything stays inside its shape; labels are painted afterwards.
+void reflection (juce::Graphics& g, juce::Rectangle<float> r, float radius, float amount)
+{
+    const auto& t = theme ();
+    const float strength = t.material * amount;
+    if (!t.glass || strength <= 0.0f || r.isEmpty ())
+        return;
+    juce::Graphics::ScopedSaveState save (g);
+    juce::Path shape;
+    shape.addRoundedRectangle (r, radius);
+    g.reduceClipRegion (shape);
+    const float reach = juce::jmax (r.getWidth (), r.getHeight ()) * 0.85f;
+    for (const auto& [position, colour] : {
+             std::pair { juce::Point<float> (r.getX () + r.getWidth () * 0.12f, r.getY ()), t.glassTint },
+             std::pair { juce::Point<float> (r.getRight (), r.getBottom ()), t.glassTint2 } })
+    {
+        g.setGradientFill (juce::ColourGradient (colour.withAlpha ((t.isLight () ? 0.09f : 0.16f) * strength), position,
+                                                 colour.withAlpha (0.0f), position.translated (reach, 0.0f), true));
+        g.fillRect (r);
+    }
+}
+
 // Three passes of a box blur in each direction approximate a gaussian; the image is small (a quarter scale or less).
 void boxBlur (juce::Image& image, int radius)
 {
@@ -90,7 +112,7 @@ void windowBackdrop (juce::Graphics& g, juce::Component& c)
     const auto window = (top != nullptr ? top->getLocalBounds () : c.getLocalBounds ()).toFloat ();
     const auto origin = top != nullptr && top != &c ? top->getLocalPoint (&c, juce::Point<int> ()).toFloat () : juce::Point<float> ();
     const float w = window.getWidth (), h = window.getHeight (), reach = juce::jmax (w, h);
-    const float strength = t.material * (t.isLight () ? 0.55f : 0.12f);
+    const float strength = t.material * (t.isLight () ? 0.60f : 0.24f);
     // where each glow sits (fractions of the window), its radius (fraction of the long side) and its colour
     const std::tuple<float, float, float, juce::Colour> glows[] = {
         { 0.08f, 0.10f, 0.60f, t.glassTint },
@@ -112,7 +134,7 @@ juce::Colour plateColour ()
     const auto& t = theme ();
     if (!t.glass || t.material <= 0.0f)
         return t.chrome;
-    return t.chrome.withAlpha ((t.isLight () ? 0.52f : 0.82f) + 0.18f * (1.0f - t.material));
+    return t.chrome.withAlpha ((t.isLight () ? 0.52f : 0.64f) + 0.18f * (1.0f - t.material));
 }
 
 void frosted (juce::Graphics& g, juce::Rectangle<float> r, float radius, const juce::Image& behind, juce::Colour tint)
@@ -186,15 +208,16 @@ surface (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float r
         return;
     }
     const float strength = t.material;
-    const float opacity = (t.isLight () ? 0.62f : 0.92f) + (t.isLight () ? 0.25f : 0.08f) * (1.0f - strength);
-    const auto top = base.interpolatedWith (t.highlight (), (t.isLight () ? 0.16f : 0.035f) * strength).withAlpha (opacity);
+    const float opacity = (t.isLight () ? 0.62f : 0.68f) + (t.isLight () ? 0.25f : 0.20f) * (1.0f - strength);
+    const auto top = base.interpolatedWith (t.highlight (), (t.isLight () ? 0.16f : 0.065f) * strength).withAlpha (opacity);
     const auto bottom = base.interpolatedWith (t.panel2, 0.22f * strength).withAlpha (opacity);
     g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
     g.fillRoundedRectangle (r, radius);
+    reflection (g, r, radius, 1.0f);
     if (r.getHeight () >= 14.0f)
     {
         const auto gloss = r.reduced (1.5f).withHeight (r.getHeight () * 0.30f);
-        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.16f : 0.025f) * strength), 0.0f, gloss.getY (),
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((t.isLight () ? 0.18f : 0.055f) * strength), 0.0f, gloss.getY (),
                                                  t.highlight ().withAlpha (0.0f), 0.0f, gloss.getBottom (), false));
         g.fillRoundedRectangle (gloss, juce::jmax (0.0f, juce::jmin (radius - 1.5f, gloss.getHeight ())));
     }
@@ -224,16 +247,17 @@ bead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, juc
     };
     // No shadow outside the shape: controls fill their components, and anything painted past r would be cut square at
     // the component's edge. Depth comes from the rim instead.
-    const auto top = light ? t.panel.interpolatedWith (t.highlight (), 0.25f) : t.panel2.interpolatedWith (t.highlight (), 0.035f);
+    const auto top = light ? t.panel.interpolatedWith (t.highlight (), 0.25f) : t.panel2.interpolatedWith (t.highlight (), 0.06f);
     const auto bottom = light ? t.panel.interpolatedWith (t.panel2, 0.40f) : t.panel2.interpolatedWith (t.panel, 0.40f);
     g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
     g.fillPath (shape (r, radius));
+    reflection (g, r, radius, 0.45f);
     if (k > 0.0f && ! round)
         rimLight (g, r, radius, 0.55f);
     else if (k > 0.0f)
     {
-        juce::ColourGradient rim (t.highlight ().withAlpha ((light ? 0.70f : 0.26f) * k), 0.0f, r.getY (),
-                                  t.highlight ().withAlpha ((light ? 0.22f : 0.06f) * k), 0.0f, r.getBottom (), false);
+        juce::ColourGradient rim (t.highlight ().withAlpha ((light ? 0.82f : 0.42f) * k), 0.0f, r.getY (),
+                                  t.highlight ().withAlpha ((light ? 0.26f : 0.12f) * k), 0.0f, r.getBottom (), false);
         rim.addColour (0.5, t.highlight ().withAlpha ((light ? 0.08f : 0.02f) * k));
         g.setGradientFill (rim);
         g.strokePath (shape (r.reduced (0.9f), juce::jmax (0.0f, radius - 0.9f)), juce::PathStrokeType (1.1f));
@@ -282,8 +306,8 @@ pane (juce::Graphics& g, juce::Rectangle<float> r, float radius, juce::Colour co
     // the frosted body: the panel shows through it
     // a control is a layer above its card, so it is more matte than the card: less of what is under it shows through
     const auto body = light ? t.panel : t.highlight ();
-    g.setGradientFill (juce::ColourGradient (body.withAlpha ((light ? 0.56f : 0.065f) * presence), 0.0f, r.getY (),
-                                             body.withAlpha ((light ? 0.40f : 0.025f) * presence), 0.0f, r.getBottom (), false));
+    g.setGradientFill (juce::ColourGradient (body.withAlpha ((light ? 0.56f : 0.10f) * presence), 0.0f, r.getY (),
+                                             body.withAlpha ((light ? 0.40f : 0.035f) * presence), 0.0f, r.getBottom (), false));
     g.fillPath (shape);
     if (lit > 0.0f)
     {
@@ -343,13 +367,13 @@ rimLight (juce::Graphics& g, juce::Rectangle<float> r, float radius, float stren
         band.addRoundedRectangle (r.reduced (0.5f), radius);
         band.addRoundedRectangle (r.reduced (thick), juce::jmax (0.0f, radius - thick));
         band.setUsingNonZeroWinding (false);
-        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.15f : 0.025f) * k), 0.0f, r.getY (),
-                                                 t.highlight ().withAlpha ((light ? 0.025f : 0.005f) * k), 0.0f, r.getBottom (), false));
+        g.setGradientFill (juce::ColourGradient (t.highlight ().withAlpha ((light ? 0.20f : 0.06f) * k), 0.0f, r.getY (),
+                                                 t.highlight ().withAlpha ((light ? 0.03f : 0.015f) * k), 0.0f, r.getBottom (), false));
         g.fillPath (band);
     }
     // the outer edge catches the light where it faces it; the inner edge, where the light leaves the glass
-    rimAt (0.65f, 0.9f, light ? 0.10f : 0.025f, light ? 0.72f : 0.25f, light ? 0.12f : 0.045f);
-    rimAt (thick, 0.65f, light ? 0.025f : 0.008f, light ? 0.12f : 0.035f, light ? 0.25f : 0.08f);
+    rimAt (0.65f, 0.9f, light ? 0.10f : 0.025f, light ? 0.90f : 0.44f, light ? 0.16f : 0.07f);
+    rimAt (thick, 0.65f, light ? 0.025f : 0.008f, light ? 0.12f : 0.055f, light ? 0.34f : 0.16f);
 }
 
 void

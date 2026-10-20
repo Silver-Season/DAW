@@ -13,6 +13,8 @@ Glass · Light uses a silver-blue ground with soft lavender light; Glass · Dark
 
 Panel divider guides appear on hover and while dragging, leaving the gaps clear at rest. The Session mixer has an opaque ambient plate beneath its cards so clips cannot show through its labels and controls. Dark-theme track colours use a softer saturation while retaining their palette hues.
 
+The glass material scatters soft ambient colour within panels and raised controls, with narrow directional reflections along their edges. Glass depth adjusts these reflections; Reduce transparency removes them and keeps the surfaces opaque. The dark material uses lighter graphite surfaces while the timeline stays flat and sharp.
+
 **Appearance** in the top bar sets two accent colours, the gradient and its angle, glass depth, playback glow and an opaque fallback (Reduce transparency). The choice is kept in the app settings, not in the project; record, play and track colours keep their meaning. Custom control accents do not recolour the ambient ground. User themes can set the optional `glassTint` and `glassTint2` colours; themes without them use their accent fills.
 
 - **Floating cards.** The browser, the Session/Arrangement area and the bottom panel are rounded glass cards with gaps between them on the window background.
