@@ -315,9 +315,32 @@ litBead (juce::Graphics& g, juce::Rectangle<float> r, float radius, bool round, 
     spectrumRim (g, r, radius, (t.isLight () ? 0.45f : 0.55f) * strength * (t.material > 0.0f ? 1.0f : 0.0f), 1.2f);
 }
 
+namespace
+{
+// A small tile of fine grain, the frost of matte glass (made once; luminance noise around mid grey).
+const juce::Image& frostTile ()
+{
+    static const juce::Image tile = [] {
+        juce::Image image (juce::Image::ARGB, 96, 96, true, juce::SoftwareImageType ());
+        juce::Random random (0x9a55);
+        for (int y = 0; y < image.getHeight (); ++y)
+            for (int x = 0; x < image.getWidth (); ++x)
+            {
+                const bool lighter = random.nextBool ();
+                const auto level = (juce::uint8) (lighter ? 255 : 0);
+                image.setPixelAt (x, y, juce::Colour (level, level, level, (juce::uint8) random.nextInt (22)));
+            }
+        return image;
+    } ();
+    return tile;
+}
+} // namespace
+
 void
 cell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float radius)
 {
+    // Matte glass (clip slots, clips, fields): the colour seen through frosted glass, a fine grain, light along the top
+    // edge and a little shade along the bottom one, so each cell reads as a flat pane rather than a painted box.
     const auto& t = theme ();
     if (!t.glass || t.material <= 0.0f || base.getAlpha () < 255)
     {
@@ -325,9 +348,22 @@ cell (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour base, float radi
         g.fillRoundedRectangle (r, radius);
         return;
     }
-    const auto top = base.interpolatedWith (t.highlight (), (t.isLight () ? 0.30f : 0.05f) * t.material);
-    g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), base, 0.0f, r.getBottom (), false));
+    const bool light = t.isLight ();
+    const float k = t.material;
+    const auto top = base.interpolatedWith (t.highlight (), (light ? 0.22f : 0.06f) * k);
+    const auto bottom = base.interpolatedWith (t.shadow (), (light ? 0.03f : 0.10f) * k);
+    g.setGradientFill (juce::ColourGradient (top, 0.0f, r.getY (), bottom, 0.0f, r.getBottom (), false));
     g.fillRoundedRectangle (r, radius);
+    if (r.getWidth () < 6.0f || r.getHeight () < 6.0f)
+        return;
+    g.setTiledImageFill (frostTile (), 0, 0, (light ? 0.3f : 0.32f) * k);
+    g.fillRoundedRectangle (r, radius);
+    juce::ColourGradient edge (t.highlight ().withAlpha ((light ? 0.55f : 0.12f) * k), 0.0f, r.getY (),
+                               t.shadow ().withAlpha ((light ? 0.05f : 0.25f) * k), 0.0f, r.getBottom (), false);
+    edge.addColour (0.35, t.highlight ().withAlpha (0.0f));
+    edge.addColour (0.75, t.shadow ().withAlpha (0.0f));
+    g.setGradientFill (edge);
+    g.drawRoundedRectangle (r.reduced (0.5f), radius, 1.0f);
 }
 
 void
