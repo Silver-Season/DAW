@@ -37,6 +37,9 @@ public:
     double uiScale() const; // 0.8 .. 1.5
     void setUiScale (double scale);
     bool animations() const;
+    // The window drawn on the graphics card (OpenGL, which macOS runs on Metal). On by default; off falls back to the CPU.
+    bool gpuRendering() const;
+    void setGpuRendering (bool);
     void setAnimations (bool);
     juce::String appearance () const;
     void setAppearance (const juce::String& json);

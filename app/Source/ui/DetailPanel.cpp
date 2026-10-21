@@ -1,4 +1,5 @@
 #include "DetailPanel.h"
+#include "Kit.h"
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
@@ -138,7 +139,8 @@ public:
         for (int f = frames - 1; f >= 0; f -= 2)
         {
             const float k = (float) f / (float) juce::jmax (1, frames - 1);
-            g.setColour (t.dimText.withAlpha (0.28f));
+            // glass: the frames behind in the track colour, through the spectrum toward the back
+            g.setColour (t.glass ? colour.withRotatedHue (k * 0.18f).withAlpha (0.18f + 0.3f * (1.0f - k)) : t.dimText.withAlpha (0.28f));
             g.strokePath (pathFor (f, k * depthX, k * depthY, -1.0f), juce::PathStrokeType (1.0f));
         }
         const float k = (float) active / (float) juce::jmax (1, frames - 1);
@@ -288,10 +290,7 @@ public:
         if (t.glass)
         {
             // glass: a rounded card with a soft shadow, no divider under the header, a power symbol for on/off
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.06f : 0.3f), 10, { 0, 2 }).drawForRectangle (g, getLocalBounds().reduced (3));
-            glass::surface (g, r.reduced (0.5f), missing ? t.panel2.withAlpha (0.6f) : t.panel, 12.0f);
-            g.setColour (isSelected ? t.accent : t.line.withAlpha (0.7f));
-            g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, isSelected ? 1.5f : 1.0f);
+            kit::card (g, r.reduced (0.5f), isSelected);
             const auto symbol = powerRect().toFloat().withSizeKeepingCentre (12.0f, 12.0f);
             juce::Path power;
             power.addCentredArc (symbol.getCentreX(), symbol.getCentreY() + 0.5f, 5.5f, 5.5f, 0.0f, 0.65f, juce::MathConstants<float>::twoPi - 0.65f, true);
@@ -421,10 +420,14 @@ public:
 
         auto body = getLocalBounds().withTrimmedTop (kDeviceHeaderHeight).reduced (12, 10);
         const int rows = 2, cols = 4;
-        const int gridW = cols * kKnobCellWidth, gridH = rows * kKnobCellHeight + 8;
+        // a low panel squeezes the rows (down to small knobs) rather than cutting them off
+        const int gap = juce::jlimit (2, 8, body.getHeight() - rows * 34);
+        const int cellH = juce::jlimit (30, kKnobCellHeight, (body.getHeight() - gap) / rows);
+        const int gridW = cols * kKnobCellWidth, gridH = rows * cellH + gap;
         if (wavetable != nullptr)
         {
-            wavetable->setBounds (juce::Rectangle<int> (150, 120).withCentre ({ body.getX() + 75, body.getCentreY() }));
+            const int side = juce::jlimit (60, 120, body.getHeight());
+            wavetable->setBounds (juce::Rectangle<int> (side * 5 / 4, side).withCentre ({ body.getX() + 75, body.getCentreY() }));
             body.removeFromLeft (150 + 12);
         }
         auto grid = juce::Rectangle<int> (gridW, gridH).withCentre (body.getCentre());
@@ -433,7 +436,7 @@ public:
         for (size_t i = 0; i < knobs.size(); ++i)
         {
             const int col = (int) i % cols, row = (int) i / cols;
-            knobs[i]->knob.setBounds (grid.getX() + col * kKnobCellWidth, grid.getY() + row * (kKnobCellHeight + 8), kKnobCellWidth, kKnobCellHeight);
+            knobs[i]->knob.setBounds (grid.getX() + col * kKnobCellWidth, grid.getY() + row * (cellH + gap), kKnobCellWidth, cellH);
         }
     }
 
@@ -648,7 +651,9 @@ public:
     {
         constexpr int pad = 12;
         int x = pad;
-        const int h = juce::jmax (40, getHeight() > 0 ? getHeight() : owner.viewport.getMaximumVisibleHeight());
+        // the height of the visible chain, so the devices follow the panel when it is made smaller or larger
+        const int visible = owner.viewport.getMaximumVisibleHeight();
+        const int h = juce::jmax (40, visible > 0 ? visible : getHeight());
         for (auto& v : views)
         {
             const int w = v->preferredWidth();
@@ -692,6 +697,31 @@ public:
         }
 
         // drop zone
+        if (t.glass)
+        {
+            // glass: a quiet sunken card with a plus, the hint under it
+            const auto zone = dropZone.toFloat().reduced (0.75f);
+            g.setColour (t.panel2.withAlpha (0.45f));
+            g.fillRoundedRectangle (zone, 12.0f);
+            g.setColour (t.line.withAlpha (0.55f));
+            g.drawRoundedRectangle (zone, 12.0f, 1.0f);
+            const auto c = zone.getCentre().translated (0.0f, -18.0f);
+            const auto disc = juce::Rectangle<float> (34.0f, 34.0f).withCentre (c);
+            glass::surface (g, disc, t.panel, 17.0f);
+            g.setColour (t.line.withAlpha (0.7f));
+            g.drawEllipse (disc, 1.0f);
+            g.setColour (t.dimText);
+            g.fillRect (c.x - 7.0f, c.y - 0.75f, 14.0f, 1.5f);
+            g.fillRect (c.x - 0.75f, c.y - 7.0f, 1.5f, 14.0f);
+            g.setFont (t.uiFont (12.0f));
+            g.drawFittedText (Strings::detail::dropHere, dropZone.reduced (14).withTrimmedTop (dropZone.getHeight() / 2 + 2), juce::Justification::centredTop, 3, 1.0f);
+            if (dropMarker >= 0)
+            {
+                g.setColour (t.accent);
+                g.fillRect (dropMarker - 1, 8, 3, getHeight() - 16);
+            }
+            return;
+        }
         juce::Path outline;
         outline.addRoundedRectangle (dropZone.toFloat().reduced (0.75f), t.radius);
         juce::Path dashed;
@@ -941,14 +971,22 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
-        fillCell (g, r, t.panel);
+        if (t.glass)
+            kit::field (g, r, {}); // a well with the chosen half as glass in it
+        else
+            fillCell (g, r, t.panel);
         auto left = r.removeFromLeft (r.getWidth() * 0.5f);
         const auto cell = [&] (juce::Rectangle<float> area, const juce::String& text, bool active, bool enabled) {
             if (active)
             {
-                fillCell (g, area.reduced (1.5f), t.panel2);
-                g.setColour (t.accent);
-                g.fillRect (area.reduced (4.0f, 0.0f).removeFromBottom (2.0f));
+                if (t.glass)
+                    glass::bead (g, area.reduced (1.5f), t.metrics.controlRadius - 1.5f); // the chosen half is a pane of glass
+                else
+                {
+                    fillCell (g, area.reduced (1.5f), t.panel2);
+                    g.setColour (t.accent);
+                    g.fillRect (area.reduced (4.0f, 0.0f).removeFromBottom (2.0f));
+                }
             }
             g.setColour (active ? t.text : (enabled ? t.dimText : t.dimText.withAlpha (0.5f)));
             g.setFont (t.uiFont (11.5f, 500));
@@ -956,7 +994,8 @@ public:
         };
         cell (left, Strings::recording::sourceMidi, source != "audio", true);
         cell (r, Strings::recording::sourceAudio, source == "audio", false);
-        strokeCell (g, getLocalBounds().toFloat(), t.line);
+        if (! t.glass)
+            strokeCell (g, getLocalBounds().toFloat(), t.line);
     }
 
     void mouseDown (const juce::MouseEvent& e) override
@@ -1135,15 +1174,19 @@ juce::String utf8Arrow() { return juce::String::fromUTF8 (" \xe2\x96\xbe"); }
 void DetailPanel::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
+    glass::windowBackdrop (g, *this);
+    g.fillAll (glass::plateColour());
     g.setColour (t.line);
     if (! t.glass) // glass: the card has its own rim
         g.fillRect (0, 0, getWidth(), 1);
     if (editorShown)
         return;
-    g.fillRect (kInfoWidth - 1, t.glass ? 12 : 1, 1, getHeight() - (t.glass ? 24 : 1));
+    if (t.glass)
+        kit::card (g, juce::Rectangle<float> (8.0f, 8.0f, (float) kInfoWidth - 14.0f, (float) getHeight() - 16.0f)); // the track as its own card
+    else
+        g.fillRect (kInfoWidth - 1, 1, 1, getHeight() - 1);
 
-    auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (14, 12);
+    auto area = juce::Rectangle<int> (0, 1, kInfoWidth - 1, getHeight() - 1).reduced (t.glass ? 22 : 14, t.glass ? 18 : 12);
     const auto track = model.findTrackOrMaster (shownTrack);
     if (! track.isValid())
     {

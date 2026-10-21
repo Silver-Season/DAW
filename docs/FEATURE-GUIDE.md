@@ -1,6 +1,6 @@
 # Feature guide
 
-Detailed controls and workflows, organized by their implementation stages. Screenshots here document earlier versions; see the [current interface gallery](../README.md#screenshots) for Glass · Light and Glass · Dark. The PR #31 preview bank has 44 Prisma programs and 14 built-in effects (the current nightly has 16 programs and 13 effects); new track controls and sounds are described in the [overview](../README.md#track-controls).
+Detailed controls and workflows, organized by their implementation stages. Screenshots here document earlier versions; see the [current interface gallery](../README.md#screenshots) for Glass · Light and Glass · Dark. The current factory bank has 44 Prisma programs and 14 built-in effects; new track controls and sounds are described in the [overview](../README.md#track-controls).
 
 ## Window, themes and menus (stage 1b)
 
@@ -126,7 +126,7 @@ The Arrangement tab shows the song over time: track headers, a marker lane, the 
 ## Audio recording, effects, drums, inspiration, export (stage 5 part 2 and stage 6)
 
 - **Audio recording.** An audio track records an input of the audio interface: the input and monitoring (Auto / In / Off) are chosen on the track card, and the input has a level meter. Recording goes into a Session slot (the circle in a slot, from the next launch boundary) or onto the timeline (F9); in a loop every pass becomes a take. The file is written by its own thread; if the disk falls behind, a silent gap of the right length is left and a warning appears. "Measure latency" in Settings measures the round trip over a cable from an output to an input and sets the correction, which can also be adjusted by hand. "Delete Unused Recordings" cleans up the project folder.
-- **Built-in effects** (14 in the PR #31 preview, 13 in the current nightly; the Effects category of the browser): EQ, compressor, gate, limiter, reverb, delay, saturator, distortion, bitcrusher, filter, chorus, flanger, phaser, auto pan. Drag an effect into a track's chain; its state is saved with the project.
+- **14 built-in effects** (the Effects category of the browser): EQ, compressor, gate, limiter, reverb, delay, saturator, distortion, bitcrusher, filter, chorus, flanger, phaser, auto pan. Drag an effect into a track's chain; its state is saved with the project.
 - **Sends A / B** to return tracks (reverb and delay): a return track is made the first time a send knob is touched. **Sidechain** for the compressor and the gate: the source is chosen on the effect card.
 - **Drum machine**: 16 pads, six synthesized kits, each pad with its own tune, decay, cutoff, drive, volume and pan; a sound from the browser can be dropped on a pad.
 - **Create → Inspiration**: a whole idea (parts for several tracks), a single part or a new sound from the generators, all in the project scale, as one undo step. The first launch opens a demo project with drums, a compressor, reverb and delay.

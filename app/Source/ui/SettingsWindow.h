@@ -20,6 +20,7 @@ public:
         std::function<void()> scanPlugins;                           // opens the plugin scanner
         std::function<void()> scanPluginFolders;                     // opens the plugin scanner and scans the folders now
         std::function<void()> closed;
+        std::function<void (bool)> gpuChanged; // "Draw on the graphics card" was switched
     };
 
     SettingsWindow (AudioEngine&, Settings&, Hooks);

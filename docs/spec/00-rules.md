@@ -70,7 +70,7 @@ Check: in a Debug build, enable `DAW_RT_CHECKS=ON` (added in 01, task 1.3), whic
   import -window root /tmp/shot.png
   ```
   Clicks and keys go through `xdotool mousemove x y click 1`, `xdotool key Tab`. Stop the process with `pkill -x DAW` (not `pkill -f`, which also kills your shell).
-- For every screen a stage changes, the report includes screenshots in all four themes, and the final ones go into `media/` and are updated in the README.
+- For every screen a stage changes, the report includes screenshots in both themes, and the final ones go into `media/` and are updated in the README.
 - Compare against the concept [`docs/design/concept.html`](../design/concept.html): colors, padding, element order. A pixel-exact match is not required; the same logic and the same impression are.
 
 ## 7. Performance

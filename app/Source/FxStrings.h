@@ -16,12 +16,12 @@ inline juce::String effectName (const juce::String& type)
 {
     static const std::map<juce::String, const char*> names {
         { "eq8", "Эквалайзер" }, { "comp", "Компрессор" }, { "gate", "Гейт" }, { "limiter", "Лимитер" }, { "reverb", "Ревербератор" },
-        { "delay", "Дилей" }, { "drive", "Сатуратор" }, { "crush", "Биткрашер" }, { "filter", "Фильтр" }, { "chorus", "Хорус" },
+        { "delay", "Дилей" }, { "drive", "Сатуратор" }, { "distortion", "Дисторшн" }, { "crush", "Биткрашер" }, { "filter", "Фильтр" }, { "chorus", "Хорус" },
         { "flanger", "Фланжер" }, { "phaser", "Фейзер" }, { "autopan", "Автопан" },
     };
     static const std::map<juce::String, const char*> namesEn {
         { "eq8", "EQ" }, { "comp", "Compressor" }, { "gate", "Gate" }, { "limiter", "Limiter" }, { "reverb", "Reverb" },
-        { "delay", "Delay" }, { "drive", "Saturator" }, { "crush", "Bitcrusher" }, { "filter", "Filter" }, { "chorus", "Chorus" },
+        { "delay", "Delay" }, { "drive", "Saturator" }, { "distortion", "Distortion" }, { "crush", "Bitcrusher" }, { "filter", "Filter" }, { "chorus", "Chorus" },
         { "flanger", "Flanger" }, { "phaser", "Phaser" }, { "autopan", "Auto Pan" },
     };
     const auto& map = isRussian() ? names : namesEn;

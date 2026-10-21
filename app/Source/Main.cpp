@@ -3,9 +3,11 @@
 #include "MainComponent.h"
 #include "Settings.h"
 #include "engine/AudioEngine.h"
+#include "engine/BuiltInEffectProcessor.h"
 #include "engine/NullAudioDriver.h"
 #include "library/UserLibrary.h"
 #include "model/ArrangementEdit.h"
+#include "model/ProjectActions.h"
 #include "project/ProjectFile.h"
 #include "ui/ExportWindow.h"
 #include "ui/ThemeLookAndFeel.h"
@@ -62,6 +64,14 @@ public:
         if (snapshotDirectory != juce::File ())
         {
             populateDemoProject (*model);
+            {
+                // more scenes with clips, so the captures show clips passing under the glass mixer
+                ProjectActions actions (*model);
+                for (int scene = 0; scene < 3; ++scene)
+                    actions.duplicateScene (scene * 2);
+                for (const int scene : { 5, 3, 4, 1 })
+                    actions.duplicateScene (scene);
+            }
             for (const auto& track : model->tracks ())
                 for (int scene = 0; scene < juce::jmin (3, model->numScenes ()); ++scene)
                     if (const auto clip = track.clipAt (scene); clip.isValid ())
@@ -159,19 +169,20 @@ private:
     // Opt-in native component captures. Uses its own settings and null audio; no user's project is opened.
     void timerCallback () override
     {
-        static const char* themes[]{ "prism", "neon", "studio", "paper", "glass-light", "glass-dark" };
+        static const char* themes[]{ "glass-light", "glass-dark" };
         auto* content = dynamic_cast<MainComponent*> (mainWindow->getContentComponent ());
-        if (snapshotStep >= 56)
+        if (snapshotStep >= 32)
         {
             stopTimer ();
             quit ();
             return;
         }
-        const int capture = snapshotStep / 2;
+        // 0-5: both themes in three views, then (as 18-27) the appearance tab, synth, mix, export and drums per theme
+        const int capture = snapshotStep / 2 < 6 ? snapshotStep / 2 : snapshotStep / 2 + 12;
         if (snapshotStep % 2 == 0)
         {
             snapshotWindow.reset ();
-            if (capture < 18)
+            if (capture < 6)
             {
                 ThemeManager::get ().setCurrent (themes[capture / 3]);
                 if (content->isArrangementShown ())
@@ -219,7 +230,7 @@ private:
                 if (!stream.openedOk () || !juce::PNGImageFormat ().writeImageToStream (image, stream))
                     setApplicationReturnValue (1);
             };
-            if (capture < 18)
+            if (capture < 6)
             {
                 const char* views[]{ "session", "midi", "arrangement" };
                 save (*content, juce::String (themes[capture / 3]) + "-" + views[capture % 3]);
@@ -239,6 +250,19 @@ private:
                 editor->setLookAndFeel (lookAndFeel.get ());
                 save (*editor, theme ().id + "-synth");
                 editor->setLookAndFeel (nullptr);
+                PrismaProcessor bass;
+                for (int i = 0; i < bass.getNumPrograms (); ++i)
+                    if (bass.getProgramName (i) == "Neon Grid Bass")
+                        bass.setCurrentProgram (i);
+                std::unique_ptr<juce::AudioProcessorEditor> bassEditor (bass.createEditor ());
+                bassEditor->setLookAndFeel (lookAndFeel.get ());
+                save (*bassEditor, theme ().id + "-cyberbass");
+                bassEditor->setLookAndFeel (nullptr);
+                BuiltInEffectProcessor distortion ("distortion");
+                std::unique_ptr<juce::AudioProcessorEditor> fxEditor (distortion.createEditor ());
+                fxEditor->setLookAndFeel (lookAndFeel.get ());
+                save (*fxEditor, theme ().id + "-distortion");
+                fxEditor->setLookAndFeel (nullptr);
             }
         }
         ++snapshotStep;

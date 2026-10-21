@@ -216,8 +216,13 @@ void ArrangementLanes::paintClip (juce::Graphics& g, const ArrangementClipRef& c
     const auto fill = pastel ? t.panel.interpolatedWith (base, t.isLight() ? 0.40f : 0.34f) : base;
     const auto content = pastel ? (t.isLight() ? base.interpolatedWith (t.text, 0.22f) : base.interpolatedWith (t.highlight(), 0.15f)) : t.clipInk;
     const auto labelInk = pastel ? t.inkOn (fill) : t.clipInk;
-    g.setColour (fill.withAlpha (a));
-    g.fillRoundedRectangle (r, radius);
+    if (t.glass && a >= 0.999f)
+        glass::cell (g, r, fill, radius); // matte glass, as the Session cells
+    else
+    {
+        g.setColour (fill.withAlpha (a));
+        g.fillRoundedRectangle (r, radius);
+    }
 
     {
         juce::Graphics::ScopedSaveState state (g);

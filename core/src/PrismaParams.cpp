@@ -421,6 +421,277 @@ const std::vector<Preset>& factoryPresets()
               setMod (p, 0, ModSource::Env2, ModDest::OscAPitch, 1.0f);              // falls two octaves fast
               p.masterGain = -4;
           }) },
+
+        // Append-only bank: existing projects and plug-in hosts store program numbers.
+        { "Velvet Bass", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.28f;
+              p.osc[0].octave = -1;
+              p.subOn = 1; p.subLevel = 0.35f;
+              p.cutoff = 620; p.drive = 0.2f; p.keyTrack = 0.25f;
+              p.filterEnvAmount = 0.2f;
+              p.env[0] = { 0.004f, 0.3f, 0.8f, 0.12f };
+              p.env[1] = { 0.001f, 0.25f, 0, 0.1f };
+              p.mono = 1; p.glide = 0.035f; p.masterGain = -5;
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.16f);
+          }) },
+        { "Acid Bass", preset ([] (PrismaParams& p) {
+              p.osc[0].octave = -1; p.osc[0].randPhase = 0;
+              p.cutoff = 260; p.resonance = 0.58f; p.drive = 0.6f;
+              p.filterEnvAmount = 0.52f;
+              p.env[0] = { 0.001f, 0.3f, 0.35f, 0.08f };
+              p.env[1] = { 0.001f, 0.22f, 0, 0.08f };
+              p.mono = 1; p.glide = 0.055f; p.masterGain = -3;
+              setMod (p, 0, ModSource::ModWheel, ModDest::FilterCutoff, 0.4f);
+          }) },
+        { "Rubber Bass", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.42f; p.osc[0].octave = -1;
+              p.subOn = 1; p.subLevel = 0.3f;
+              p.cutoff = 400; p.resonance = 0.4f; p.drive = 0.35f;
+              p.filterEnvAmount = 0.38f;
+              p.env[0] = { 0.002f, 0.45f, 0.1f, 0.16f };
+              p.env[1] = { 0.008f, 0.32f, 0, 0.12f };
+              p.mono = 1; p.masterGain = -3;
+              setMod (p, 0, ModSource::Velocity, ModDest::OscAPos, 0.18f);
+          }) },
+        { "Fold Bass", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 5; p.osc[0].wtPos = 0.42f; p.osc[0].octave = -1;
+              p.subOn = 1; p.subLevel = 0.4f;
+              p.cutoff = 1600; p.drive = 0.55f; p.resonance = 0.2f;
+              p.env[0] = { 0.003f, 0.25f, 0.7f, 0.1f };
+              p.mono = 1; p.glide = 0.04f; p.masterGain = -2;
+              p.lfo[0] = { 1, 0.5f, 1, 5, 1 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.22f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::FilterCutoff, 0.25f);
+          }) },
+        { "Silk Lead", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.3f; p.osc[0].unison = 3; p.osc[0].detune = 9;
+              p.cutoff = 3200; p.filterEnvAmount = 0.15f;
+              p.env[0] = { 0.018f, 0.4f, 0.8f, 0.3f };
+              p.mono = 1; p.glide = 0.09f; p.masterGain = -4;
+              p.lfo[0].rate = 5.3f;
+              setMod (p, 0, ModSource::ModWheel, ModDest::OscAPitch, 0.012f);
+              setMod (p, 1, ModSource::Lfo1, ModDest::OscAPitch, 0.002f);
+          }) },
+        { "Pulse Lead", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 2; p.osc[0].wtPos = 0.35f; p.osc[0].unison = 2; p.osc[0].detune = 7;
+              p.cutoff = 4200; p.drive = 0.2f; p.resonance = 0.18f;
+              p.env[0] = { 0.003f, 0.2f, 0.75f, 0.18f };
+              p.lfo[0].rate = 0.8f;
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.22f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::FilterCutoff, 0.3f);
+              p.mono = 1; p.glide = 0.04f; p.masterGain = 0;
+          }) },
+        { "Fifth Lead", preset ([] (PrismaParams& p) {
+              p.osc[0].unison = 3; p.osc[0].detune = 14;
+              p.osc[1].on = 1; p.osc[1].semi = 7; p.osc[1].level = 0.3f;
+              p.cutoff = 2600; p.filterEnvAmount = 0.25f; p.drive = 0.22f;
+              p.env[0] = { 0.006f, 0.4f, 0.7f, 0.22f };
+              p.mono = 1; p.glide = 0.045f; p.masterGain = -4;
+              setMod (p, 0, ModSource::ModWheel, ModDest::FilterCutoff, 0.35f);
+          }) },
+        { "Hollow Lead", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 3; p.osc[0].wtPos = 0.22f;
+              p.cutoff = 3800; p.filterType = 0; p.resonance = 0.12f;
+              p.env[0] = { 0.012f, 0.4f, 0.85f, 0.3f };
+              p.lfo[0].rate = 0.3f;
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.15f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::OscAPos, 0.35f);
+              p.mono = 1; p.glide = 0.075f; p.masterGain = 0;
+          }) },
+        { "Aurora Pad", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 1; p.osc[0].wtPos = 0.25f; p.osc[0].unison = 5; p.osc[0].detune = 18;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0.2f; p.osc[1].octave = 1; p.osc[1].level = 0.22f;
+              p.cutoff = 2400; p.keyTrack = 0.2f;
+              p.env[0] = { 0.9f, 1.4f, 0.8f, 2.2f };
+              p.lfo[0] = { 0, 0.13f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.2f);
+              setMod (p, 1, ModSource::Lfo1, ModDest::Pan, 0.18f);
+              p.masterGain = -4;
+          }) },
+        { "Air Choir Pad", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 3; p.osc[0].wtPos = 0.45f; p.osc[0].unison = 4; p.osc[0].detune = 11;
+              p.noiseLevel = 0.035f; p.cutoff = 4100; p.filterType = 0;
+              p.env[0] = { 0.65f, 1.2f, 0.8f, 1.8f };
+              p.lfo[0] = { 1, 0.18f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.18f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::FilterCutoff, 0.25f);
+              p.masterGain = -8;
+          }) },
+        { "Slow Tide Pad", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.5f; p.osc[0].unison = 5; p.osc[0].detune = 22;
+              p.osc[1].on = 1; p.osc[1].table = 1; p.osc[1].wtPos = 0.2f; p.osc[1].level = 0.3f;
+              p.cutoff = 1100; p.resonance = 0.18f;
+              p.env[0] = { 1.4f, 1.2f, 0.85f, 2.8f };
+              p.lfo[0] = { 0, 0.08f, 0, 4, 0 };
+              p.lfo[1] = { 1, 0.11f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::FilterCutoff, 0.16f);
+              setMod (p, 1, ModSource::Lfo2, ModDest::OscBPos, 0.22f);
+              p.masterGain = -11;
+          }) },
+        { "Frozen Pad", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 1; p.osc[0].wtPos = 0.6f; p.osc[0].unison = 4; p.osc[0].detune = 6;
+              p.filterType = 2; p.cutoff = 650; p.resonance = 0.12f;
+              p.env[0] = { 0.4f, 2.0f, 0.65f, 2.5f };
+              p.lfo[0] = { 0, 0.17f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::Pan, 0.4f);
+              setMod (p, 1, ModSource::Lfo1, ModDest::OscAPos, 0.1f);
+              p.masterGain = -6;
+          }) },
+        { "Amber Pluck", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.62f; p.osc[0].unison = 3; p.osc[0].detune = 12;
+              p.cutoff = 550; p.filterEnvAmount = 0.45f; p.resonance = 0.2f;
+              p.env[0] = { 0.001f, 0.65f, 0, 0.28f };
+              p.env[1] = { 0.001f, 0.23f, 0, 0.12f };
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.2f);
+              p.masterGain = -6;
+          }) },
+        { "Glass Current Pluck", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 1; p.osc[0].wtPos = 0.28f;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0; p.osc[1].octave = 2; p.osc[1].level = 0.16f;
+              p.cutoff = 6200; p.filterType = 0;
+              p.env[0] = { 0.001f, 1.1f, 0, 0.7f };
+              p.env[2] = { 0.001f, 0.15f, 0, 0.1f };
+              setMod (p, 0, ModSource::Env3, ModDest::OscBLevel, 0.2f);
+              setMod (p, 1, ModSource::Velocity, ModDest::FilterCutoff, 0.18f);
+              p.masterGain = -4;
+          }) },
+        { "Nylon Pluck", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.28f; p.osc[0].randPhase = 0;
+              p.noiseLevel = 0.015f; p.cutoff = 1250; p.keyTrack = 0.45f;
+              p.filterEnvAmount = 0.25f;
+              p.env[0] = { 0.001f, 1.0f, 0, 0.35f };
+              p.env[1] = { 0.001f, 0.12f, 0, 0.08f };
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.22f);
+              p.masterGain = -8;
+          }) },
+        { "Circuit Pluck", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 4; p.osc[0].wtPos = 0.25f;
+              p.cutoff = 900; p.resonance = 0.32f; p.drive = 0.3f;
+              p.filterEnvAmount = 0.4f;
+              p.env[0] = { 0.001f, 0.28f, 0, 0.16f };
+              p.env[1] = { 0.001f, 0.13f, 0, 0.08f };
+              setMod (p, 0, ModSource::Velocity, ModDest::OscAPos, 0.2f);
+              p.masterGain = -4;
+          }) },
+        { "Felt Keys", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0.18f;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0; p.osc[1].octave = 1; p.osc[1].level = 0.15f;
+              p.cutoff = 1500; p.filterType = 0; p.keyTrack = 0.4f;
+              p.env[0] = { 0.008f, 1.8f, 0.12f, 0.4f };
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.3f);
+              p.velocitySens = 0.9f; p.masterGain = -9;
+          }) },
+        { "Velvet Organ", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0; p.osc[1].octave = 1; p.osc[1].level = 0.28f;
+              p.cutoff = 2000; p.filterType = 0;
+              p.env[0] = { 0.012f, 0.1f, 0.9f, 0.12f };
+              p.lfo[0] = { 0, 4.2f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::Pan, 0.22f);
+              p.velocitySens = 0.3f; p.masterGain = -12;
+          }) },
+        { "Celesta Bell", preset ([] (PrismaParams& p) {
+              p.osc[0].wtPos = 0; p.osc[0].octave = 1;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0; p.osc[1].octave = 2; p.osc[1].semi = 7; p.osc[1].level = 0.23f;
+              p.cutoff = 7000; p.filterType = 0;
+              p.env[0] = { 0.001f, 1.5f, 0, 1.1f };
+              p.env[2] = { 0.001f, 0.3f, 0, 0.2f };
+              setMod (p, 0, ModSource::Env3, ModDest::OscBLevel, 0.18f);
+              p.masterGain = -10;
+          }) },
+        { "Prism Bell", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 1; p.osc[0].wtPos = 0.14f;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0; p.osc[1].octave = 2; p.osc[1].semi = 3; p.osc[1].fine = 17; p.osc[1].level = 0.2f;
+              p.cutoff = 8500; p.filterType = 0;
+              p.env[0] = { 0.001f, 2.2f, 0, 1.8f };
+              p.lfo[0].rate = 0.3f;
+              setMod (p, 0, ModSource::Lfo1, ModDest::Pan, 0.3f);
+              p.masterGain = -4;
+          }) },
+        { "Warm Strings", preset ([] (PrismaParams& p) {
+              p.osc[0].unison = 5; p.osc[0].detune = 10;
+              p.osc[1].on = 1; p.osc[1].wtPos = 0.5f; p.osc[1].level = 0.22f; p.osc[1].fine = 5;
+              p.cutoff = 1500; p.keyTrack = 0.35f;
+              p.env[0] = { 0.22f, 1.2f, 0.85f, 0.85f };
+              p.lfo[0].rate = 5.1f;
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPitch, 0.002f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::FilterCutoff, 0.3f);
+              p.masterGain = -10;
+          }) },
+        { "Soft Brass", preset ([] (PrismaParams& p) {
+              p.osc[0].unison = 3; p.osc[0].detune = 6;
+              p.cutoff = 650; p.keyTrack = 0.3f; p.filterEnvAmount = 0.34f;
+              p.env[0] = { 0.06f, 0.5f, 0.75f, 0.25f };
+              p.env[1] = { 0.09f, 0.45f, 0.3f, 0.2f };
+              setMod (p, 0, ModSource::Velocity, ModDest::FilterCutoff, 0.25f);
+              p.masterGain = -8;
+          }) },
+        { "Orbit Sweep", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 4; p.osc[0].wtPos = 0.3f; p.osc[0].unison = 3;
+              p.filterType = 4; p.cutoff = 1200; p.resonance = 0.35f;
+              p.env[0] = { 0.15f, 1, 0.75f, 0.7f };
+              p.lfo[0] = { 1, 0.4f, 1, 2, 1 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::FilterCutoff, 0.35f);
+              setMod (p, 1, ModSource::Lfo1, ModDest::Pan, 0.6f);
+              setMod (p, 2, ModSource::ModWheel, ModDest::OscAPos, 0.45f);
+              p.masterGain = -9;
+          }) },
+        { "Digital Rain", preset ([] (PrismaParams& p) {
+              p.osc[0].table = 1; p.osc[0].wtPos = 0.5f; p.osc[0].octave = 1;
+              p.filterType = 0; p.cutoff = 3400;
+              p.env[0] = { 0.003f, 1.2f, 0.25f, 0.6f };
+              p.lfo[0] = { 5, 4, 1, 5, 1 };
+              p.lfo[1] = { 0, 0.6f, 0, 4, 0 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscAPos, 0.4f);
+              setMod (p, 1, ModSource::Lfo1, ModDest::FilterCutoff, 0.18f);
+              setMod (p, 2, ModSource::Lfo2, ModDest::Pan, 0.45f);
+              p.masterGain = -3;
+          }) },
+        { "Neon Grid Bass", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 4, 0.38f, -1, 0, 0, 0.65f, 0, 2, 8, 0.25f, 0.7f, 0, 0 };
+              p.osc[1] = { 1, 0, 0.95f, -1, 0, 0, 0.3f, 0, 1, 0, 0, 0, 0, 0 };
+              p.subOn = 1; p.subLevel = 0.42f;
+              p.cutoff = 1500; p.drive = 0.9f; p.resonance = 0.28f; p.filterEnvAmount = 0.32f;
+              p.env[0] = { 0.001f, 0.26f, 0.35f, 0.07f };
+              p.env[1] = { 0.001f, 0.18f, 0, 0.08f };
+              p.mono = 1; p.legato = 0; p.glide = 0.012f; p.masterGain = 0;
+              setMod (p, 0, ModSource::ModWheel, ModDest::OscAPos, 0.35f);
+          }) },
+        { "Razor Bass", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 5, 0.62f, -1, 0, -4, 0.65f, -0.1f, 2, 10, 0.3f, 0.7f, 0, 0 };
+              p.osc[1] = { 1, 4, 0.48f, 0, 0, 4, 0.28f, 0.1f, 1, 0, 0, 0, 0, 0 };
+              p.subOn = 1; p.subLevel = 0.4f;
+              p.cutoff = 2600; p.drive = 1; p.resonance = 0.2f; p.filterEnvAmount = 0.2f;
+              p.env[0] = { 0.002f, 0.35f, 0.8f, 0.09f };
+              p.env[1] = { 0.001f, 0.22f, 0.2f, 0.08f };
+              p.mono = 1; p.glide = 0.055f; p.masterGain = 0;
+              setMod (p, 0, ModSource::ModWheel, ModDest::FilterCutoff, 0.3f);
+              setMod (p, 1, ModSource::Aftertouch, ModDest::OscAPos, 0.2f);
+          }) },
+        { "Chrome Wobble Bass", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 5, 0.4f, -1, 0, 0, 0.7f, 0, 2, 15, 0.35f, 0.8f, 0, 0 };
+              p.osc[1] = { 1, 3, 0.35f, -1, 0, 0, 0.22f, 0, 1, 0, 0, 0, 0, 0 };
+              p.subOn = 1; p.subLevel = 0.45f;
+              p.cutoff = 750; p.drive = 0.9f; p.resonance = 0.38f;
+              p.env[0] = { 0.003f, 0.3f, 0.9f, 0.12f };
+              p.lfo[0] = { 1, 2, 1, 4, 1 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::FilterCutoff, 0.36f);
+              setMod (p, 1, ModSource::Lfo1, ModDest::OscAPos, 0.2f);
+              setMod (p, 2, ModSource::ModWheel, ModDest::Lfo1Rate, 0.15f);
+              p.mono = 1; p.masterGain = -2;
+          }) },
+        { "Overload Bass", preset ([] (PrismaParams& p) {
+              p.osc[0] = { 1, 4, 0.7f, -1, 0, -7, 0.65f, -0.1f, 3, 16, 0.4f, 0.8f, 0, 0 };
+              p.osc[1] = { 1, 5, 0.55f, -1, 0, 7, 0.35f, 0.1f, 2, 12, 0.4f, 0.7f, 0, 0 };
+              p.subOn = 1; p.subLevel = 0.35f;
+              p.cutoff = 1800; p.drive = 1; p.resonance = 0.25f; p.filterEnvAmount = 0.25f;
+              p.env[0] = { 0.001f, 0.5f, 0.65f, 0.1f };
+              p.env[1] = { 0.001f, 0.35f, 0.15f, 0.1f };
+              p.lfo[0] = { 0, 0.5f, 1, 3, 1 };
+              setMod (p, 0, ModSource::Lfo1, ModDest::OscBPos, 0.15f);
+              setMod (p, 1, ModSource::ModWheel, ModDest::FilterCutoff, 0.35f);
+              p.mono = 1; p.glide = 0.025f; p.masterGain = 0;
+          }) },
     };
     return presets;
 }

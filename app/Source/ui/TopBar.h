@@ -39,7 +39,7 @@ public:
     std::function<void ()> onCaptureClicked;
 
     std::function<void ()> onCpuClicked, onAppearanceClicked, onExportClicked, onUndoClicked, onRedoClicked,
-      onSettingsClicked, onLibraryClicked;
+      onSettingsClicked, onLibraryClicked, onProjectClicked;
     // The right edge of the browser column (0 when it is hidden): the Library button above it takes its width.
     void setLeftColumn (int right)
     {
@@ -98,8 +98,12 @@ private:
     juce::uint32 diskShownUntil = 0;
 
     juce::Rectangle<int> logoArea, signatureArea, positionArea, ribbonArea, ribbonStripArea, capsuleArea;
+
+    juce::Rectangle<int> libraryPlate; // glass: the plate the Library button rests on
     std::vector<int> separators; // thin lines between the groups of the transport capsule
     int leftColumn = 0;
+    juce::Rectangle<int> nameArea; // the project name; a click opens the project properties
+    void mouseUp (const juce::MouseEvent&) override;
     juce::String projectName;
     void paintRibbon (juce::Graphics&);
     void updateRibbon();

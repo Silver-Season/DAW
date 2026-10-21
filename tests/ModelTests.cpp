@@ -239,7 +239,7 @@ void testStringsAndSettings()
         Settings s (file.getFile());
         check (s.theme () == "glass-dark" && juce::exactlyEqual (s.uiScale (), 1.0) && s.animations (), "defaults");
         check (std::abs (s.previewVolumeDb() + 12.0) < 1e-9, "preview volume defaults to -12 dB");
-        s.setTheme ("neon");
+        s.setTheme ("glass-light");
         s.setUiScale (2.5); // clamped to 1.5
         s.setAnimations (false);
         s.setPlaceFolders ({ "/a", "/b" });
@@ -253,7 +253,7 @@ void testStringsAndSettings()
         s.save();
     }
     Settings s (file.getFile());
-    check (s.theme() == "neon" && juce::exactlyEqual (s.uiScale(), 1.5) && ! s.animations(), "values survive a restart");
+    check (s.theme() == "glass-light" && juce::exactlyEqual (s.uiScale(), 1.5) && ! s.animations(), "values survive a restart");
     check (s.placeFolders().size() == 2, "place folders are stored");
     const auto recent = s.recentProjects();
     check (recent.size() == 10 && recent[0].endsWith ("p5.prisma") && [&] { auto copy = recent; copy.removeDuplicates (false); return copy.size() == 10; }(),

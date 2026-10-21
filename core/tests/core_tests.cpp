@@ -14,6 +14,8 @@
 #include "daw/synth/PrismaSynth.h"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -169,6 +171,48 @@ int main()
         check (s.getNumActiveVoices() == 0, "voices free after release");
     });
 
+    test ("factory bank preserves legacy programs and valid unique parameters", [] {
+        const std::vector<std::string> legacy { "Init", "Supersaw Lead", "Reese Bass", "Wobble Bass", "Glass Pad", "Pluck", "Vox Sweep",
+            "Electric Keys", "Drawbar Organ", "Glass Bell", "Music Box", "String Ensemble", "Brass Section", "Sub Bass", "Noise Riser", "Laser Zap" };
+        const auto& bank = synth::factoryPresets();
+        check (bank.size() >= 44, "28 new sounds appended to the original 16 programs");
+        for (size_t i = 0; i < legacy.size() && i < bank.size(); ++i)
+            check (bank[i].name == legacy[i], "legacy program " + std::to_string (i) + " stays " + legacy[i]);
+        // Frozen before extending the bank: FNV-1a over each legacy parameter's IEEE-754 bytes.
+        const uint64_t legacyValues[] {
+            0x99051593ae5117d1ULL, 0xdcb17dc592952b98ULL, 0x06659ca9d4c0dd65ULL, 0x9736c15ac05700aaULL,
+            0xe456d2bf4b3202e7ULL, 0x782b7939f54a8d46ULL, 0x3a5d142d0413e758ULL, 0xf5c72d5a270f1e3cULL,
+            0x700d59679a2af254ULL, 0xdac9cc4aa576d8a5ULL, 0x2ae5b6ddb7b447c1ULL, 0xeefa9db04edf2de7ULL,
+            0x357ec05415d17ca9ULL, 0x45dd540ec74b05dfULL, 0x3874bb646e1b94d1ULL, 0x5a2ed76a7878e10aULL
+        };
+        for (size_t i = 0; i < legacy.size() && i < bank.size(); ++i)
+        {
+            uint64_t hash = 14695981039346656037ULL;
+            for (const auto& d : synth::parameterDescriptors())
+            {
+                const auto bits = std::bit_cast<uint32_t> (d.get (bank[i].params));
+                for (int byte = 0; byte < 4; ++byte)
+                {
+                    hash ^= (bits >> (byte * 8)) & 255;
+                    hash *= 1099511628211ULL;
+                }
+            }
+            check (hash == legacyValues[i], legacy[i] + ": all original parameter values retained");
+        }
+        std::set<std::string> names;
+        for (const auto& patch : bank)
+        {
+            check (names.insert (patch.name).second, "unique preset name: " + patch.name);
+            for (const auto& d : synth::parameterDescriptors())
+            {
+                const float value = d.get (patch.params);
+                check (std::isfinite (value) && value >= d.min && value <= d.max, patch.name + ": " + d.id + " in range");
+                if (d.kind != synth::ParamDescriptor::Kind::Float)
+                    check (std::abs (value - std::round (value)) < 1.0e-5f, patch.name + ": " + d.id + " is discrete");
+            }
+        }
+    });
+
     test ("every preset renders without NaN", [] {
         for (const auto& preset : synth::factoryPresets())
         {
@@ -189,6 +233,12 @@ int main()
                 }
             }
             check (finite && energy > 0.01, "preset " + preset.name);
+            auto off = MidiEvent::noteOff (0, 48);
+            s.process (l.data(), r.data(), 256, &off, 1);
+            const int releaseBlocks = (int) std::ceil (preset.params.env[0].release * 44100.0 / 256.0) + 16;
+            for (int b = 0; b < releaseBlocks; ++b)
+                s.process (l.data(), r.data(), 256, nullptr, 0);
+            check (s.getNumActiveVoices() == 0, "preset releases all voices: " + preset.name);
         }
     });
 

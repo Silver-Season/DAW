@@ -813,8 +813,10 @@ void testSessionAgainstArrangement()
 void testStopTrackAndEdits()
 {
     std::printf ("[arrangement test] the stop button puts a track in session; editing the arrangement during playback\n");
-    Rig r (256, 1);
+    Rig r (256, 2);
     auto t = r.trackList[0];
+    auto other = r.trackList[1];
+    place (r.f.model, other, 0.0, 64.0, { { 0.0, 64.0, 55, 90 } }, 64.0);
     place (r.f.model, t, 0.0, 64.0, { { 0.0, 64.0, 48, 90 } }, 64.0);
     auto slot = r.f.model.createClip (t, 0, 4.0);
     slot.setNotes ({ { 0.0, 0.5, 72, 100 } }, nullptr);
@@ -841,6 +843,8 @@ void testStopTrackAndEdits()
     r.f.engine.stopTrack (t.id());
     r.runBeats (0.5);
     check (r.f.engine.findRuntime (t.id())->inSession.load() && log->balance (48) == 0, "the stop button of the track puts it in session: the pad is released");
+    check (r.f.engine.isPlaying() && ! r.f.engine.findRuntime (other.id())->inSession.load()
+               && r.log (1)->balance (55) == 1, "other track's held note and global transport continue after stop");
     r.runBeats (4.0);
     check (log->ons (48).size() == 2, "and the arrangement stays silent");
     r.f.engine.backToArrangement();

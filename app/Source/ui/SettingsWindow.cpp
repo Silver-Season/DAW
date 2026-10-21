@@ -722,6 +722,12 @@ public:
         opaque.setButtonText (Strings::appearance::opaque);
         animations.setButtonText (Strings::settingsui::animations);
         animations.onClick = [this] { settings.setAnimations (animations.getToggleState()); };
+        gpu.setButtonText (Strings::settingsui::gpuRendering);
+        gpu.onClick = [this] {
+            settings.setGpuRendering (gpu.getToggleState());
+            if (onGpuChanged)
+                onGpuChanged (gpu.getToggleState());
+        };
         reset.setButtonText (Strings::appearance::reset);
         reset.onClick = [this]
         {
@@ -729,7 +735,7 @@ public:
             refresh ();
         };
         for (auto* c : std::initializer_list<juce::Component*>{
-               &scale, &primary, &secondary, &custom, &gradient, &opaque, &animations, &angle, &glow, &depth, &reset })
+               &scale, &primary, &secondary, &custom, &gradient, &opaque, &animations, &gpu, &angle, &glow, &depth, &reset })
             addAndMakeVisible (c);
         for (auto* e : { &primary, &secondary })
         {
@@ -800,6 +806,7 @@ public:
         gradient.setToggleState (a.gradient, juce::dontSendNotification);
         opaque.setToggleState (a.reduceTransparency, juce::dontSendNotification);
         animations.setToggleState (settings.animations (), juce::dontSendNotification);
+        gpu.setToggleState (settings.gpuRendering (), juce::dontSendNotification);
         if (!primary.hasKeyboardFocus (true))
             primary.setText ("#" + a.primary.toDisplayString (false), false);
         if (!secondary.hasKeyboardFocus (true))
@@ -904,6 +911,7 @@ public:
         scale.setBounds (180, 438, 100, 28);
         animations.setBounds (300, 438, getWidth () - 320, 28);
         reset.setBounds (20, 483, 220, 28);
+        gpu.setBounds (300, 483, getWidth () - 320, 28);
         languageBox.setBounds (180, 519, 110, 28);
         languageNote.setBounds (300, 519, getWidth () - 320, 28);
     }
@@ -951,7 +959,10 @@ public:
     juce::ComboBox scale, themeList, languageBox;
     juce::Label languageNote;
     juce::TextEditor primary, secondary;
-    juce::ToggleButton custom, gradient, opaque, animations;
+    juce::ToggleButton custom, gradient, opaque, animations, gpu;
+  public:
+    std::function<void (bool)> onGpuChanged; // the window attaches or detaches its graphics context
+  private:
     juce::Slider angle, glow, depth;
     juce::TextButton reset;
     std::array<juce::TextButton, 8> swatches;
@@ -1247,7 +1258,11 @@ public:
         pages[sound] = std::make_unique<SoundPage> (e, s);
         pages[midi] = std::make_unique<MidiPage> (e, s);
         pages[recording] = std::make_unique<RecordingPage> (e, s);
-        pages[appearance] = std::make_unique<AppearancePage> (s);
+        {
+            auto page = std::make_unique<AppearancePage> (s);
+            page->onGpuChanged = h.gpuChanged;
+            pages[appearance] = std::move (page);
+        }
         pages[library] = std::make_unique<LibraryPage> (s, h);
         pages[plugins] = std::make_unique<PluginsPage> (e, s, h);
         const juce::String names[kNumTabs] { Strings::settingsui::tabSound, Strings::settingsui::tabMidi, Strings::settingsui::tabRecording,

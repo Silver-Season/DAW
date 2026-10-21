@@ -6,9 +6,6 @@ An open-source digital audio workstation for macOS. Build ideas in a Session gri
 
 **macOS 11+ · Apple Silicon & Intel · C++20 / JUCE 8 · English & Russian · AGPLv3**
 
-> **Upcoming build preview — [PR #31](https://github.com/Silver-Season/DAW/pull/31).** The glass screenshots, explicit track power / Stop controls, 44-program factory bank and dedicated Distortion on this page show the tested upcoming build. The current nightly from `main` has 16 Prisma programs and 13 built-in effects; the preview changes arrive after review and merge.
-
-
 [Download for Mac](#download-for-mac) · [Screenshots](#screenshots) · [Listen](#listen) · [Build](#build-from-source) · [Feature guide](docs/FEATURE-GUIDE.md)
 
 ![Arrangement in Glass Dark: clips, markers, track power and Stop/Resume, with the device chain below](media/ui-glass/glass-dark-arrangement.png)

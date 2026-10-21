@@ -100,12 +100,8 @@ void ArrangementMinimap::paint (juce::Graphics& g)
     const auto frame = frameBounds();
     if (t.glass)
     {
-        // glass: a soft accent window with rounded corners instead of a dark frame with bars
-        const auto f = frame.toFloat().reduced (0.5f);
-        g.setColour (t.accentFill.withAlpha (0.12f));
-        g.fillRoundedRectangle (f, 4.0f);
-        g.setColour (t.accentFill.withAlpha (0.8f));
-        g.drawRoundedRectangle (f, 4.0f, 1.5f);
+        // glass: a pane of clear glass over the overview, its edge quietly in the accent
+        glass::pane (g, frame.toFloat().reduced (0.5f), 5.0f, t.accentFill, 0.45f, 0.55f);
         return;
     }
     g.setColour (t.text.withAlpha (0.09f));

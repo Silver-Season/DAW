@@ -1,6 +1,7 @@
 #include "PianoRoll.h"
 
 #include "Chrome.h"
+#include "Kit.h"
 #include "PianoRollParts.h"
 #include "QuantiseWindow.h"
 
@@ -33,21 +34,9 @@ public:
     juce::Rectangle<float> segments() const { return { 10.0f, 5.0f, 300.0f, (float) getHeight() - 10.0f }; }
     void paint (juce::Graphics& g) override
     {
-        const auto& t = theme();
-        const auto r = segments();
-        const float pill = r.getHeight() * 0.5f, third = r.getWidth() / 3.0f;
-        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.85f : 0.7f));
-        g.fillRoundedRectangle (r, pill);
-        const auto active = juce::Rectangle<float> (r.getX() + third * (float) owner.editorMode, r.getY(), third, r.getHeight()).reduced (3.0f);
-        juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
-        glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
-        const juce::String labels[] { Strings::transport::modePianoRoll, Strings::transport::modeScore, Strings::transport::modeStep };
-        for (int i = 0; i < 3; ++i)
-        {
-            g.setColour (i == owner.editorMode ? t.text : t.dimText);
-            g.setFont (t.uiFont (13.0f, i == owner.editorMode ? 600 : 500));
-            g.drawText (labels[i], juce::Rectangle<float> (r.getX() + third * (float) i, r.getY(), third, r.getHeight()), juce::Justification::centred, false);
-        }
+        glass::Lit lit (*this);
+        kit::segmented (g, segments(), { Strings::transport::modePianoRoll, Strings::transport::modeScore, Strings::transport::modeStep },
+                        owner.editorMode);
     }
     void mouseDown (const juce::MouseEvent& e) override
     {

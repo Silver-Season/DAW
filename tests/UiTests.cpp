@@ -14,67 +14,30 @@
 #include "../app/Source/model/ClipEdit.h"
 #include "../app/Source/ui/EditCommands.h"
 #include "../app/Source/ui/Theme.h"
+#include "../app/Source/ui/Kit.h"
 
 using namespace tests;
 
 namespace
 {
-juce::String hex (juce::Colour c)
-{
-    return "#" + juce::String::toHexString ((int) (c.getARGB() & 0xffffff)).paddedLeft ('0', 6).toLowerCase();
-}
-
 //==============================================================================
 void testThemes()
 {
-    std::printf ("[test 12] themes: six JSON files, all tokens, 16-colour palette\n");
+    std::printf ("[test 12] themes: the two glass JSON files, all tokens, 16-colour palette\n");
     auto& manager = ThemeManager::get();
     const auto problems = manager.reload();
     check (problems.isEmpty(), "all built-in theme files parse");
-    check (manager.all ().size () == 6, "six built-in themes");
+    check (manager.all ().size () == 2 && manager.all ()[0].id == "glass-light" && manager.all ()[1].id == "glass-dark", "two built-in themes, light and dark glass");
 
-    struct Expected
+    for (const auto& t : manager.all())
     {
-        const char *id, *background, *chrome, *panel, *panel2, *line, *text, *dimText, *accent, *accent2, *record, *play, *clipInk;
-        int saturation, lightness;
-        float glow, radius;
-        bool scanlines;
-        const char *fontUi, *fontNum;
-    };
-    const Expected table[] {
-        { "prism", "#07080d", "#0c0e15", "#121520", "#181c29", "#232838", "#e6e8f2", "#7f869c", "#8be9ff", "#c59bff", "#ff4d6d", "#6bf0a6", "#0b0d14", 78, 62, 1.0f, 6.0f, false, "Onest", "JetBrains Mono" },
-        { "neon", "#040208", "#090511", "#0f0919", "#160d24", "#2d1946", "#f4eaff", "#8e7aab", "#00f0ff", "#ff2bd6", "#ff2b4f", "#c3ff1a", "#07030d", 100, 58, 1.6f, 0.0f, true, "JetBrains Mono", "JetBrains Mono" },
-        { "studio", "#161718", "#232426", "#2b2c2f", "#333438", "#3e4044", "#dcd8cf", "#8f8a82", "#ffb547", "#7fc8b2", "#e5484d", "#93d36c", "#1a1b1c", 42, 62, 0.0f, 3.0f, false, "Onest", "JetBrains Mono" },
-        { "paper", "#e3e7ee", "#f6f7f9", "#ffffff", "#eef1f5", "#d5dae3", "#1b2130", "#667085", "#2457e6", "#b5179e", "#e5243f", "#0f9a4c", "#141a26", 72, 74, 0.0f, 6.0f, false, "Onest", "JetBrains Mono" },
-    };
-    for (const auto& e : table)
-    {
-        const Theme* found = nullptr;
-        for (const auto& t : manager.all())
-            if (t.id == e.id)
-                found = &t;
-        check (found != nullptr, juce::String ("theme present: ") + e.id);
-        if (found == nullptr)
-            continue;
-        const auto& t = *found;
-        const juce::String name = e.id;
-        check (hex (t.background) == e.background && hex (t.chrome) == e.chrome && hex (t.panel) == e.panel && hex (t.panel2) == e.panel2,
-               name + ": surface colours match the table");
-        check (hex (t.line) == e.line && hex (t.text) == e.text && hex (t.dimText) == e.dimText, name + ": line and text colours match");
-        check (hex (t.accent) == e.accent && hex (t.accent2) == e.accent2 && hex (t.record) == e.record && hex (t.play) == e.play
-                   && hex (t.clipInk) == e.clipInk,
-               name + ": accent, record, play and clip ink match");
-        check (std::abs (t.clipSaturation * 100.0f - (float) e.saturation) < 0.01f && std::abs (t.clipLightness * 100.0f - (float) e.lightness) < 0.01f,
-               name + ": palette saturation and lightness");
-        check (std::abs (t.glow - e.glow) < 1e-4f && std::abs (t.radius - e.radius) < 1e-4f && t.scanlines == e.scanlines, name + ": glow, radius, scanlines");
-        check (t.fontUi == e.fontUi && t.fontNum == e.fontNum, name + ": fonts");
-
+        const juce::String name = t.id;
         std::set<juce::uint32> distinct;
         for (int i = 0; i < Theme::kPaletteSize; ++i)
             distinct.insert (t.palette (i).getARGB());
         check ((int) distinct.size() == Theme::kPaletteSize, name + ": palette has 16 distinct colours");
         check (t.palette (0) == juce::Colour::fromHSL (t.hues[0] / 360.0f, t.clipSaturation, t.clipLightness, 1.0f), name + ": palette colour 0 is HSL of hue 0");
-        check (t.clipColour (3, false).getAlpha() == 140 && t.clipColour (3, true).getAlpha() == 255, name + ": inactive clips are drawn at 55 % opacity");
+        check (t.glass, name + ": the built-in themes are glass");
     }
 
     for (const auto& th : manager.all())
@@ -82,44 +45,56 @@ void testThemes()
             check (Theme::contrast (th.textPalette (i), th.panel) >= 4.5f && Theme::contrast (th.textPalette (i), th.chrome) >= 4.5f,
                    th.id + ": palette colour " + juce::String (i) + " as text has contrast 4.5:1");
 
-    const auto prism = manager.all()[0];
-    const auto neon = manager.all()[1];
-    check ((int) prism.hues[0] == 350 && (int) prism.hues[15] == 328 && (int) neon.hues[0] == 318 && (int) neon.hues[15] == 335, "spectrum and neon hue lists");
 
     // A theme without a token is refused with the name of the token.
     Theme broken;
     juce::String error;
     check (! Theme::fromJson ("{\"id\":\"x\",\"name\":\"X\"}", broken, error) && error.contains ("background"), "missing token is reported by name");
     check (! Theme::fromJson ("not json", broken, error), "garbage is not a theme");
-    auto json = juce::String::fromUTF8 (BinaryData::prism_json, BinaryData::prism_jsonSize);
-    check (! Theme::fromJson (json.replace ("\"accent\": \"#8be9ff\"", "\"accent\": \"zzz\""), broken, error) && error.contains ("accent"), "bad colour is reported");
+    auto json = juce::String::fromUTF8 (BinaryData::glassdark_json, BinaryData::glassdark_jsonSize);
+    auto invalid = juce::JSON::parse (json);
+    invalid.getDynamicObject()->setProperty ("accent", "zzz");
+    check (! Theme::fromJson (juce::JSON::toString (invalid), broken, error) && error.contains ("accent"), "bad colour is reported");
+
+    // Older user themes have no ambient tokens; each optional token is validated independently.
+    auto legacy = juce::JSON::parse (json);
+    legacy.getDynamicObject()->removeProperty ("glassTint");
+    legacy.getDynamicObject()->removeProperty ("glassTint2");
+    check (Theme::fromJson (juce::JSON::toString (legacy), broken, error)
+               && broken.glassTint == broken.accentFill && broken.glassTint2 == broken.accentFill2,
+           "themes without ambient tokens retain their accent-derived ground");
+    for (const auto* key : { "glassTint", "glassTint2" })
+    {
+        auto badTint = juce::JSON::parse (json);
+        badTint.getDynamicObject()->setProperty (key, "#wrong");
+        check (! Theme::fromJson (juce::JSON::toString (badTint), broken, error) && error.contains (key),
+               juce::String (key) + ": malformed optional material colour is reported");
+    }
 
     // User themes from a folder: valid ones join the list, a broken one is reported and skipped.
     auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("daw-theme-test-" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
     dir.createDirectory();
-    dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"prism\"", "\"id\": \"mine\"").replace ("\"name\": \"Prism\"", "\"name\": \"Mine\""));
+    dir.getChildFile ("mine.json").replaceWithText (json.replace ("\"id\": \"glass-dark\"", "\"id\": \"mine\"").replace ("\"name\": \"Glass · Dark\"", "\"name\": \"Mine\""));
     dir.getChildFile ("broken.json").replaceWithText ("{ \"id\": \"broken\" }");
     const auto userProblems = manager.reload (dir);
-    check (manager.all ().size () == 7 && manager.all ().back ().id == "mine",
+    check (manager.all ().size () == 3 && manager.all ().back ().id == "mine",
            "a theme from User Library/Themes appears in the list");
     check (userProblems.size() == 1 && userProblems[0].startsWith ("broken.json"), "a broken user theme is reported, the others load");
     manager.setCurrent ("mine");
     check (theme().id == "mine", "current theme can be switched");
     manager.setCurrent ("no-such-theme");
-    check (theme().id == "prism", "unknown theme id falls back to the first theme");
+    check (theme().id == "glass-light", "unknown theme id falls back to the first theme");
     dir.deleteRecursively();
     manager.reload();
 
     // Fonts come from the embedded files, with different weights.
-    manager.setCurrent ("prism");
+    manager.setCurrent ("glass-light");
     const auto regular = theme().uiFont (13.0f, 400), semibold = theme().uiFont (13.0f, 600), mono = theme().numFont (13.0f);
     check (regular.getTypefacePtr() != nullptr && regular.getTypefacePtr()->getName().startsWith ("Onest"), "UI font is Onest");
     check (semibold.getTypefacePtr() != nullptr && semibold.getTypefacePtr() != regular.getTypefacePtr(), "semibold is a different face than regular");
     check (mono.getTypefacePtr() != nullptr && mono.getTypefacePtr()->getName().startsWith ("JetBrains Mono"), "number font is JetBrains Mono");
     check (std::abs (juce::GlyphArrangement::getStringWidth (mono, "1111") - juce::GlyphArrangement::getStringWidth (mono, "8888")) < 0.01f, "digits of the number font have equal widths");
-    manager.setCurrent ("neon");
-    check (theme().uiFont (13.0f).getTypefacePtr()->getName().startsWith ("JetBrains Mono"), "Neon uses the monospace font for the UI");
-    manager.setCurrent ("prism");
+    manager.setCurrent ("glass-dark");
 }
 
 void
@@ -194,7 +169,203 @@ testAppearance ()
         check (pixels > 100, "current native prism mark renders in both glass themes");
     }
     manager.setAppearance (Appearance ());
-    manager.setCurrent ("prism");
+    manager.setCurrent ("glass-dark");
+}
+
+void testKit()
+{
+    std::printf ("[test kit] every control kind in every state paints in both themes; labels stay readable\n");
+    auto& manager = ThemeManager::get();
+    manager.reload();
+    using ui::kit::Kind;
+    const Kind kinds[] { Kind::plain, Kind::ghost, Kind::toggle, Kind::primary, Kind::danger, Kind::play };
+    for (const auto& th : manager.all())
+    {
+        manager.setCurrent (th.id);
+        const auto& t = theme();
+        check (t.metrics.controlHeight >= 16.0f && t.metrics.compactHeight <= t.metrics.controlHeight
+                   && t.metrics.text > t.metrics.small && t.metrics.panelRadius >= 0.0f,
+               th.id + ": size tokens are sane");
+        juce::Image image (juce::Image::ARGB, 120, 40, true);
+        juce::Graphics g (image);
+        bool readable = true, painted = true;
+        for (const auto kind : kinds)
+            for (int bits = 0; bits < 32; ++bits)
+            {
+                ui::kit::State st { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) == 0 };
+                image.clear (image.getBounds(), t.panel);
+                const auto ink = ui::kit::button (g, { 4.0f, 4.0f, 112.0f, 32.0f }, kind, st);
+                const auto fill = image.getPixelAt (60, 20);
+                painted = painted && image.getPixelAt (60, 20).getAlpha() > 0;
+                if (st.enabled && kind != Kind::play && fill.getAlpha() == 255)
+                    readable = readable && Theme::contrast (ink, fill) >= 3.0f;
+            }
+        check (painted, th.id + ": buttons paint in every state");
+        check (readable, th.id + ": button labels contrast with their fill (3:1 or more) in every enabled state");
+        image.clear (image.getBounds());
+        ui::kit::switchControl (g, { 0.0f, 0.0f, 40.0f, 24.0f }, { false, false, true });
+        ui::kit::segmented (g, { 0.0f, 0.0f, 120.0f, 30.0f }, { "A", "B", "C" }, 1, 0, 2);
+        ui::kit::field (g, { 0.0f, 0.0f, 120.0f, 26.0f }, { false, false, false, true });
+        ui::kit::card (g, { 4.0f, 4.0f, 100.0f, 30.0f }, true);
+        ui::kit::row (g, { 0.0f, 0.0f, 120.0f, 24.0f }, { true, false, true });
+        check (ui::kit::segmentAt ({ 0.0f, 0.0f, 120.0f, 30.0f }, 3, 100.0f) == 2 && ui::kit::segmentAt ({ 0.0f, 0.0f, 120.0f, 30.0f }, 3, -5.0f) == 0,
+               th.id + ": a click finds its segment");
+    }
+    manager.setCurrent ("glass-light");
+    check (! theme().metrics.pill && std::abs (theme().metrics.controlRadius - 10.0f) < 0.01f && std::abs (theme().metrics.controlHeight - 28.0f) < 0.01f,
+           "glass themes read their size tokens from the file");
+    manager.setCurrent ("glass-dark");
+}
+
+void testGlassMaterial()
+{
+    std::printf ("[test glass material] continuous ground, crisp selections, contrast and opaque fallback\n");
+    auto& manager = ThemeManager::get();
+    manager.setAppearance (Appearance());
+    for (const auto* id : { "glass-light", "glass-dark" })
+    {
+        manager.setCurrent (id);
+        juce::Component window, child;
+        window.setSize (480, 320);
+        window.addAndMakeVisible (child);
+        child.setBounds (90, 80, 160, 100);
+        const auto ground = [] (juce::Component& c) {
+            juce::Image image (juce::Image::ARGB, c.getWidth(), c.getHeight(), true);
+            juce::Graphics g (image);
+            ui::glass::windowBackdrop (g, c);
+            return image;
+        };
+        const auto whole = ground (window), part = ground (child);
+        bool readable = true;
+        int maximumDifference = 0;
+        for (int y = 10; y < child.getHeight(); y += 20)
+            for (int x = 10; x < child.getWidth(); x += 20)
+            {
+                const auto pixel = part.getPixelAt (x, y);
+                const auto parentPixel = whole.getPixelAt (x + child.getX(), y + child.getY());
+                const auto difference = [] (juce::Colour a, juce::Colour b) {
+                    return std::max ({ std::abs ((int) a.getRed() - b.getRed()),
+                                       std::abs ((int) a.getGreen() - b.getGreen()),
+                                       std::abs ((int) a.getBlue() - b.getBlue()) });
+                };
+                maximumDifference = std::max (maximumDifference, difference (pixel, parentPixel));
+                const auto plate = pixel.overlaidWith (ui::glass::plateColour());
+                readable = readable && Theme::contrast (theme().text, plate) >= 4.5f
+                                    && Theme::contrast (theme().dimText, plate) >= 4.5f;
+            }
+        // Each of the three alpha-composited gradients can round by one byte at a different raster clip origin.
+        check (maximumDifference <= 3, juce::String (id) + ": child plates use the same window-space ambient light (maximum channel difference "
+                                          + juce::String (maximumDifference) + ")");
+        check (readable, juce::String (id) + ": main and secondary text stay readable on ambient plates");
+        if (! theme().isLight())
+        {
+            bool graphite = true;
+            for (const auto point : { juce::Point<int> (30, 30), { 450, 30 }, { 240, 290 } })
+            {
+                const auto pixel = whole.getPixelAt (point.x, point.y);
+                graphite = graphite && std::max ({ pixel.getRed(), pixel.getGreen(), pixel.getBlue() })
+                                         - std::min ({ pixel.getRed(), pixel.getGreen(), pixel.getBlue() }) <= 12;
+            }
+            check (graphite, "dark ambient surfaces remain neutral graphite rather than navy");
+        }
+
+        const auto paint = [] (juce::Colour under, const auto& painter) {
+            juce::Image image (juce::Image::ARGB, 120, 40, true);
+            juce::Graphics g (image);
+            g.fillAll (under);
+            painter (g, juce::Rectangle<float> (4.0f, 4.0f, 112.0f, 32.0f));
+            return image;
+        };
+        const auto card = [] (juce::Graphics& g, juce::Rectangle<float> r) { ui::kit::card (g, r); };
+        const auto a = paint (theme().background, card), b = paint (theme().panel2, card);
+        check (a.getPixelAt (60, 20) != b.getPixelAt (60, 20),
+               juce::String (id) + ": satin cards preserve a little of the underlying material");
+        check (a.getPixelAt (0, 20) == theme().background,
+               juce::String (id) + ": cards do not cast clipped shadows outside their bounds");
+
+        const auto selection = [] (juce::Graphics& g, juce::Rectangle<float> r) {
+            ui::kit::row (g, r, { false, false, true });
+        };
+        const auto row = paint (theme().chrome, selection);
+        const auto selected = row.getPixelAt (60, 20);
+        check (selected != theme().chrome && selected == row.getPixelAt (60, 12),
+               juce::String (id) + ": selection is a visible flat tint without a convex gloss band");
+        check (Theme::contrast (theme().text, selected) >= 4.5f,
+               juce::String (id) + ": selected row labels keep text contrast");
+
+        // Stronger glass must keep normal and secondary labels readable throughout each material control's range.
+        for (const float depth : { 0.0f, 0.35f, 1.0f })
+        {
+            Appearance material;
+            material.glass = depth;
+            manager.setAppearance (material);
+            const std::function<void (juce::Graphics&, juce::Rectangle<float>)> painters[] {
+                card,
+                [] (juce::Graphics& g, juce::Rectangle<float> r) { ui::kit::field (g, r, {}); },
+                [] (juce::Graphics& g, juce::Rectangle<float> r) { ui::glass::bead (g, r, theme().metrics.controlRadius); }
+            };
+            bool materialReadable = true;
+            for (const auto& painter : painters)
+            {
+                const auto image = paint (theme().chrome, painter);
+                for (const auto point : { juce::Point<int> (20, 12), { 60, 20 }, { 95, 28 } })
+                {
+                    const auto fill = image.getPixelAt (point.x, point.y);
+                    materialReadable = materialReadable && Theme::contrast (theme().text, fill) >= 4.5f
+                                                        && Theme::contrast (theme().dimText, fill) >= 4.5f;
+                }
+            }
+            check (materialReadable, juce::String (id) + ": reflections preserve label contrast at depth " + juce::String (depth));
+        }
+        manager.setAppearance (Appearance());
+
+        Appearance custom;
+        custom.customAccent = true;
+        custom.primary = juce::Colours::yellow;
+        custom.secondary = juce::Colours::magenta;
+        manager.setAppearance (custom);
+        check (ground (window).getPixelAt (30, 30) == whole.getPixelAt (30, 30),
+               juce::String (id) + ": custom control colours do not flood the ambient ground");
+        check (paint (theme().background, card).getPixelAt (60, 20) == a.getPixelAt (60, 20),
+               juce::String (id) + ": custom accents do not recolour diffuse reflections in cards");
+        custom.reduceTransparency = true;
+        manager.setAppearance (custom);
+        const auto opaqueA = paint (theme().background, card), opaqueB = paint (theme().panel2, card);
+        check (opaqueA.getPixelAt (60, 20) == opaqueB.getPixelAt (60, 20)
+                   && ui::glass::plateColour().isOpaque(),
+               juce::String (id) + ": reduced transparency makes cards and plates opaque");
+        const auto field = paint (theme().background, [] (juce::Graphics& g, juce::Rectangle<float> r) {
+            ui::kit::field (g, r, {});
+        });
+        check (field.getPixelAt (60, 20) == theme().panel
+                   && ground (window).getPixelAt (30, 30) == theme().background,
+               juce::String (id) + ": reduced transparency removes the field film and ambient glows");
+        manager.setAppearance (Appearance());
+
+        for (const bool vertical : { false, true })
+        {
+            ui::Splitter splitter (vertical);
+            splitter.setSize (64, 40);
+            const auto painted = [&] {
+                juce::Image image (juce::Image::ARGB, 64, 40, true);
+                juce::Graphics g (image);
+                splitter.paint (g);
+                return image.getPixelAt (32, 20).getAlpha() != 0;
+            };
+            const juce::MouseEvent event (juce::Desktop::getInstance().getMainMouseSource(), {}, {},
+                                          0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &splitter, &splitter,
+                                          juce::Time (1), {}, juce::Time (1), 1, false);
+            check (! painted(), "splitter guide is hidden at rest");
+            splitter.mouseEnter (event);
+            check (painted(), "splitter guide appears on hover");
+            splitter.mouseDown (event);
+            splitter.mouseExit (event);
+            check (painted(), "splitter guide stays visible during a drag outside its hit area");
+            splitter.mouseUp (event);
+            check (! painted(), "splitter guide hides again when the drag ends");
+        }
+    }
+    manager.setCurrent ("glass-dark");
 }
 
 //==============================================================================
@@ -824,6 +995,8 @@ void tests::runUiTests()
     testRecordingUi();
     testThemes();
     testAppearance ();
+    testKit();
+    testGlassMaterial();
     testActionTransactions();
     testActionsWithEngine();
     testEditCommands();

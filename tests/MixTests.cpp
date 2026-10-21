@@ -1,11 +1,14 @@
 // The mix round after the demo song (docs/demo/README.md): the master seen as a track with its chain and automation,
 // built-in effects dropped on the master, and the defaults an envelope opens with.
 #include "TestSupport.h"
+#include "../app/Source/Strings.h"
+#include "../app/Source/engine/RtCheck.h"
 
 #include "../app/Source/browser/BrowserActions.h"
 #include "../app/Source/library/UserLibrary.h"
 #include "../app/Source/model/Automation.h"
 #include "../app/Source/engine/DrumKitProcessor.h"
+#include "../app/Source/engine/BuiltInEffectProcessor.h"
 #include "../app/Source/engine/OfflineRenderer.h"
 #include "../app/Source/model/ArrangementEdit.h"
 #include "daw/dsp/Loudness.h"
@@ -373,6 +376,46 @@ void testExportStemsMp3Lufs()
     f.engine.audioDeviceStopped();
     folder.deleteRecursively();
 }
+void testDistortionState()
+{
+    std::printf ("[mix] Distortion parameters survive a saved state and expose useful macros\n");
+    BuiltInEffectProcessor fx ("distortion");
+    auto* dsp = fx.getEffect();
+    check (dsp != nullptr && fx.getName() == Strings::fx::effectName ("distortion"), "Distortion processor and translated name");
+    if (dsp == nullptr)
+        return;
+    auto& parameters = fx.getParameters();
+    auto* drive = dynamic_cast<juce::RangedAudioParameter*> (parameters[dsp->paramIndex ("drive")]);
+    drive->setValueNotifyingHost (drive->convertTo0to1 (27.0f));
+    juce::MemoryBlock state;
+    fx.getStateInformation (state);
+    BuiltInEffectProcessor restored ("distortion");
+    restored.setStateInformation (state.getData(), (int) state.getSize());
+    const auto& loaded = restored.getParameters();
+    check (loaded.size() == parameters.size(), "all effect parameters are restored");
+    for (int i = 0; i < loaded.size(); ++i)
+        check (std::abs (loaded[i]->getValue() - parameters[i]->getValue()) < 1.0e-6f, "parameter round-trip " + juce::String (i));
+    check (restored.defaultMacros().front() == dsp->paramIndex ("mode") && restored.defaultMacros().size() == 7,
+           "compact controls expose mode, drive, tone, bias, input, mix and output");
+    restored.setPlayConfigDetails (2, 2, 48000, 256);
+    restored.prepareToPlay (48000, 256);
+    juce::AudioBuffer<float> block (2, 256);
+    juce::MidiBuffer midi;
+    daw::rt::resetViolations();
+    {
+        const daw::rt::ScopedAudioThread guard;
+        for (int b = 0; b < 32; ++b)
+        {
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < 256; ++i)
+                    block.setSample (c, i, 0.25f * std::sin ((float) (b * 256 + i) * 0.1f));
+            restored.processBlock (block, midi);
+        }
+    }
+    check (daw::rt::violationCount() == 0, "Distortion processing uses no heap");
+    check (block.getMagnitude (0, 0, 256) > 0.01f && block.getMagnitude (0, 0, 256) < 1.0f, "restored distortion renders bounded audio");
+}
+
 void testFactoryPresetLevels()
 {
     std::printf ("[mix] every factory preset sounds, does not clip and sits near the others\n");
@@ -397,6 +440,7 @@ namespace tests
 void runMixTests()
 {
     testDrumLevels();
+    testDistortionState();
     testFactoryPresetLevels();
     testMasterAsTrack();
     testMasterEffectDrop();

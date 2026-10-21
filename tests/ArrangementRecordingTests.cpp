@@ -1213,14 +1213,6 @@ void testTransportBar()
         check (image.getPixelAt (rimPoint.x, rimPoint.y) != image.getPixelAt (outside.x, outside.y),
                "the lens is drawn over the spectrum");
     }
-    themes.setCurrent ("prism");
-    {
-        ui::TopBar bar (f.engine, f.model);
-        bar.setBounds (0, 0, 1600, ui::TopBar::kHeight);
-        for (auto* c : bar.getChildren())
-            if (auto* s = dynamic_cast<ui::Spectrum*> (c))
-                check (s->lensBounds().isEmpty(), "the other themes keep the plain spectrum");
-    }
 }
 
 void testTakesInTheView()

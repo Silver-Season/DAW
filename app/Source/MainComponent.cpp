@@ -7,6 +7,7 @@
 #include "engine/PluginFolders.h"
 #include "project/AudioImport.h"
 #include "ui/Dialogs.h"
+#include "ui/GlassMaterial.h"
 #include "ui/ThemeLookAndFeel.h"
 
 #include "daw/synth/PrismaParams.h"
@@ -100,6 +101,7 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     topBar->onRedoClicked = [this] { commandManager.invokeDirectly (ui::commands::redo, false); };
     topBar->onSettingsClicked = [this] { showSettings (ui::SettingsWindow::appearance); };
     topBar->onLibraryClicked = [this] { setBrowserVisible (! browserVisible); };
+    topBar->onProjectClicked = [this] { commandManager.invokeDirectly (ui::commands::projectProperties, false); };
     browser = std::make_unique<ui::BrowserPanel> (engine, settings, sources);
     sources.onChanged = [this] { browser->sourcesChanged(); };
     browser->onActivate = [this] (const browser::DragItem& item) {
@@ -278,6 +280,20 @@ MainComponent::MainComponent (AudioEngine& e, ProjectModel& m)
     });
 }
 
+void MainComponent::setGpuRendering (bool on)
+{
+    if (on == glContext.isAttached())
+        return;
+    if (on)
+    {
+        glContext.setComponentPaintingEnabled (true);
+        glContext.setContinuousRepainting (false);
+        glContext.attachTo (*this);
+    }
+    else
+        glContext.detach();
+}
+
 void MainComponent::attachKeyListeners (juce::Component& window)
 {
     window.addKeyListener (noteKeys.get());
@@ -286,6 +302,7 @@ void MainComponent::attachKeyListeners (juce::Component& window)
 
 MainComponent::~MainComponent()
 {
+    glContext.detach();
     stopTimer();
     topBar->setRecorder (nullptr);
     session->setRecorder (nullptr);
@@ -842,7 +859,7 @@ void MainComponent::timerCallback()
 
 void MainComponent::paint (juce::Graphics& g)
 {
-    g.fillAll (theme().background);
+    ui::glass::windowBackdrop (g, *this);
 }
 
 void MainComponent::resized()
@@ -1130,6 +1147,8 @@ void MainComponent::openFromSystem (const juce::File& file)
 
 void MainComponent::startup (const juce::File& fileToOpen)
 {
+    // after the window is shown: the snapshot mode never calls startup, so its captures stay on the CPU
+    setGpuRendering (settings.gpuRendering());
     started = true;
     if (fileToOpen.existsAsFile())
         pendingOpen = fileToOpen;
@@ -1408,6 +1427,7 @@ void MainComponent::showSettings (ui::SettingsWindow::Tab tab)
         hooks.placesChanged = [this] { sources.scanPlaces (false); };
         hooks.scanPlugins = [this] { showPluginScanner(); };
         hooks.scanPluginFolders = [this] { showPluginScanner (true); };
+        hooks.gpuChanged = [this] (bool on) { setGpuRendering (on); };
         hooks.closed = [this] {
             juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<MainComponent> (this)] {
                 if (safe != nullptr)

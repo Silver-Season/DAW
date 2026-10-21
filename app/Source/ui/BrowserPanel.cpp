@@ -4,6 +4,7 @@
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
 #include "Dialogs.h"
+#include "Kit.h"
 
 #include "daw/synth/PrismaParams.h"
 
@@ -163,6 +164,7 @@ void BrowserPanel::lookAndFeelChanged()
     search.setTextToShowWhenEmpty (Strings::browser::searchPlaceholder, t.dimText);
     search.applyFontToAllText (t.uiFont (12.5f));
     search.setFont (t.uiFont (12.5f));
+    resized(); // glass rows are taller
 }
 
 void BrowserPanel::visibilityChanged()
@@ -392,7 +394,7 @@ int BrowserPanel::rowAt (juce::Point<int> p) const
 
 void BrowserPanel::resized()
 {
-    searchArea = { 10, 10, getWidth() - 20, theme().glass ? 34 : 32 };
+    searchArea = { 10, 10, getWidth() - 20, theme().glass ? 36 : 32 };
     search.setBounds (searchArea.withTrimmedLeft (30).withTrimmedRight (8).reduced (0, 6));
     const int navTop = searchArea.getBottom() + 6;
     const int navHeight = (int) navEntries().size() * navRowH();
@@ -431,16 +433,11 @@ juce::Rectangle<int> BrowserPanel::previewButtonRect() const
 void BrowserPanel::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
+    glass::windowBackdrop (g, *this);
+    g.fillAll (glass::plateColour()); // the plate: a little of the window's ground shows through
 
     if (t.glass)
-    {
-        const auto box = searchArea.toFloat();
-        g.setColour (t.panel2.withAlpha (t.isLight() ? 0.75f : 0.6f));
-        g.fillRoundedRectangle (box, 9.0f);
-        g.setColour (search.hasKeyboardFocus (true) ? t.accent : t.line.withAlpha (0.6f));
-        g.drawRoundedRectangle (box.reduced (0.5f), 9.0f, search.hasKeyboardFocus (true) ? 1.5f : 1.0f);
-    }
+        kit::field (g, searchArea.toFloat(), { false, false, false, search.hasKeyboardFocus (true) });
     else
     {
         fillCell (g, searchArea.toFloat(), t.panel);
@@ -459,22 +456,17 @@ void BrowserPanel::paint (juce::Graphics& g)
         const bool selected = ! searching && sameNav (n.kind, n.index, current.kind, current.index);
         if (t.glass && n.kind != Nav::label)
         {
-            // glass: a line icon, a larger label, the selection a soft tinted pill
-            if (selected)
+            // Paint labels above the shared flat selection, keeping navigation crisp in both themes.
+            const auto drawRow = [&] (juce::Graphics& to)
             {
-                g.setColour (t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f));
-                g.fillRoundedRectangle (r.toFloat(), 8.0f);
-            }
-            else if (i == hoveredNav)
-            {
-                g.setColour (t.panel2.withAlpha (0.7f));
-                g.fillRoundedRectangle (r.toFloat(), 8.0f);
-            }
-            g.setColour (selected ? t.text : t.text.withAlpha (0.8f));
-            g.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
-            g.setColour (t.text);
-            g.setFont (t.uiFont (14.0f, selected ? 600 : 400));
-            g.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
+                to.setColour (selected ? t.accent : t.text.withAlpha (0.75f));
+                to.fillPath (navIcon (n.kind == Nav::recent ? 0 : 1, n.index, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ (float) r.getX() + 17.0f, (float) r.getCentreY() })));
+                to.setColour (t.text);
+                to.setFont (t.uiFont (13.5f, selected ? 500 : 400));
+                to.drawText (navTitle (n), r.withTrimmedLeft (36).withTrimmedRight (12), juce::Justification::centredLeft, true);
+            };
+            kit::row (g, r.toFloat(), { i == hoveredNav, false, selected });
+            drawRow (g);
             continue;
         }
         if (selected)
@@ -502,8 +494,21 @@ void BrowserPanel::paint (juce::Graphics& g)
         }
     }
 
-    g.setColour (t.line);
-    g.fillRect (0, listArea.getY() - 3, getWidth(), 1);
+    if (t.glass)
+    {
+        // a fading hairline between navigation and the list, inset from the card's edges
+        const float y = (float) listArea.getY() - 3.0f;
+        juce::ColourGradient line (t.line.withAlpha (0.0f), 14.0f, y, t.line.withAlpha (0.0f), (float) getWidth() - 14.0f, y, false);
+        line.addColour (0.2, t.line.withAlpha (0.7f));
+        line.addColour (0.8, t.line.withAlpha (0.7f));
+        g.setGradientFill (line);
+        g.fillRect (14.0f, y, (float) getWidth() - 28.0f, 1.0f);
+    }
+    else
+    {
+        g.setColour (t.line);
+        g.fillRect (0, listArea.getY() - 3, getWidth(), 1);
+    }
 
     // items
     {
@@ -540,13 +545,7 @@ void BrowserPanel::paint (juce::Graphics& g)
             const bool selected = i == selectedRow;
             const auto cell = box.reduced (6, 1);
             if (t.glass)
-            {
-                if (selected || i == hoveredRow)
-                {
-                    g.setColour (selected ? t.accentFill.withAlpha (t.isLight() ? 0.18f : 0.24f) : t.panel2.withAlpha (0.7f));
-                    g.fillRoundedRectangle (cell.toFloat(), 7.0f);
-                }
-            }
+                kit::row (g, cell.toFloat(), { i == hoveredRow, false, selected });
             else if (selected)
             {
                 fillCell (g, cell.toFloat(), t.panel2, 0.8f);
@@ -590,15 +589,7 @@ void BrowserPanel::paint (juce::Graphics& g)
     const auto b = previewButtonRect();
     const bool on = settings.previewEnabled();
     if (t.glass)
-    {
-        if (on)
-            glass::accent (g, b.toFloat(), t.accentFill, b.getHeight() * 0.5f);
-        else
-            glass::surface (g, b.toFloat(), t.panel, b.getHeight() * 0.5f);
-        g.setColour (on ? t.accentFill : t.line);
-        g.drawRoundedRectangle (b.toFloat().reduced (0.5f), b.getHeight() * 0.5f, 1.0f);
-        g.setColour (on ? t.inkOn (t.accentFill) : t.dimText);
-    }
+        g.setColour (kit::button (g, b.toFloat(), kit::Kind::toggle, { false, false, on }));
     else
     {
         fillCell (g, b.toFloat(), on ? t.accent : t.panel);

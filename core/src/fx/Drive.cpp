@@ -272,17 +272,18 @@ class DriveEffect final : public BasicEffect
 public:
     enum Param { pMode, pDrive, pTone, pBias, pInput };
 
-    DriveEffect()
-        : BasicEffect ({ { "mode", "Mode", "", 0.0f, (float) (modeCount - 1), 0.0f, false, { "Soft", "Tape", "Tube", "Hard", "Fold", "Crush" } },
-                         { "drive", "Drive", "dB", 0.0f, 36.0f, 6.0f, false, {} },
+    explicit DriveEffect (bool distortion = false)
+        : BasicEffect ({ { "mode", "Mode", "", 0.0f, (float) (modeCount - 1), distortion ? 3.0f : 0.0f, false, { "Soft", "Tape", "Tube", "Hard", "Fold", "Crush" } },
+                         { "drive", "Drive", "dB", 0.0f, 36.0f, distortion ? 18.0f : 6.0f, false, {} },
                          { "tone", "Tone", "%", -100.0f, 100.0f, 0.0f, false, {} },
                          { "bias", "Bias", "%", -100.0f, 100.0f, 0.0f, false, {} },
-                         { "input", "Input", "dB", -24.0f, 24.0f, 0.0f, false, {} } })
+                         { "input", "Input", "dB", -24.0f, 24.0f, 0.0f, false, {} } }),
+          isDistortion (distortion)
     {
         tableFor (0); // build the tables here, not on first use in the audio thread
     }
 
-    std::string_view type() const override { return "drive"; }
+    std::string_view type() const override { return isDistortion ? "distortion" : "drive"; }
     int latencySamples() const override { return kLatency; }
     double tailSeconds() const override { return 0.1; } // the DC blocker settles in a few tens of milliseconds
 
@@ -630,6 +631,7 @@ private:
         to.b0 = from.b0; to.b1 = from.b1; to.b2 = from.b2; to.a1 = from.a1; to.a2 = from.a2;
     }
 
+    const bool isDistortion;
     std::array<Channel, 2> channel;
     std::vector<float> pre, osBuf, gainBuf, biasBuf, compBuf;
     std::array<std::vector<float>, 2> post;
@@ -645,4 +647,5 @@ private:
 } // namespace
 
 std::unique_ptr<Effect> makeDrive() { return std::make_unique<DriveEffect>(); }
+std::unique_ptr<Effect> makeDistortion() { return std::make_unique<DriveEffect> (true); }
 } // namespace daw::fx

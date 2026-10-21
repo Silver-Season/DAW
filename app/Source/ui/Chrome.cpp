@@ -2,6 +2,9 @@
 
 #include "../Strings.h"
 
+#include <BinaryData.h>
+#include <map>
+
 namespace ui
 {
 InfoBar::InfoBar (juce::Component& w) : window (w)
@@ -60,7 +63,10 @@ void InfoBar::timerCallback()
 void InfoBar::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.glass ? t.background : t.chrome);
+    if (t.glass)
+        glass::windowBackdrop (g, *this);
+    else
+        g.fillAll (t.chrome);
     if (! t.glass)
     {
         g.setColour (t.line);
@@ -151,6 +157,8 @@ Splitter::Splitter (bool verticalBar) : vertical (verticalBar)
 void Splitter::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    if (t.glass && ! hover && ! dragging)
+        return;
     g.setColour (hover || dragging ? t.accent : t.line);
     const auto r = getLocalBounds();
     if (vertical)
@@ -285,7 +293,8 @@ void ComingSoonView::paint (juce::Graphics& g)
     }
     // the card
     const auto c = card.toFloat();
-    juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.14f : 0.5f), 24, { 0, 6 }).drawForRectangle (g, card);
+    juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.14f : 0.45f), 24, { 0, 6 })
+        .drawForPath (g, [&] { juce::Path p; p.addRoundedRectangle (card.toFloat(), 16.0f); return p; }());
     glass::surface (g, c, t.panel, 16.0f);
     g.setColour (t.line.withAlpha (0.7f));
     g.drawRoundedRectangle (c, 16.0f, 1.0f);
@@ -333,23 +342,27 @@ void CardFrames::paint (juce::Graphics& g)
         corners.addRectangle (r);
         corners.setUsingNonZeroWinding (false);
         corners.addPath (rounded);
-        g.setColour (t.background);
-        g.fillPath (corners);
+        {
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion (corners);
+            glass::windowBackdrop (g, *this);
+        }
         // a soft shadow below the card, kept out of the card itself
         {
             juce::Graphics::ScopedSaveState save (g);
             for (const auto& other : cards)
                 g.excludeClipRegion (other.reduced (2));
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.07f : 0.30f), 12, { 0, 3 }).drawForPath (g, rounded);
+            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.045f : 0.18f), 12, { 0, 3 }).drawForPath (g, rounded);
         }
-        // the rim: bright along the top, a quiet line all round
-        g.setColour (t.line.withAlpha (t.isLight() ? 0.55f : 0.7f));
-        g.strokePath (rounded, juce::PathStrokeType (1.0f));
-        g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.9f : 0.16f), 0.0f, r.getY(),
-                                                 t.highlight().withAlpha (0.0f), 0.0f, r.getY() + 40.0f, false));
-        juce::Path inner;
-        inner.addRoundedRectangle (r.reduced (1.0f), kRadius - 1.0f);
-        g.strokePath (inner, juce::PathStrokeType (1.0f));
+        // a faint sheen across the matte plate from its lit corner, then its edge
+        {
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion (rounded);
+            g.setGradientFill (juce::ColourGradient (t.highlight().withAlpha (t.isLight() ? 0.10f : 0.025f), r.getX(), r.getY(),
+                                                     t.highlight().withAlpha (0.0f), r.getX() + r.getWidth() * 0.45f, r.getY() + r.getHeight() * 0.45f, false));
+            g.fillRect (r);
+        }
+        glass::edge (g, r, kRadius, 1.0f);
     }
 }
 
@@ -368,6 +381,27 @@ void ScanlineOverlay::paint (juce::Graphics& g)
 }
 
 //==============================================================================
+void drawAppIcon (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    // Scaled down once per pixel size with good resampling; the 1024 px source would alias if drawn directly.
+    static juce::Image source = juce::ImageCache::getFromMemory (BinaryData::AppIcon1024_png, BinaryData::AppIcon1024_pngSize);
+    static std::map<int, juce::Image> scaled;
+    if (! source.isValid())
+        return;
+    const float density = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const int px = juce::jlimit (8, 512, juce::roundToInt (juce::jmin (area.getWidth(), area.getHeight()) * density));
+    auto& image = scaled[px];
+    if (! image.isValid())
+    {
+        image = source;
+        while (image.getWidth() / 2 >= px) // halve step by step, then the last step: smooth edges at any size
+            image = image.rescaled (image.getWidth() / 2, image.getHeight() / 2, juce::Graphics::highResamplingQuality);
+        image = image.rescaled (px, px, juce::Graphics::highResamplingQuality);
+    }
+    g.setOpacity (1.0f);
+    g.drawImage (image, area.withSizeKeepingCentre (juce::jmin (area.getWidth(), area.getHeight()), juce::jmin (area.getWidth(), area.getHeight())));
+}
+
 void drawLogo (juce::Graphics& g, juce::Rectangle<float> area)
 {
     // The same geometry as media/brand/*.svg: a glass prism, the incoming beam and six spectrum bars like tracks.

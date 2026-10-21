@@ -4,6 +4,7 @@
 #include "../engine/AudioEngine.h"
 #include "../model/ArrangementEdit.h"
 #include "GlassMaterial.h"
+#include "Kit.h"
 #include "Theme.h"
 
 namespace ui
@@ -151,10 +152,7 @@ public:
             return;
         // Glass: a card with what will be written: the name, the folder, the length and the size to expect.
         namespace E = Strings::exportUi;
-        const auto card = details.toFloat();
-        glass::surface (g, card, t.chrome, 12.0f);
-        g.setColour (t.line.withAlpha (0.7f));
-        g.drawRoundedRectangle (card.reduced (0.5f), 12.0f, 1.0f);
+        kit::card (g, details.toFloat());
         auto r = details.reduced (16, 14);
         g.setColour (t.text);
         g.setFont (t.uiFont (14.0f, 600));

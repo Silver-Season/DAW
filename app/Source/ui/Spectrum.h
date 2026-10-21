@@ -43,8 +43,6 @@ private:
     static constexpr float kLensHome = 0.62f;
     float lensPosition = kLensHome; // centre of the lens, 0..1 across the width
     float dragOffset = 0.0f;
-    juce::Image backdrop, lensImage;
     void paintContent (juce::Graphics&);
-    void paintLens (juce::Graphics&, float scale);
 };
 } // namespace ui

@@ -1,4 +1,5 @@
 #include "SessionView.h"
+#include "Kit.h"
 
 #include "../Strings.h"
 #include "../engine/AudioEngine.h"
@@ -106,19 +107,42 @@ public:
     {
         const auto& t = theme();
         auto r = getLocalBounds().toFloat();
+        if (role == Role::activator)
+        {
+            kit::State state;
+            state.on = on;
+            state.hover = isMouseOver();
+            g.setColour (kit::button (g, r, kit::Kind::toggle, state));
+            g.fillPath (icons::power (r.withSizeKeepingCentre (11.0f, 11.0f)));
+            return;
+        }
+        if (t.glass)
+        {
+            // Solo uses the second accent; arm stays red.
+            kit::State st;
+            st.on = on;
+            st.hover = isMouseOver();
+            const auto ink = kit::button (g, r, role == Role::arm ? kit::Kind::danger : kit::Kind::toggle, st,
+                                          role == Role::solo ? std::optional<juce::Colour> (t.accentFill2) : std::nullopt);
+            g.setColour (ink);
+            if (role == Role::arm)
+                g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (r.getCentre()));
+            else
+            {
+                g.setFont (t.uiFont (t.metrics.small, 600));
+                g.drawText (text, getLocalBounds(), juce::Justification::centred, false);
+            }
+            return;
+        }
         juce::Colour fill = t.panel2, ink = t.dimText;
         if (on)
         {
-            fill = role == Role::activator ? (t.glass ? t.accentFill : t.accent)
-                                           : (role == Role::solo ? (t.glass ? t.accentFill2 : t.accent2) : t.record);
-            ink = t.glass ? t.inkOn (fill) : t.clipInk;
+            fill = role == Role::activator ? t.accent : (role == Role::solo ? t.accent2 : t.record);
+            ink = t.clipInk;
         }
         else if (isMouseOver())
             fill = t.panel2.brighter (0.08f);
-        if (t.glass && on)
-            glass::accent (g, r, fill, t.radius * 0.7f);
-        else
-            fillCell (g, r, fill, 0.7f);
+        fillCell (g, r, fill, 0.7f);
         if (! on)
             strokeCell (g, r, t.line, 1.0f, 0.7f);
         g.setColour (ink);
@@ -426,6 +450,9 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        // the glass mixer shows this grid blurred: it follows every repaint of the grid
+        if (view.underGlass > 0 && ! glass::capturing())
+            view.repaintGlassOver (false);
         const auto& t = theme();
         const int numScenes = view.model.numScenes();
         const bool animate = view.engine.getSettings().animations();
@@ -492,7 +519,7 @@ public:
             SessionRecorder::Progress progress;
             const bool hasProgress = recScene >= 0 && view.recorder->getProgress (v.track.id(), progress);
             // empty slots carry a trace of the track colour, so neighbouring columns differ
-            const auto emptyFill = t.glass ? t.panel.interpolatedWith (t.panel2, 0.45f).interpolatedWith (t.palette (v.track.colour()), 0.03f)
+            const auto emptyFill = t.glass ? t.panel2.interpolatedWith (t.panel, 0.25f)
                                            : t.panel.interpolatedWith (t.palette (v.track.colour()), 0.08f);
 
             for (int s = 0; s < numScenes; ++s)
@@ -512,8 +539,38 @@ public:
                         paintRecording (g, cell, progress, hasProgress, v.track, animate, blink4, now, selected);
                         continue;
                     }
-                    fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
-                    strokeCell (g, cell, dropTarget || selected ? t.accent : (t.glass ? t.line.withAlpha (0.55f) : t.line), selected ? 1.5f : 1.0f);
+                    if (t.glass)
+                    {
+                        // Glass, as the design: a quiet grey cell; a faint plus in the middle (double-click makes a
+                        // clip), or the red record ring when the track records.
+                        if (t.glass && ! dropTarget)
+                            glass::pane (g, cell, t.radius, t.accentFill, 0.0f, 0.4f); // an empty slot nearly dissolves: a faint pane
+                        else
+                            fillCell (g, cell, dropTarget ? t.accentFill.withAlpha (0.2f).overlaidWith (emptyFill) : emptyFill);
+                        if (dropTarget || selected)
+                            strokeCell (g, cell, t.accent, 1.5f);
+                        const auto c = cell.getCentre();
+                        if (live)
+                        {
+                            const auto ring = juce::Rectangle<float> (14.0f, 14.0f).withCentre (c);
+                            g.setColour (t.record.withAlpha (armed ? 1.0f : 0.55f));
+                            g.drawEllipse (ring, 1.4f);
+                            if (armed)
+                                g.fillEllipse (ring.reduced (3.5f));
+                        }
+                        else
+                        {
+                            g.setColour (t.dimText.withAlpha (0.45f));
+                            g.fillRect (c.x - 5.0f, c.y - 0.6f, 10.0f, 1.2f);
+                            g.fillRect (c.x - 0.6f, c.y - 5.0f, 1.2f, 10.0f);
+                        }
+                        continue;
+                    }
+                    if (t.glass && ! dropTarget)
+                        glass::pane (g, cell, t.radius, t.accentFill, 0.0f, 0.4f);
+                    else
+                        fillCell (g, cell, dropTarget ? t.accent.withAlpha (0.12f).overlaidWith (t.panel).interpolatedWith (t.panel, 0.0f) : emptyFill);
+                    strokeCell (g, cell, dropTarget || selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
                     const auto mark = juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ cell.getX() + 12.5f, cell.getCentreY() });
                     g.setColour (live ? (armed ? t.record : t.record.withAlpha (0.6f)) : t.line);
                     if (live)
@@ -988,6 +1045,8 @@ public:
 
     void paint (juce::Graphics& g) override
     {
+        if (view.underGlass > 0 && ! glass::capturing())
+            view.repaintGlassOver (true);
         const auto& t = theme();
         const auto& sel = view.selection.get();
         const auto clipBounds = g.getClipBounds();
@@ -998,13 +1057,27 @@ public:
                 continue;
             const auto scene = view.model.sceneAt (s);
             const bool selected = sel.kind == Selection::Kind::scene && sel.scene == s;
-            fillCell (g, b.toFloat(), t.panel2);
-            strokeCell (g, b.toFloat(), selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
+            if (t.glass)
+            {
+                // glass: a light list row with a hairline under it; a selected scene is a tinted row
+                if (selected || s == hoverScene)
+                {
+                    g.setColour (selected ? t.accentFill.withAlpha (t.isLight() ? 0.2f : 0.26f) : t.panel2.withAlpha (0.6f));
+                    g.fillRoundedRectangle (b.toFloat().reduced (0.0f, 1.0f), 8.0f);
+                }
+                g.setColour (t.line.withAlpha (0.5f));
+                g.fillRect ((float) b.getX() + 8.0f, (float) b.getBottom() - 0.5f, (float) b.getWidth() - 16.0f, 1.0f);
+            }
+            else
+            {
+                fillCell (g, b.toFloat(), t.panel2);
+                strokeCell (g, b.toFloat(), selected ? t.accent : t.line, selected ? 1.5f : 1.0f);
+            }
             const bool hot = s == hoverScene && hoverLaunch;
             g.setColour (hot ? t.play : (scene.colour() >= 0 ? t.palette (scene.colour()) : t.dimText));
             g.fillPath (icons::play (juce::Rectangle<float> (9.0f, 9.0f).withCentre ({ (float) b.getX() + 13.0f, (float) b.getCentreY() })));
             g.setColour (t.text);
-            g.setFont (t.uiFont (12.0f));
+            g.setFont (t.uiFont (t.glass ? 13.0f : 12.0f));
             g.drawText (scene.name(), b.withTrimmedLeft (28).withTrimmedRight (6), juce::Justification::centredLeft, true);
         }
         const auto stop = stopBounds().toFloat();
@@ -1158,6 +1231,7 @@ public:
         };
         addAndMakeVisible (dbField);
 
+        activator.setComponentID ("track-power");
         activator.onClick = [this] (const juce::MouseEvent&) {
             if (auto track = view.model.findTrack (trackId); track.isValid())
                 view.actions.setTrackMute (trackId, ! track.mute());
@@ -1191,7 +1265,7 @@ public:
             dbField.setValue ((double) track.volumeDb());
         pan.setRingColour (theme().text);
         activator.setState (! track.mute());
-        activator.setText (juce::String (view.model.indexOfTrack (trackId) + 1));
+        activator.setHelpText (track.mute() ? Strings::help::trackEnable : Strings::help::trackDisable);
         solo.setState (track.solo());
         arm.setState (track.arm());
         sendA.setRingColour (theme().palette (track.colour()));
@@ -1240,9 +1314,18 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
+        if (view.underGlass > 0)
+        {
+            // a calm glass card over the clip grid (the blurred grid showing through moved under the mouse and read
+            // as stray shadows)
+            glass::surface (g, r, t.panel, t.metrics.panelRadius);
+            return;
+        }
         fillCell (g, r, t.panel);
         strokeCell (g, r, t.line);
     }
+
+    void lookAndFeelChanged() override { resized(); } // the glass themes lay the strip out differently
 
     void resized() override
     {
@@ -1256,6 +1339,22 @@ public:
         arm.setBounds (buttons);
         r.removeFromBottom (6);
 
+        if (theme().glass && getWidth() >= 96)
+        {
+            // Glass: the sends and the pan as larger glass knobs on top, the meter and the fader with its scale below.
+            sendA.setVisible (true);
+            sendB.setVisible (true);
+            auto sendsRow = r.removeFromTop (50);
+            const int cellW = sendsRow.getWidth() / 3;
+            sendA.setBounds (sendsRow.removeFromLeft (cellW));
+            sendB.setBounds (sendsRow.removeFromLeft (cellW));
+            pan.setBounds (sendsRow);
+            r.removeFromTop (4);
+            dbField.setBounds (r.removeFromBottom (16).withTrimmedLeft (r.getWidth() / 3));
+            meter.setBounds (r.getX(), r.getY(), 14, r.getHeight());
+            fader.setBounds (r.getX() + 20, r.getY(), juce::jmax (24, juce::jmin (64, r.getWidth() - 20)), r.getHeight());
+            return;
+        }
         auto sends = r.removeFromTop (40);
         const bool narrow = getWidth() < 96;
         const int cell = juce::jmin (36, (sends.getWidth()) / (narrow ? 1 : 3));
@@ -1346,6 +1445,15 @@ public:
     {
         const auto& t = theme();
         const auto r = getLocalBounds().toFloat();
+        if (view.underGlass > 0)
+        {
+            // a calm glass card over the clip grid (the blurred grid showing through moved under the mouse and read
+            // as stray shadows)
+            glass::windowBackdrop (g, *this);
+            g.fillAll (glass::plateColour());
+            glass::surface (g, r, t.panel, t.metrics.panelRadius);
+            return;
+        }
         fillCell (g, r, t.panel);
         strokeCell (g, r, t.line);
     }
@@ -1374,6 +1482,16 @@ class SessionView::MixerRow final : public juce::Component
 {
 public:
     explicit MixerRow (SessionView& v) : view (v) {}
+
+    void paint (juce::Graphics& g) override
+    {
+        if (theme().glass)
+        {
+            // Satin cards sit on an opaque ambient plate; musical data underneath must not show through controls.
+            glass::windowBackdrop (g, *this);
+            g.fillAll (glass::plateColour());
+        }
+    }
 
     void rebuild()
     {
@@ -1484,9 +1602,18 @@ void SessionView::setMixerVisible (bool visible)
         onMixerVisibilityChanged (visible);
 }
 
+void SessionView::repaintGlassOver (bool scenesColumn)
+{
+    if (scenesColumn)
+        masterStrip->repaint();
+    else
+        mixer->repaint();
+}
+
 int SessionView::contentHeight() const
 {
-    return model.numScenes() * kStep + kStopHeight;
+    // under a glass mixer the last row can be scrolled above it
+    return model.numScenes() * kStep + kStopHeight + underGlass;
 }
 
 void SessionView::updateLayout()
@@ -1600,7 +1727,9 @@ void SessionView::resized()
         mixerHeight = juce::jlimit (kMixerMinHeight, kMixerMaxHeight, free);
         gridBottom = bottom - mixerHeight - kMixerGap;
     }
-    gridArea = { left, gridTop, leftWidth, juce::jmax (0, gridBottom - gridTop) };
+    // Glass: the grid and the scenes go on under the mixer, which is glass over them.
+    underGlass = theme().glass && mixerVisible ? mixerHeight + kMixerGap : 0;
+    gridArea = { left, gridTop, leftWidth, juce::jmax (0, gridBottom - gridTop + underGlass) };
     sceneArea = { right - kMasterWidth, gridTop, kMasterWidth, gridArea.getHeight() };
     mixerArea = { left, bottom - mixerHeight, leftWidth, mixerHeight };
     masterStripArea = { right - kMasterWidth, bottom - mixerHeight, kMasterWidth, mixerHeight };
@@ -1614,12 +1743,16 @@ void SessionView::resized()
     masterStrip->setVisible (mixerVisible);
 
     constexpr int bar = 9;
-    hbar.setBounds (gridArea.getX(), gridArea.getBottom() - bar, gridArea.getWidth() - bar, bar);
-    vbar.setBounds (gridArea.getRight() - bar, gridArea.getY(), bar, gridArea.getHeight());
+    const int visibleBottom = gridArea.getBottom() - underGlass; // where the grid shows without glass over it
+    hbar.setBounds (gridArea.getX(), visibleBottom - bar, gridArea.getWidth() - bar, bar);
+    vbar.setBounds (gridArea.getRight() - bar, gridArea.getY(), bar, visibleBottom - gridArea.getY());
 
-    mixerTab.setBounds (juce::Rectangle<int> (30, 11).withCentre ({ sceneArea.getCentreX(), gridArea.getBottom() + (mixerVisible ? kMixerGap / 2 : 6) }));
+    mixerTab.setBounds (juce::Rectangle<int> (30, 11).withCentre ({ sceneArea.getCentreX(), visibleBottom + (mixerVisible ? kMixerGap / 2 : 6) }));
     mixerTab.setOpen (mixerVisible);
 
+    mixer->toFront (false);
+    masterStrip->toFront (false);
+    mixerTab.toFront (false);
     updateLayout();
     mixer->layoutStrips();
     applyScroll();
@@ -1663,7 +1796,7 @@ void SessionView::tick()
 void SessionView::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.chrome);
+    g.fillAll (glass::plateColour());
 
     // the master column header
     fillCell (g, masterHeaderArea.toFloat(), t.panel2);

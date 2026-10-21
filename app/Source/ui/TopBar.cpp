@@ -4,6 +4,7 @@
 
 #include "../Strings.h"
 #include "Chrome.h"
+#include "Kit.h"
 #include "ScalePicker.h"
 #include "../engine/AudioEngine.h"
 #include "../model/Automation.h"
@@ -86,12 +87,21 @@ public:
     bool on = false;
     bool accentInk = false; // the label in the accent colour (the scale button while a scale is set)
     bool framed = false;    // glass themes: a button of its own (top row), not one of the capsule's row
+    bool bare = false;      // glass themes: no pane of glass at rest (stop and record, as plain icons)
     float iconSize = 0.0f;  // 0: the default size
     bool leftAligned = false; // icon and label start at the left edge (the Library button)
     std::optional<juce::Colour> iconColour; // the icon in its own colour (the red dot of Capture)
     bool chevron = false; // glass: a small down arrow after the label (the button opens a list)
     std::function<void()> onClick;
     std::function<void()> onPopup; // right mouse button
+
+private:
+    std::unique_ptr<juce::VBlankAttachment> fade;
+    double fadeStart = 0.0;
+    float fadeFrom = 0.0f, amount = 0.0f; // how far the lit state has appeared
+    bool fading = false;
+
+public:
 
     IconButton (std::function<juce::Path (juce::Rectangle<float>)> iconFn, const juce::String& label, Role r, const juce::String& help)
         : icon (std::move (iconFn)), text (label), role (r)
@@ -101,120 +111,73 @@ public:
 
     void setOn (bool v)
     {
-        if (on != v)
+        if (on == v)
+            return;
+        on = v;
+        // glass: the lit pane appears (and goes) over a quarter of a second instead of switching
+        if (theme().glass && isShowing())
         {
-            on = v;
-            repaint();
+            fadeStart = juce::Time::getMillisecondCounterHiRes();
+            fadeFrom = amount;
+            fading = true;
+            if (fade == nullptr) // kept for the button's life; idle between fades
+                fade = std::make_unique<juce::VBlankAttachment> (this, [this] {
+                    if (! fading)
+                        return;
+                    const float p = (float) juce::jlimit (0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - fadeStart) / 260.0);
+                    const float eased = 1.0f - (1.0f - p) * (1.0f - p) * (1.0f - p);
+                    amount = fadeFrom + ((on ? 1.0f : 0.0f) - fadeFrom) * eased;
+                    fading = p < 1.0f;
+                    repaint();
+                });
         }
+        else
+            amount = on ? 1.0f : 0.0f;
+        repaint();
     }
 
     void paint (juce::Graphics& g) override
     {
+        // the look comes from the kit: a framed button, a capsule switch, record/punch in red, play round in glass
         const auto& t = theme();
-        auto r = getLocalBounds().toFloat().reduced (0.5f);
-        juce::Colour fill = t.panel, ink = t.text, border = t.line;
-        if (role == Role::record)
-            ink = t.record;
-        else if (accentInk)
-            ink = t.accent;
-        if (on)
-        {
-            const auto accent = role == Role::play ? t.play : (role == Role::record ? t.record : (role == Role::warning ? t.warning : t.accent));
-            fill = accent;
-            border = accent;
-            ink = t.inkOn (accent);
-            if ((role == Role::play || role == Role::warning) && t.glow > 0.0f)
-                juce::DropShadow (accent.withAlpha (0.6f), juce::roundToInt (14.0f * t.glow), {}).drawForRectangle (g, getLocalBounds().reduced (3));
-        }
-        else if (isMouseOver() && isEnabled())
-            fill = t.panel2;
-        if (! isEnabled())
-        {
-            fill = fill.withMultipliedAlpha (0.5f);
-            ink = t.dimText.withAlpha (0.6f);
-            border = border.withMultipliedAlpha (0.6f);
-        }
-        if (t.glass && role == Role::play && icon && text.isEmpty())
-        {
-            // Glass: play is a round green button at all times, glowing while the song plays.
-            const auto circle = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight()), juce::jmin (r.getWidth(), r.getHeight()));
-            juce::DropShadow (t.play.withAlpha (on ? 0.55f : 0.25f), on ? 12 : 6, { 0, 1 }).drawForRectangle (g, circle.toNearestInt().reduced (3));
-            g.setGradientFill (juce::ColourGradient (t.play.interpolatedWith (t.highlight(), 0.25f), circle.getX(), circle.getY(),
-                                                     t.play.interpolatedWith (t.shadow(), 0.12f), circle.getX(), circle.getBottom(), false));
-            g.fillEllipse (circle);
-            g.setColour (t.highlight().withAlpha (0.55f));
-            g.drawEllipse (circle.reduced (0.75f), 1.0f);
-            g.setColour (juce::Colours::white);
-            const float s = circle.getHeight() * 0.36f;
-            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (circle.getCentre().translated (s * 0.08f, 0.0f))));
-            return;
-        }
+        const auto r = getLocalBounds().toFloat().reduced (0.5f);
+        // glass: the light of the pane follows the pointer; icons and labels stay still (moving text reads as a fault)
+        std::optional<glass::Lit> lit;
         if (t.glass)
+            lit.emplace (*this);
+        const juce::Point<float> floatBy;
+        using K = kit::Kind;
+        const K idle = framed || ! t.glass ? K::plain : K::ghost; // how a button of this place looks while off
+        // while the pane fades out the button still draws its lit state, fading
+        const bool shownOn = on || amount > 0.001f;
+        const K kind = role == Role::play && icon && text.isEmpty() ? K::play
+                     : role == Role::record ? (shownOn && (framed || ! t.glass) ? K::danger : idle)
+                     : role == Role::warning ? (shownOn ? K::toggle : idle)
+                     : idle;
+        kit::State st;
+        st.on = shownOn;
+        st.amount = amount;
+        st.bare = bare;
+        st.hover = isMouseOver() && isEnabled();
+        st.enabled = isEnabled();
+        auto ink = kit::button (g, r, kind, st, role == Role::warning ? std::optional<juce::Colour> (t.warning)
+                                             : (role == Role::record && kind == K::ghost ? std::optional<juce::Colour> (t.record) : std::nullopt));
+        if (! on && isEnabled() && (role == Role::record || accentInk))
+            ink = role == Role::record ? t.record : t.accent;
+        if (kind == K::play && t.glass)
         {
-            // Inside the transport capsule a button is only its icon until it is lit or under the mouse.
-            const float pill = r.getHeight () * 0.5f;
-            if (on)
-                glass::accent (g, r, fill, pill);
-            else if (framed)
-            {
-                glass::surface (g, r, fill, pill);
-                g.setColour (border.withMultipliedAlpha (0.8f));
-                g.drawRoundedRectangle (r, pill, 1.0f);
-            }
-            else if (isMouseOver () && isEnabled ())
-            {
-                g.setColour (t.panel2.withAlpha (0.8f));
-                g.fillRoundedRectangle (r, pill);
-            }
-        }
-        else
-        {
-            fillCell (g, r, fill);
-            strokeCell (g, r, border);
-        }
-
-        g.setColour (ink);
-        const auto font = t.uiFont (getWidth() < 34 ? 10.5f : (framed && t.glass ? 13.5f : 12.5f), 500);
-        const float s = iconSize > 0.0f ? iconSize : (text.isEmpty() ? 11.0f : 10.0f);
-        if (icon && text.isNotEmpty() && iconSize > 0.0f)
-        {
-            // icon and label as one group: centred, or from the left edge
-            const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
-            const float groupWidth = s + 9.0f + textWidth;
-            const float x0 = leftAligned ? r.getX() + 12.0f : r.getCentreX() - groupWidth * 0.5f;
-            if (iconColour)
-                g.setColour (isEnabled() ? *iconColour : iconColour->withAlpha (0.4f));
-            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre ({ x0 + s * 0.5f, r.getCentreY() })));
+            const float s = juce::jmin (r.getWidth(), r.getHeight()) * 0.36f;
             g.setColour (ink);
-            g.setFont (font);
-            g.drawText (text, juce::Rectangle<float> (x0 + s + 9.0f, r.getY(), textWidth + 4.0f, r.getHeight()), juce::Justification::centredLeft, false);
+            g.fillPath (icon (juce::Rectangle<float> (s, s).withCentre (r.getCentre().translated (s * 0.08f, 0.0f) + floatBy)));
             return;
         }
-        if (icon)
-        {
-            const auto box = juce::Rectangle<float> (s, s).withCentre (text.isEmpty() ? r.getCentre() : juce::Point<float> (r.getX() + 8.0f + s * 0.5f, r.getCentreY()));
-            g.fillPath (icon (box));
-        }
-        if (text.isNotEmpty())
-        {
-            g.setFont (font);
-            const int iconRoom = icon ? juce::roundToInt (s + 12.0f) : 0;
-            if (chevron && t.glass)
-            {
-                const float textWidth = juce::GlyphArrangement::getStringWidth (font, text);
-                const float x0 = r.getCentreX() - (textWidth + 14.0f) * 0.5f;
-                g.drawText (text, juce::Rectangle<float> (x0, r.getY(), textWidth + 2.0f, r.getHeight()), juce::Justification::centredLeft, false);
-                g.setColour (ink.withAlpha (0.8f));
-                juce::Path v;
-                const auto c = juce::Point<float> (x0 + textWidth + 10.0f, r.getCentreY() + 1.0f);
-                v.startNewSubPath (c.x - 3.5f, c.y - 2.0f);
-                v.lineTo (c.x, c.y + 1.8f);
-                v.lineTo (c.x + 3.5f, c.y - 2.0f);
-                g.strokePath (v, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-                return;
-            }
-            g.drawText (text, getLocalBounds().withTrimmedLeft (iconRoom), juce::Justification::centred, false);
-        }
+        kit::LabelStyle style;
+        style.size = getWidth() < 34 ? 10.5f : (framed && t.glass ? 13.5f : 12.5f);
+        style.iconSize = iconSize > 0.0f ? iconSize : (text.isEmpty() ? 11.0f : 10.0f);
+        style.iconColour = iconColour.has_value() && isEnabled() ? iconColour : std::nullopt;
+        style.leftAligned = leftAligned;
+        style.chevron = chevron && t.glass;
+        kit::label (g, r + floatBy, text, ink, icon ? kit::Icon (icon) : kit::Icon(), style);
     }
 
     void mouseEnter (const juce::MouseEvent&) override { repaint(); }
@@ -308,6 +271,20 @@ public:
     void paint (juce::Graphics& g) override
     {
         const auto& t = theme();
+        if (t.glass)
+        {
+            // glass: "CPU 14%" and a slim bar
+            g.setColour (t.text);
+            g.setFont (t.uiFont (12.0f, 500));
+            const auto label = Strings::transport::cpu + " " + juce::String (juce::roundToInt (load * 100.0f)) + "%";
+            g.drawText (label, getLocalBounds().removeFromLeft (64), juce::Justification::centredLeft, false);
+            const auto bar = juce::Rectangle<float> ((float) getWidth() - 64.0f, (float) getHeight() * 0.5f - 3.0f, 60.0f, 6.0f);
+            g.setColour (t.line.withAlpha (0.7f));
+            g.fillRoundedRectangle (bar, 3.0f);
+            g.setColour (load > 0.85f ? t.record : t.play);
+            g.fillRoundedRectangle (bar.withWidth (juce::jmax (6.0f, bar.getWidth() * load)), 3.0f);
+            return;
+        }
         g.setColour (t.dimText);
         g.setFont (t.uiFont (10.5f, 500));
         g.drawText (Strings::transport::cpu, getLocalBounds().removeFromLeft (26), juce::Justification::centredLeft, false);
@@ -435,13 +412,31 @@ public:
 
     std::function<void (int view)> onSwitch;
 
+    std::function<bool()> animationsEnabled; // Settings → animations; the lens jumps when they are off
+
     void setView (int v)
     {
-        if (v != view)
+        if (v == view)
+            return;
+        from = slidePosition();
+        view = v;
+        if (animationsEnabled != nullptr && ! animationsEnabled())
         {
-            view = v;
+            sliding = false;
             repaint();
+            return;
         }
+        slideStart = juce::Time::getMillisecondCounterHiRes();
+        if (slide == nullptr)
+            slide = std::make_unique<juce::VBlankAttachment> (this, [this] {
+                // kept alive between slides (destroying it inside its own callback is not allowed); idle once settled
+                if (! sliding)
+                    return;
+                sliding = slideProgress() < 1.0f;
+                repaint();
+            });
+        sliding = true;
+        repaint();
     }
 
     juce::String helpAt (juce::Point<int> p) const override
@@ -459,62 +454,34 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        const auto& t = theme();
-        auto r = getLocalBounds().toFloat().reduced (0.5f);
-        const float third = r.getWidth() / 3.0f;
-        const auto segment = [&] (int i) { return juce::Rectangle<float> (r.getX() + third * (float) i, r.getY(), third, r.getHeight()); };
-        const juce::String labels[] { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab };
-        if (t.glass)
-        {
-            // A sunken pill track; the shown view is a raised glass pill in it.
-            const float pill = r.getHeight() * 0.5f;
-            g.setColour (t.panel2.withAlpha (t.isLight() ? 0.85f : 0.7f));
-            g.fillRoundedRectangle (r, pill);
-            g.setColour (t.line.withAlpha (0.6f));
-            g.drawRoundedRectangle (r, pill, 1.0f);
-            const auto active = segment (view).reduced (3.0f);
-            juce::DropShadow (t.shadow().withAlpha (t.isLight() ? 0.12f : 0.4f), 6, { 0, 1 }).drawForRectangle (g, active.toNearestInt());
-            glass::surface (g, active, t.isLight() ? t.highlight() : t.panel, active.getHeight() * 0.5f);
-            for (int i = 0; i < 3; ++i)
-            {
-                g.setColour (i == view ? t.text : t.dimText);
-                g.setFont (t.uiFont (14.0f, i == view ? 600 : 500));
-                g.drawText (labels[i], segment (i).toNearestInt(), juce::Justification::centred, false);
-            }
-            if (hovering)
-            {
-                g.setColour (t.accent.withAlpha (0.2f));
-                g.fillRoundedRectangle (segment (arrangementView), pill);
-            }
-            return;
-        }
-        g.setColour (t.panel);
-        g.fillRoundedRectangle (r, t.radius);
-        for (int i = 0; i < 3; ++i)
-        {
-            auto area = segment (i);
-            const bool active = i == view;
-            if (active)
-            {
-                g.setColour (t.panel2);
-                g.fillRoundedRectangle (area, t.radius);
-                g.setColour (t.accent);
-                g.fillRect (area.removeFromBottom (2.0f).reduced (1.0f, 0.0f));
-            }
-            g.setColour (active ? t.text : t.dimText);
-            g.setFont (t.uiFont (12.0f, 500));
-            g.drawText (labels[i], area.toNearestInt(), juce::Justification::centred, false);
-        }
-        if (hovering) // a clip is held over the Arrangement tab
-        {
-            g.setColour (t.accent.withAlpha (0.25f));
-            g.fillRoundedRectangle (segment (arrangementView), t.radius);
-        }
-        strokeCell (g, getLocalBounds().toFloat(), t.line);
+        glass::Lit lit (*this);
+        const float p = slideProgress();
+        kit::segmented (g, getLocalBounds().toFloat().reduced (0.5f),
+                        { Strings::transport::sessionTab, Strings::transport::arrangementTab, Strings::transport::mixTab },
+                        view, -1, hovering ? (int) arrangementView : -1, slidePosition(), std::sin (juce::MathConstants<float>::pi * p), true);
     }
 
 private:
+    static constexpr double kSlideMs = 320.0;
     int segmentAt (int x) const { return juce::jlimit (0, 2, x * 3 / juce::jmax (1, getWidth())); }
+    float slideProgress() const
+    {
+        return ! sliding ? 1.0f : (float) juce::jlimit (0.0, 1.0, (juce::Time::getMillisecondCounterHiRes() - slideStart) / kSlideMs);
+    }
+    // where the lens is now: eased out with a slight overshoot, like glass that slides and settles
+    float slidePosition() const
+    {
+        const float p = slideProgress();
+        if (p >= 1.0f)
+            return (float) view;
+        const float c = 1.4f, q = p - 1.0f;
+        const float eased = 1.0f + (c + 1.0f) * q * q * q + c * q * q;
+        return from + ((float) view - from) * eased;
+    }
+    std::unique_ptr<juce::VBlankAttachment> slide;
+    bool sliding = false;
+    double slideStart = 0.0;
+    float from = 0.0f;
     int view = session;
     bool hovering = false;
 };
@@ -531,6 +498,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     tempo.setWheelStep (0.1);
     tempo.setHelpText (Strings::help::tempo);
     tempo.setBoxedInGlass (false);
+    tempo.setInterfaceFontInGlass (true);
     // With a tempo envelope on the master the field scales the whole envelope: every point by the same factor.
     tempo.onGestureStart = [this] {
         model.undo.beginNewTransaction (Strings::undoTempo);
@@ -561,6 +529,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     play = std::make_unique<IconButton> (I::play, juce::String(), Role::play, Strings::help::play);
     stop = std::make_unique<IconButton> (I::stop, juce::String(), Role::normal, Strings::help::stop);
     record = std::make_unique<IconButton> (I::record, juce::String(), Role::record, Strings::help::record);
+    stop->bare = record->bare = true; // plain icons in the row, as in the design; a pane appears when touched or on
     overdub = std::make_unique<IconButton> (nullptr, Strings::recording::ovr, Role::normal, Strings::help::overdub);
     loop = std::make_unique<IconButton> (I::loop, juce::String(), Role::normal, Strings::help::loop);
     punchIn = std::make_unique<IconButton> (nullptr, Strings::arrRec::punchIn, Role::record, Strings::help::punchIn);
@@ -670,6 +639,7 @@ TopBar::TopBar (AudioEngine& e, ProjectModel& m) : engine (e), model (m)
     spectrum = std::make_unique<Spectrum> (engine);
     addChildComponent (*spectrum);
     tabs = std::make_unique<Tabs>();
+    tabs->animationsEnabled = [this] { return engine.getSettings().animations(); };
     tabs->onSwitch = [this] (int view) {
         if (view == Tabs::mix)
         {
@@ -706,6 +676,12 @@ void TopBar::setVersionText (const juce::String& text)
         version->text = text;
         version->repaint();
     }
+}
+
+void TopBar::mouseUp (const juce::MouseEvent& e)
+{
+    if (nameArea.contains (e.getPosition()) && onProjectClicked)
+        onProjectClicked();
 }
 
 void TopBar::setArrangementShown (bool shown)
@@ -828,7 +804,10 @@ void TopBar::tick()
 void TopBar::paint (juce::Graphics& g)
 {
     const auto& t = theme();
-    g.fillAll (t.glass ? t.background : t.chrome); // glass: the window background, the capsule and cards float on it
+    if (t.glass)
+        glass::windowBackdrop (g, *this); // the window's ground; the capsule and cards float on it
+    else
+        g.fillAll (t.chrome);
     if (! t.glass)
     {
         g.setColour (t.line);
@@ -837,23 +816,36 @@ void TopBar::paint (juce::Graphics& g)
 
     if (t.glass)
     {
+        if (! libraryPlate.isEmpty ())
+            glass::capsule (g, libraryPlate.toFloat ());
         glass::capsule (g, capsuleArea.toFloat ());
         g.setColour (t.line.withAlpha (0.8f));
         for (const int x : separators)
             g.fillRect ((float) x, (float) capsuleArea.getY () + 11.0f, 1.0f, (float) capsuleArea.getHeight () - 22.0f);
     }
-    ui::drawLogo (g, logoArea.toFloat());
+    if (t.glass)
+        ui::drawAppIcon (g, logoArea.toFloat()); // glass: the icon tile, as on the dock
+    else
+        ui::drawLogo (g, logoArea.toFloat());
     g.setColour (t.text);
     g.setFont (t.uiFont (22.0f, 600));
     g.drawText (Strings::labelAppName, juce::Rectangle<int> (logoArea.getRight() + 9, 9, 96, 34), juce::Justification::centredLeft, false);
-    // the project name, after a thin divider
-    const int nameX = logoArea.getRight() + 9 + 96 + 14;
+    // the project name, after a thin divider, with a chevron: a click opens the project properties
     g.setColour (t.line);
-    g.fillRect (nameX - 14, 17, 1, 18);
+    g.fillRect (nameArea.getX() - 14, 17, 1, 18);
     g.setColour (t.text);
-    g.setFont (t.uiFont (15.0f, 500));
-    g.drawFittedText (projectName, juce::Rectangle<int> (nameX, 9, juce::jmax (40, tabs->getX() - nameX - 12), 34),
-                      juce::Justification::centredLeft, 1, 1.0f);
+    g.setFont (t.uiFont (t.glass ? 16.0f : 15.0f, 500));
+    const float nameWidth = juce::jmin ((float) nameArea.getWidth() - 18.0f, juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), projectName) + 2.0f);
+    g.drawFittedText (projectName, nameArea.withWidth (juce::roundToInt (nameWidth)), juce::Justification::centredLeft, 1, 1.0f);
+    {
+        juce::Path v;
+        const juce::Point<float> c ((float) nameArea.getX() + nameWidth + 10.0f, (float) nameArea.getCentreY() + 1.0f);
+        v.startNewSubPath (c.x - 4.0f, c.y - 2.0f);
+        v.lineTo (c.x, c.y + 2.0f);
+        v.lineTo (c.x + 4.0f, c.y - 2.0f);
+        g.setColour (t.dimText);
+        g.strokePath (v, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
 
     auto field = [&] (juce::Rectangle<int> area, const juce::String& text) {
         if (! t.glass)
@@ -862,8 +854,9 @@ void TopBar::paint (juce::Graphics& g)
             strokeCell (g, area.toFloat(), t.line);
         }
         g.setColour (t.text);
-        g.setFont (t.numFont (13.0f));
-        g.drawText (text, area, juce::Justification::centred, false);
+        // glass: the numbers in the interface face, a size up, as the design sets them ("33.1.1", "4/4")
+        g.setFont (t.glass ? t.uiFont (15.5f, 500) : t.numFont (13.0f));
+        g.drawText (t.glass ? text.removeCharacters (" ") : text, area, juce::Justification::centred, false);
     };
     const int num = model.sigNum(), den = model.sigDen();
     field (signatureArea, juce::String (num) + " / " + juce::String (den));
@@ -954,8 +947,9 @@ void TopBar::resized()
     // and a capsule holding the transport in groups, with the lamps and the CPU at its right end; the ribbon and the
     // spectrum take the room left in between.
     constexpr int h = 30, gap = 6, groupGap = 15, cy = 78;
-    logoArea = { 16, 10, 34, 34 };
+    logoArea = theme ().glass ? juce::Rectangle<int> (14, 8, 38, 38) : juce::Rectangle<int> (16, 10, 34, 34);
     tabs->setBounds (getWidth () / 2 - 165, 9, 330, 34);
+    nameArea = { logoArea.getRight () + 9 + 96 + 14, 9, juce::jmax (40, tabs->getX () - (logoArea.getRight () + 9 + 96 + 14) - 12), 34 };
     settingsButton->setBounds (getWidth () - 14 - 34, 10, 34, 32);
     exportButton->setBounds (settingsButton->getX () - 8 - 104, 10, 104, 32);
     redoButton->setBounds (exportButton->getX () - 10 - 32, 10, 32, 32);
@@ -981,8 +975,15 @@ void TopBar::resized()
     const int libraryFull = juce::jmax (110, leftColumn - 10);
     const bool libraryCompact = getWidth () - 10 - (10 + libraryFull + 8) < 1090;
     libraryButton->text = libraryCompact ? juce::String () : Strings::transport::library;
-    libraryButton->setBounds (10, cy - 20, libraryCompact ? 40 : libraryFull, 40);
-    capsuleArea = { libraryButton->getRight () + 8, cy - 21, getWidth () - 10 - (libraryButton->getRight () + 8), 42 };
+    // glass: a plate the width of the library column, the Library button a pane resting on it, as in the design
+    const bool plated = theme ().glass && ! libraryCompact;
+    libraryPlate = plated ? juce::Rectangle<int> (10, cy - 21, libraryFull, 42) : juce::Rectangle<int>();
+    if (plated)
+        libraryButton->setBounds (libraryPlate.getX () + 6, cy - 15, 112, 30);
+    else
+        libraryButton->setBounds (10, cy - 20, libraryCompact ? 40 : libraryFull, 40);
+    const int capsuleLeft = juce::jmax (libraryButton->getRight (), libraryPlate.getRight ()) + 8;
+    capsuleArea = { capsuleLeft, cy - 21, getWidth () - 10 - capsuleLeft, 42 };
 
     separators.clear ();
     int x = capsuleArea.getX () + 12;
@@ -1026,7 +1027,7 @@ void TopBar::resized()
         c.setBounds (right, cy - 10, width, 20);
         right -= gap;
     };
-    take (*cpu, 80);
+    take (*cpu, theme ().glass ? 112 : 80);
     take (*diskLamp, 20);
     take (*keysLamp, 78);
     take (*midiLamp, 48);

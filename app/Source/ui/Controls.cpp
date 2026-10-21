@@ -60,9 +60,10 @@ void Knob::setValue (double normalised)
 void Knob::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    glass::Lit lit (*this);
     auto area = getLocalBounds().toFloat();
     // Glass: a tall knob shows its value under the caption at all times, as the device cards of the design do.
-    const bool twoLines = t.glass && caption.isNotEmpty() && valueText && getHeight() >= 62;
+    const bool twoLines = t.glass && caption.isNotEmpty() && valueText && getHeight() >= 52;
     const float captionHeight = caption.isNotEmpty() ? (twoLines ? 26.0f : 13.0f) : 0.0f;
     auto captionArea = area.removeFromBottom (captionHeight);
     const float d = juce::jmin (area.getWidth(), area.getHeight());
@@ -299,6 +300,7 @@ juce::Rectangle<float> Fader::thumbArea() const
 void Fader::paint (juce::Graphics& g)
 {
     const auto& t = theme();
+    glass::Lit lit (*this);
     const auto bounds = getLocalBounds().toFloat();
     const float travel = bounds.getHeight() - 10.0f;
     if (t.glass)
@@ -307,11 +309,18 @@ void Fader::paint (juce::Graphics& g)
         const bool scale = bounds.getWidth() >= 40.0f;
         const float x = scale ? bounds.getX() + 13.0f : bounds.getCentreX();
         const auto track = juce::Rectangle<float> (4.0f, bounds.getHeight() - 6.0f).withCentre ({ x, bounds.getCentreY() });
-        g.setColour (t.isLight() ? t.line.withAlpha (0.75f) : t.shadow().withAlpha (0.45f));
-        g.fillRoundedRectangle (track, 2.0f);
-        g.setColour (t.text.withAlpha (t.isLight() ? 0.55f : 0.65f));
         const auto yOf = [&] (double db) { return bounds.getBottom() - 5.0f - (float) dbToNorm (db) * travel; };
-        g.fillRoundedRectangle (track.withTop (yOf (valueDb)), 2.0f);
+        // the thumb is a clear lens over the track: the level under it bends at its rim
+        const auto thumb = juce::Rectangle<float> (26.0f, 16.0f).withCentre ({ x, thumbArea().getCentreY() });
+        {
+            glass::Liquid liquid (g, getLocalBounds());
+            auto& b = liquid.backdrop();
+            b.setColour (t.isLight() ? t.line.withAlpha (0.75f) : t.shadow().withAlpha (0.45f));
+            b.fillRoundedRectangle (track, 2.0f);
+            b.setColour (t.accentFill);
+            b.fillRoundedRectangle (track.withTop (yOf (valueDb)), 2.0f);
+            liquid.lens (thumb, 8.0f, 0.6f, 0.5f);
+        }
         if (scale)
         {
             g.setFont (t.numFont (9.5f));
@@ -324,10 +333,6 @@ void Fader::paint (juce::Graphics& g)
                             juce::Justification::centredLeft, false);
             }
         }
-        const auto thumb = juce::Rectangle<float> (22.0f, 13.0f).withCentre ({ x, thumbArea().getCentreY() });
-        glass::thumb (g, thumb);
-        g.setColour (t.dimText.withAlpha (0.8f));
-        g.fillRect (juce::Rectangle<float> (10.0f, 1.0f).withCentre (thumb.getCentre()));
         return;
     }
     const float cx = bounds.getWidth() >= 40.0f ? bounds.getX() + 12.0f : bounds.getCentreX(); // a wide fader keeps its track on the left
@@ -461,7 +466,7 @@ void NumberField::paint (juce::Graphics& g)
         if (levelCentre > minimum && levelCentre < maximum)
             norm.setSkewForCentre (levelCentre);
         const float v = (float) norm.convertTo0to1 (juce::jlimit (minimum, maximum, value));
-        auto textArea = r.removeFromRight (52.0f);
+        auto textArea = r.removeFromRight (44.0f);
         const auto track = r.reduced (6.0f, 0.0f).withSizeKeepingCentre (r.getWidth() - 12.0f, 4.0f);
         g.setColour (t.isLight() ? t.line.withAlpha (0.8f) : t.shadow().withAlpha (0.45f));
         g.fillRoundedRectangle (track, 2.0f);
@@ -469,8 +474,8 @@ void NumberField::paint (juce::Graphics& g)
         g.fillRoundedRectangle (track.withWidth (juce::jmax (4.0f, track.getWidth() * v)), 2.0f);
         glass::thumb (g, juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ track.getX() + track.getWidth() * v, track.getCentreY() }));
         g.setColour (t.dimText);
-        g.setFont (t.numFont (10.5f));
-        g.drawText (getDisplayText(), textArea.toNearestInt(), juce::Justification::centredRight, false);
+        g.setFont (t.numFont (10.0f));
+        g.drawText (getDisplayText().replace (" dB", ""), textArea.toNearestInt(), juce::Justification::centredRight, false);
         return;
     }
     if (boxed && (boxedInGlass || ! t.glass))
@@ -481,7 +486,7 @@ void NumberField::paint (juce::Graphics& g)
     if (editor != nullptr)
         return;
     g.setColour (t.text);
-    g.setFont (t.numFont (fontHeight));
+    g.setFont (interfaceFont && t.glass ? t.uiFont (fontHeight + 2.5f, 500) : t.numFont (fontHeight));
     g.drawText (getDisplayText(), r.toNearestInt().reduced (4, 0), justification, false);
 }
 
